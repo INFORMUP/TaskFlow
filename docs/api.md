@@ -7,7 +7,7 @@ TaskFlow exposes a RESTful API for programmatic access by Claude Code, other age
 ## Design Principles
 
 - **RESTful** with JSON request/response bodies
-- **OpenAPI 3.1** spec generated automatically (consistent with dashboard-backend)
+- **OpenAPI 3.1** spec generated automatically via Fastify's `@fastify/swagger` + TypeBox type providers
 - **Authentication** via Bearer tokens (JWT)
 - **Authorization** enforced per-endpoint based on team permissions (see [permissions.md](permissions.md))
 - **Pagination** via cursor-based pagination for list endpoints
@@ -29,10 +29,40 @@ TaskFlow exposes a RESTful API for programmatic access by Claude Code, other age
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/auth/login` | Authenticate with credentials, receive JWT |
+| `POST` | `/api/v1/auth/callback` | Exchange Google OAuth authorization code for JWT |
 | `POST` | `/api/v1/auth/refresh` | Refresh an expired access token |
-| `POST` | `/api/v1/auth/agent-token` | Issue a scoped agent token (Engineer/Admin only) |
-| `DELETE` | `/api/v1/auth/agent-token/{token_id}` | Revoke an agent token |
+| `POST` | `/api/v1/auth/tokens` | Create a scoped API token (see token types below) |
+| `GET` | `/api/v1/auth/tokens` | List tokens for the authenticated user |
+| `DELETE` | `/api/v1/auth/tokens/{token_id}` | Revoke an API token |
+
+#### Token Creation
+
+```
+POST /api/v1/auth/tokens
+```
+
+```json
+{
+  "token_name": "CI pipeline",
+  "token_type": "integration",
+  "scopes": ["tasks:read", "tasks:transition"],
+  "expires_at": "2027-01-01T00:00:00Z"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `token_name` | string | Human-readable label |
+| `token_type` | string | `user`, `agent`, or `integration` — determines rate limit tier |
+| `scopes` | string[] | Permission scopes (from seeded `scopes` table). Token effective permissions = intersection of scopes and user's team permissions. |
+| `expires_at` | ISO 8601 | Optional. Null for non-expiring tokens. |
+
+**Permission to create by type:**
+- `user` — any authenticated user (creates a token for themselves)
+- `agent` — Engineer or Admin only (creates a token for an agent user)
+- `integration` — Engineer or Admin only
+
+Response: `201 Created` with the full token object. The plaintext token value is included **only in this response** — it cannot be retrieved later.
 
 ---
 
@@ -60,8 +90,7 @@ POST /api/v1/tasks
   "title": "Login fails on Safari 17",
   "description": "Users report blank screen after OAuth redirect...",
   "priority": "high",
-  "reported_by": "user_123",
-  "labels": ["auth", "browser-compat"]
+  "created_by": "user_123"
 }
 ```
 
@@ -80,7 +109,7 @@ GET /api/v1/tasks?flow=bug&status=investigate&assignee=user_456&priority=high&q=
 | `assignee` | string | Filter by assigned user/agent ID |
 | `priority` | string | Filter by priority level |
 | `labels` | string | Comma-separated label filter |
-| `q` | string | Full-text search across title and description |
+| `q` | string | Full-text search across title, description, and transition notes |
 | `created_after` | ISO 8601 | Filter by creation date |
 | `created_before` | ISO 8601 | Filter by creation date |
 | `cursor` | string | Pagination cursor |
@@ -145,7 +174,7 @@ Returns the complete, ordered history of status changes for a task:
       "id": "tr_001",
       "from_status": null,
       "to_status": "triage",
-      "actor": { "id": "user_123", "name": "Jane", "team": "user", "type": "human" },
+      "actor": { "id": "user_123", "name": "Jane", "teams": ["user"], "type": "human" },
       "note": "Login fails after OAuth redirect on Safari 17. Blank white screen. Happens every time.",
       "created_at": "2026-04-08T10:00:00Z"
     },
@@ -153,7 +182,7 @@ Returns the complete, ordered history of status changes for a task:
       "id": "tr_002",
       "from_status": "triage",
       "to_status": "investigate",
-      "actor": { "id": "agent_claude_01", "name": "Claude", "team": "agent", "type": "agent" },
+      "actor": { "id": "agent_claude_01", "name": "Claude", "teams": ["agent"], "type": "agent" },
       "note": "Not a duplicate. Reproduced on Safari 17.2+ with OAuth redirect. Severity assessed as High — affects ~12% of users based on browser analytics.",
       "created_at": "2026-04-08T10:05:00Z"
     },
@@ -161,7 +190,7 @@ Returns the complete, ordered history of status changes for a task:
       "id": "tr_003",
       "from_status": "investigate",
       "to_status": "approve",
-      "actor": { "id": "agent_claude_01", "name": "Claude", "team": "agent", "type": "agent" },
+      "actor": { "id": "agent_claude_01", "name": "Claude", "teams": ["agent"], "type": "agent" },
       "note": "Root cause identified: SameSite cookie attribute not set on OAuth callback. Proposed fix: set SameSite=None; Secure on session cookie in auth middleware.",
       "created_at": "2026-04-08T10:20:00Z"
     }
@@ -170,9 +199,20 @@ Returns the complete, ordered history of status changes for a task:
 }
 ```
 
+### Actor Types
+
+The `type` field on actor objects identifies the kind of entity that performed the action:
+
+| Type | Description |
+|------|-------------|
+| `human` | A human user (engineer, product, end user) |
+| `agent` | An AI agent (e.g., Claude) |
+| `system` | An automated system action (e.g., auto-close on timeout, scheduled deduplication). System actors have no associated user identity — the `id` field references a sentinel system user. |
+
 Supports filtering:
 - `?actor_type=agent` — show only agent transitions
 - `?actor_type=human` — show only human transitions
+- `?actor_type=system` — show only system-initiated transitions
 - `?from_status=validate&to_status=resolve` — show only specific backward transitions (useful for tracking rework)
 
 The API validates:
@@ -209,6 +249,11 @@ The API validates:
 }
 ```
 
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `assignee_id` | string | Yes | User or agent ID to assign |
+| `note` | string | No | Optional context for the assignment. Stored as a comment on the task if provided. |
+
 ---
 
 ## Labels
@@ -219,6 +264,61 @@ The API validates:
 | `POST` | `/api/v1/labels` | Create a label | Admin |
 | `POST` | `/api/v1/tasks/{task_id}/labels` | Add labels to task | Edit |
 | `DELETE` | `/api/v1/tasks/{task_id}/labels/{label_id}` | Remove label from task | Edit |
+
+---
+
+## Task Relationships
+
+| Method | Path | Description | Permission |
+|--------|------|-------------|------------|
+| `GET` | `/api/v1/tasks/{task_id}/relationships` | List related tasks | View |
+| `POST` | `/api/v1/tasks/{task_id}/relationships` | Create a relationship | Edit |
+| `DELETE` | `/api/v1/tasks/{task_id}/relationships/{relationship_id}` | Remove a relationship | Edit |
+
+```json
+{
+  "related_task_id": "BUG-37",
+  "relationship_type": "parent_child"
+}
+```
+
+Valid `relationship_type` values: `parent_child`, `blocks`, `relates_to`.
+
+---
+
+## Mentions
+
+| Method | Path | Description | Permission |
+|--------|------|-------------|------------|
+| `GET` | `/api/v1/users/{user_id}/mentions` | List tasks where the user was mentioned | View (own) or Admin |
+
+Returns tasks where the user was `@mentioned` in comments or transition notes. Results are the union of `comment_mentions` and `transition_mentions`, deduplicated by task.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `source` | string | Filter by mention source: `comment`, `transition`, or omit for both |
+| `cursor` | string | Pagination cursor |
+| `limit` | integer | Page size (default 25, max 100) |
+
+---
+
+## User Preferences
+
+| Method | Path | Description | Permission |
+|--------|------|-------------|------------|
+| `GET` | `/api/v1/users/{user_id}/preferences` | Get user preferences | View (own) or Admin |
+| `PATCH` | `/api/v1/users/{user_id}/preferences` | Update user preferences | Edit (own) or Admin |
+
+```json
+{
+  "notification_level": "assigned_only",
+  "notify_on_mention": true,
+  "notify_on_assignment": true,
+  "notify_on_status_change": false,
+  "default_flow_filter": "bug",
+  "default_priority_filter": null
+}
+```
 
 ---
 
@@ -252,12 +352,24 @@ Allow external services to subscribe to TaskFlow events.
   "flow": "bug",
   "from_status": "triage",
   "to_status": "investigate",
-  "actor": { "id": "agent_claude_01", "team": "agent" },
+  "actor": { "id": "agent_claude_01", "teams": ["agent"] },
   "timestamp": "2026-04-08T14:30:00Z"
 }
 ```
 
 Events: `task.created`, `task.updated`, `task.transitioned`, `task.assigned`, `task.commented`, `task.closed`, `task.deleted`
+
+---
+
+## Slack Integration
+
+Endpoints for the Slack app integration. See [slack-integration.md](slack-integration.md) for full design details.
+
+| Method | Path | Description | Permission |
+|--------|------|-------------|------------|
+| `POST` | `/api/v1/integrations/slack/events` | Receive Slack event payloads (verified via signing secret) | — |
+| `GET` | `/api/v1/integrations/slack/oauth` | Initiate Slack app OAuth installation | Admin |
+| `POST` | `/api/v1/integrations/slack/oauth` | Complete Slack app OAuth callback | Admin |
 
 ---
 

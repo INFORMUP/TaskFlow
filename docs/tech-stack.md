@@ -1,6 +1,8 @@
 # Tech Stack
 
-TaskFlow's tech stack prioritizes consistency with InformUp's existing projects (dashboard-backend, dashboard-frontend, RePortal) while making targeted deviations where the benefits clearly outweigh the cost of inconsistency.
+TaskFlow's tech stack prioritizes consistency with InformUp's existing projects (dashboard-backend, dashboard-frontend, RePortal) while making targeted improvements where the benefits clearly justify the change.
+
+> **Note on dashboard-backend:** The Python/FastAPI code in that repo is deprecated. The active backend is Node.js + TypeScript + Express + Prisma. All three InformUp backends (dashboard-backend, RePortal) run on Node.js/TypeScript with Express and Prisma.
 
 ---
 
@@ -8,57 +10,71 @@ TaskFlow's tech stack prioritizes consistency with InformUp's existing projects 
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| **Backend** | Python 3.13 + FastAPI | Direct match with dashboard-backend. Async-first, automatic OpenAPI spec generation, Pydantic validation. |
-| **Database** | PostgreSQL 16 | Direct match with dashboard-backend. Needed for full-text search (tsvector), JSONB fields, and robust transaction support. |
-| **ORM** | SQLAlchemy 2.x + Alembic | Direct match with dashboard-backend. Alembic handles schema migrations. |
+| **Backend** | Node.js + TypeScript + Fastify | Same language/runtime as all InformUp backends. Fastify over Express for automatic OpenAPI generation, native JSON Schema validation, and encapsulated plugin architecture. |
+| **Database** | PostgreSQL 16 | Matches dashboard-backend. Needed for full-text search (tsvector), JSONB fields, and robust transaction support. |
+| **ORM** | Prisma | Direct match with dashboard-backend and RePortal. Handles schema migrations. |
+| **Validation** | TypeBox (JSON Schema) | Single source of truth: one schema definition produces TypeScript types, request validation, and OpenAPI documentation. Replaces the Zod (dashboard-backend) / express-validator (RePortal) split. |
 | **Frontend** | Vue 3 + TypeScript + Vite | Direct match with dashboard-frontend. Composition API, strong typing, fast dev server. |
 | **Routing** | Vue Router 4 | Direct match with dashboard-frontend. |
-| **Testing (backend)** | pytest + pytest-asyncio | Direct match with dashboard-backend. |
-| **Testing (frontend)** | Vitest (unit) + Playwright (E2E) | Direct match with dashboard-frontend. Playwright is used across all three repos. |
-| **Auth** | JWT (access + refresh tokens) | Consistent with dashboard-backend's JWT approach. |
-| **ASGI Server** | Uvicorn | Direct match with dashboard-backend. |
-| **Package Management** | uv (Python), npm (JS) | Matches existing tooling. |
-| **AI Integration** | Anthropic SDK (Python) | Already used in dashboard-backend. Required for agent capabilities. |
+| **Testing (backend)** | Vitest + Supertest | Matches dashboard-backend. Same test runner across frontend and backend. |
+| **Testing (frontend)** | Vitest (unit) + Playwright (E2E) | Direct match with dashboard-frontend. Playwright is used across all InformUp repos. |
+| **Auth** | JWT (access + refresh tokens) | Consistent with dashboard-backend and RePortal's JWT approach. |
+| **Package Management** | npm | Matches existing tooling across all repos. |
+| **AI Integration** | Anthropic SDK (Node.js) | Already used in dashboard-backend and RePortal. Required for agent capabilities. |
+
+### Why Fastify over Express
+
+All existing InformUp backends use Express. Fastify is a deliberate deviation justified by three concrete benefits for TaskFlow:
+
+1. **Automatic OpenAPI generation.** Fastify's `@fastify/swagger` + TypeBox type providers generate an OpenAPI 3.1 spec directly from route schemas. This is critical for agent integration — agents consume the spec to understand available operations. With Express, OpenAPI requires separate annotations (swagger-jsdoc) or a parallel schema definition that can drift from the actual validation.
+
+2. **Single-source-of-truth validation.** TypeBox schemas simultaneously define TypeScript types, request/response validation, and OpenAPI documentation. TaskFlow has complex validation rules (transition validity, resolution requirements, permission scoping) — maintaining these in one place eliminates drift between what the API accepts, what TypeScript expects, and what the docs say.
+
+3. **Encapsulated plugin architecture.** Fastify plugins scope their routes, hooks, and decorators by default. This maps directly to TaskFlow's phased build plan — each phase (auth, agent tokens, Slack, webhooks) becomes a self-contained plugin that can be developed, tested, and shipped independently without middleware ordering concerns.
+
+Additional benefits: built-in request timeout handling, automatic async error propagation (no manual try/catch per route), native WebSocket integration via `@fastify/websocket`, and route-level rate limiting via `@fastify/rate-limit`.
 
 ---
 
-## Deviations from Existing Stack
+## Additions to Existing Stack
 
-### Background Job Queue: Celery + Redis (or arq)
+### Background Job Queue: BullMQ + Redis
 
 **Not present in existing repos.** TaskFlow needs async background processing for:
 - Slack notification delivery
 - Webhook dispatch
 - Agent task execution
 
-**Options:**
-- **Celery + Redis** — battle-tested, rich ecosystem, but heavier. Better if job complexity grows.
-- **arq** — lightweight, async-native (uses Redis + asyncio). Better fit for FastAPI's async model.
+**BullMQ** is the Node.js-native choice: Redis-backed, supports delayed/scheduled jobs, retries with backoff, and has a dashboard (Bull Board) for monitoring. Lightweight enough to start simple, capable enough to scale.
 
-**Recommendation:** Start with **arq** for simplicity. Migrate to Celery only if job scheduling or complex workflows demand it.
-
-### Real-Time Updates: WebSockets (via FastAPI)
+### Real-Time Updates: WebSockets (via @fastify/websocket)
 
 **Not present in existing repos.** TaskFlow benefits from real-time status updates in the UI (e.g., when an agent transitions a task, the board updates without refresh).
 
-FastAPI has native WebSocket support. No additional framework needed.
+`@fastify/websocket` integrates into Fastify's route and hook lifecycle — WebSocket handlers share the same auth, validation, and plugin scoping as HTTP routes.
 
 ---
 
-## Alternatives Considered and Rejected
+## Alternatives Considered
 
-### Node.js / Express Backend (from RePortal)
+### Python / FastAPI
 
-RePortal uses Express.js, but:
-- dashboard-backend is the more relevant precedent (same problem domain: data-driven API)
-- FastAPI's automatic OpenAPI generation is valuable for agent integration
-- Type safety via Pydantic is preferable to manual validation with express-validator
+The original tech stack proposal recommended Python + FastAPI based on the assumption that dashboard-backend used this stack. That assumption was incorrect — the Python code is deprecated. Choosing Python would make TaskFlow the only Python backend in the InformUp ecosystem, adding operational overhead (separate CI, deployment, and dependency tooling) without a compensating benefit. Fastify provides the same OpenAPI generation advantage while keeping the team on a single language.
+
+### Express (from dashboard-backend, RePortal)
+
+Express is the current standard across InformUp. It was rejected for TaskFlow because:
+- No automatic OpenAPI generation — requires swagger-jsdoc or tsoa, both of which are separate annotation layers that can drift from actual validation
+- Validation (Zod or express-validator) is disconnected from API documentation
+- Global middleware model creates ordering-sensitive configuration; Fastify's encapsulated plugins are a better fit for TaskFlow's phased delivery
+
+Express remains appropriate for the existing projects where migration cost would outweigh the benefits.
 
 ### SQLite (from RePortal dev mode)
 
 Not suitable for TaskFlow's concurrent access patterns, full-text search needs, or JSONB fields.
 
-### MySQL (from RePortal production)
+### MySQL (from RePortal fallback)
 
 Viable, but PostgreSQL is already used in dashboard-backend and offers better JSONB support, full-text search, and partial indexes — all of which TaskFlow's schema leverages.
 

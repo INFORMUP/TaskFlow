@@ -2,6 +2,8 @@
 
 Teams represent distinct groups of people who interact with TaskFlow at different levels of engagement and permission. Each team has a defined scope of responsibility and a corresponding set of capabilities within the system.
 
+Users can belong to **multiple teams** and inherit the union of permissions across all memberships. For example, a tech lead might belong to both Engineer and Product. See [users.md](users.md) for the full user identity model.
+
 ---
 
 ## Engineer

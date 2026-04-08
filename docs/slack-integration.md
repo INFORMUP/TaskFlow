@@ -85,10 +85,10 @@ When a task notification is posted to a channel, replies in the Slack thread are
 ### TaskFlow Backend Requirements
 
 - **Slack user linking:** Map Slack user IDs to TaskFlow user accounts. Provide a `/connect-slack` flow in TaskFlow UI or a `/taskflow connect` slash command.
-- **Webhook endpoint:** `POST /api/integrations/slack/events` to receive Slack event payloads.
-- **OAuth endpoint:** `GET/POST /api/integrations/slack/oauth` for app installation flow.
+- **Webhook endpoint:** `POST /api/v1/integrations/slack/events` to receive Slack event payloads.
+- **OAuth endpoint:** `GET/POST /api/v1/integrations/slack/oauth` for app installation flow.
 - **Channel configuration API:** Allow admins to configure which channels receive which notification types.
-- **Message queue:** Use a background job queue (e.g., Celery with Redis, or a simple async task queue) to handle Slack API calls without blocking the main request path. Slack rate limits are generous but bursty — queue ensures reliability.
+- **Message queue:** Use BullMQ + Redis (see [tech-stack.md](tech-stack.md#background-job-queue-bullmq--redis)) to handle Slack API calls without blocking the main request path. Slack rate limits are generous but bursty — queue ensures reliability.
 
 ### Database Additions
 

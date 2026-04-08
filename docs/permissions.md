@@ -2,6 +2,8 @@
 
 Permissions in TaskFlow control which teams can perform which actions on which task flows. The model is **role-based** (tied to team membership) with **per-flow granularity**.
 
+Users can belong to multiple teams (see [users.md](users.md#team-membership)). A user's effective permissions are the **union** of all permissions granted by their team memberships. For example, a user in both Engineer and Product teams can perform any action that either team is allowed.
+
 ---
 
 ## Permission Actions
@@ -117,7 +119,7 @@ Scope is indicated in the matrices above where relevant (e.g., User View = "Own 
 
 ## API Permissions
 
-API access follows the same permission model. API tokens are issued per-user and inherit the user's team-level permissions. Agent API tokens are scoped to the Agent team.
+API access follows the same permission model. API tokens are issued per-user and inherit the user's team-level permissions. Additionally, API tokens can be scoped to a subset of permitted actions via `api_token_scopes` (see [users.md](users.md#authentication)) — a token may have fewer permissions than the user it belongs to, but never more.
 
 See [api.md](api.md) for endpoint-level permission requirements.
 

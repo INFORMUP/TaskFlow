@@ -1,0 +1,9 @@
+[submodule "external/dashboard-backend"]
+	path = external/dashboard-backend
+	url = git@github.com:InformUp/dashboard-backend.git
+[submodule "external/dashboard-frontend"]
+	path = external/dashboard-frontend
+	url = git@github.com:InformUp/dashboard-frontend.git
+[submodule "external/Reportal"]
+	path = external/Reportal
+	url = git@github.com:InformUp/Reportal.git
