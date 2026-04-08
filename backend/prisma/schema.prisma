@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Team {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  members UserTeam[]
+
+  @@map("teams")
+}
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  email       String?  @unique
+  displayName String   @map("display_name")
+  actorType   String   @map("actor_type") // human, agent, system
+  status      String   @default("active") // invited, active, deactivated
+  timezone    String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  teams            UserTeam[]
+  oauthConnections OauthConnection[]
+  createdTasks     Task[]           @relation("TaskCreatedBy")
+  assignedTasks    Task[]           @relation("TaskAssignee")
+  taskTransitions  TaskTransition[]
+  comments         Comment[]
+
+  @@map("users")
+}
+
+model UserTeam {
+  userId    String   @map("user_id") @db.Uuid
+  teamId    String   @map("team_id") @db.Uuid
+  isPrimary Boolean  @default(false) @map("is_primary")
+  grantedBy String?  @map("granted_by") @db.Uuid
+  grantedAt DateTime @default(now()) @map("granted_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id])
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@id([userId, teamId])
+  @@index([userId])
+  @@index([teamId])
+  @@map("user_teams")
+}
+
+model OauthConnection {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  provider       String   // google
+  providerUserId String   @map("provider_user_id")
+  lastUsedAt     DateTime? @map("last_used_at") @db.Timestamptz()
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, provider])
+  @@unique([provider, providerUserId])
+  @@map("oauth_connections")
+}
+
+model Flow {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  statuses    FlowStatus[]
+  transitions FlowTransition[]
+  tasks       Task[]
+
+  @@map("flows")
+}
+
+model FlowStatus {
+  id          String   @id @default(uuid()) @db.Uuid
+  flowId      String   @map("flow_id") @db.Uuid
+  slug        String
+  name        String
+  description String?
+  sortOrder   Int      @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  flow             Flow             @relation(fields: [flowId], references: [id])
+  transitionsFrom  FlowTransition[] @relation("TransitionFrom")
+  transitionsTo    FlowTransition[] @relation("TransitionTo")
+  tasksAtStatus    Task[]
+  transitionFrom   TaskTransition[] @relation("TaskTransitionFrom")
+  transitionTo     TaskTransition[] @relation("TaskTransitionTo")
+
+  @@unique([flowId, slug])
+  @@index([flowId, sortOrder])
+  @@map("flow_statuses")
+}
+
+model FlowTransition {
+  id           String @id @default(uuid()) @db.Uuid
+  flowId       String @map("flow_id") @db.Uuid
+  fromStatusId String @map("from_status_id") @db.Uuid
+  toStatusId   String @map("to_status_id") @db.Uuid
+
+  flow       Flow       @relation(fields: [flowId], references: [id])
+  fromStatus FlowStatus @relation("TransitionFrom", fields: [fromStatusId], references: [id])
+  toStatus   FlowStatus @relation("TransitionTo", fields: [toStatusId], references: [id])
+
+  @@unique([flowId, fromStatusId, toStatusId])
+  @@map("flow_transitions")
+}
+
+model Task {
+  id              String    @id @default(uuid()) @db.Uuid
+  displayId       String    @unique @map("display_id")
+  flowId          String    @map("flow_id") @db.Uuid
+  currentStatusId String    @map("current_status_id") @db.Uuid
+  title           String
+  description     String?   @db.Text
+  priority        String    @default("medium") // critical, high, medium, low
+  resolution      String?   // fixed, invalid, duplicate, wont_fix, cannot_reproduce, completed, rejected, deferred
+  createdBy       String    @map("created_by") @db.Uuid
+  assigneeId      String?   @map("assignee_id") @db.Uuid
+  isDeleted       Boolean   @default(false) @map("is_deleted")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  flow          Flow           @relation(fields: [flowId], references: [id])
+  currentStatus FlowStatus     @relation(fields: [currentStatusId], references: [id])
+  creator       User           @relation("TaskCreatedBy", fields: [createdBy], references: [id])
+  assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  transitions   TaskTransition[]
+  comments      Comment[]
+
+  @@index([flowId, currentStatusId])
+  @@index([assigneeId])
+  @@index([createdBy])
+  @@map("tasks")
+}
+
+model TaskTransition {
+  id           String   @id @default(uuid()) @db.Uuid
+  taskId       String   @map("task_id") @db.Uuid
+  fromStatusId String?  @map("from_status_id") @db.Uuid
+  toStatusId   String   @map("to_status_id") @db.Uuid
+  actorId      String   @map("actor_id") @db.Uuid
+  note         String   @db.Text
+  actorType    String   @map("actor_type") // human, agent, system
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  task       Task        @relation(fields: [taskId], references: [id])
+  fromStatus FlowStatus? @relation("TaskTransitionFrom", fields: [fromStatusId], references: [id])
+  toStatus   FlowStatus  @relation("TaskTransitionTo", fields: [toStatusId], references: [id])
+  actor      User        @relation(fields: [actorId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@index([actorType, taskId])
+  @@map("task_transitions")
+}
+
+model Comment {
+  id        String   @id @default(uuid()) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  body      String   @db.Text
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  task   Task @relation(fields: [taskId], references: [id])
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@map("comments")
+}
