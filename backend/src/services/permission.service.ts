@@ -124,3 +124,32 @@ export function getViewScope(
 
   return bestScope;
 }
+
+// Build a Prisma `where` fragment that restricts a task query to what the
+// user is allowed to see, given their teams across every flow. The result
+// should be spread alongside any other filters the caller wants to AND with.
+export function buildTaskViewWhere(
+  teamSlugs: string[],
+  userId: string,
+  flowIdBySlug: Map<string, string>
+): Record<string, unknown> {
+  const clauses: Record<string, unknown>[] = [];
+
+  for (const [slug, flowId] of flowIdBySlug) {
+    const scope = getViewScope(teamSlugs, slug);
+    if (scope === "none") continue;
+    if (scope === "all") {
+      clauses.push({ flowId });
+    } else if (scope === "own_public") {
+      clauses.push({ flowId, createdBy: userId });
+    } else if (scope === "assigned") {
+      clauses.push({ flowId, assigneeId: userId });
+    }
+  }
+
+  if (clauses.length === 0) {
+    return { id: { in: [] } };
+  }
+
+  return { OR: clauses };
+}

@@ -3,6 +3,7 @@ import {
   canPerformAction,
   canTransitionToStatus,
   getViewScope,
+  buildTaskViewWhere,
 } from "../../services/permission.service.js";
 
 describe("permission.service", () => {
@@ -225,6 +226,77 @@ describe("permission.service", () => {
 
     it("user has no view access to improvement", () => {
       expect(getViewScope(["user"], "improvement")).toBe("none");
+    });
+  });
+
+  describe("buildTaskViewWhere", () => {
+    const USER = "user-uuid";
+    const flowIds = new Map([
+      ["bug", "flow-bug"],
+      ["feature", "flow-feature"],
+      ["improvement", "flow-improvement"],
+    ]);
+
+    it("engineer gets an OR clause with all three flows unfiltered", () => {
+      const where = buildTaskViewWhere(["engineer"], USER, flowIds);
+      expect(where).toEqual({
+        OR: [
+          { flowId: "flow-bug" },
+          { flowId: "flow-feature" },
+          { flowId: "flow-improvement" },
+        ],
+      });
+    });
+
+    it("product gets bug + feature (all) but improvement is excluded (comment-only, no view: all means scope is 'all' since product has view: true)", () => {
+      // product has view: true on all three; VIEW_SCOPES shows all/all/all
+      // so they still see all three flows fully
+      const where = buildTaskViewWhere(["product"], USER, flowIds);
+      expect(where).toEqual({
+        OR: [
+          { flowId: "flow-bug" },
+          { flowId: "flow-feature" },
+          { flowId: "flow-improvement" },
+        ],
+      });
+    });
+
+    it("user team sees only own tasks on bug/feature and nothing on improvement", () => {
+      const where = buildTaskViewWhere(["user"], USER, flowIds);
+      expect(where).toEqual({
+        OR: [
+          { flowId: "flow-bug", createdBy: USER },
+          { flowId: "flow-feature", createdBy: USER },
+        ],
+      });
+    });
+
+    it("agent team sees only assigned tasks across all three flows", () => {
+      const where = buildTaskViewWhere(["agent"], USER, flowIds);
+      expect(where).toEqual({
+        OR: [
+          { flowId: "flow-bug", assigneeId: USER },
+          { flowId: "flow-feature", assigneeId: USER },
+          { flowId: "flow-improvement", assigneeId: USER },
+        ],
+      });
+    });
+
+    it("returns an impossible match when user has no teams", () => {
+      const where = buildTaskViewWhere([], USER, flowIds);
+      expect(where).toEqual({ id: { in: [] } });
+    });
+
+    it("picks the broadest scope across multiple teams", () => {
+      // user+engineer → engineer's 'all' dominates
+      const where = buildTaskViewWhere(["user", "engineer"], USER, flowIds);
+      expect(where).toEqual({
+        OR: [
+          { flowId: "flow-bug" },
+          { flowId: "flow-feature" },
+          { flowId: "flow-improvement" },
+        ],
+      });
     });
   });
 });

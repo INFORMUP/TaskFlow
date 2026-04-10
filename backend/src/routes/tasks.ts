@@ -1,7 +1,12 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../prisma-client.js";
-import { canPerformAction } from "../services/permission.service.js";
+import { buildTaskViewWhere, canPerformAction } from "../services/permission.service.js";
 import { createTask } from "../services/task.service.js";
+
+async function getFlowIdBySlug(): Promise<Map<string, string>> {
+  const flows = await prisma.flow.findMany();
+  return new Map(flows.map((f) => [f.slug, f.id]));
+}
 
 export async function taskRoutes(fastify: FastifyInstance) {
   // Create task
@@ -64,7 +69,11 @@ export async function taskRoutes(fastify: FastifyInstance) {
       limit?: string;
     };
 
-    const where: Record<string, unknown> = { isDeleted: false };
+    const flowIdBySlug = await getFlowIdBySlug();
+    const teamSlugs = request.user.teams.map((t) => t.slug);
+    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+
+    const where: Record<string, unknown> = { isDeleted: false, ...viewWhere };
 
     if (query.flow) {
       const flow = await prisma.flow.findUnique({ where: { slug: query.flow } });
@@ -122,8 +131,12 @@ export async function taskRoutes(fastify: FastifyInstance) {
   fastify.get("/api/v1/tasks/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
 
+    const flowIdBySlug = await getFlowIdBySlug();
+    const teamSlugs = request.user.teams.map((t) => t.slug);
+    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+
     const task = await prisma.task.findFirst({
-      where: { id, isDeleted: false },
+      where: { id, isDeleted: false, ...viewWhere },
       include: {
         flow: true,
         currentStatus: true,
@@ -146,8 +159,12 @@ export async function taskRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const updates = request.body as { title?: string; description?: string; priority?: string };
 
+    const flowIdBySlug = await getFlowIdBySlug();
+    const teamSlugs = request.user.teams.map((t) => t.slug);
+    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+
     const task = await prisma.task.findFirst({
-      where: { id, isDeleted: false },
+      where: { id, isDeleted: false, ...viewWhere },
       include: { flow: true },
     });
 
@@ -157,7 +174,6 @@ export async function taskRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const teamSlugs = request.user.teams.map((t) => t.slug);
     if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
       return reply.status(403).send({
         error: { code: "FORBIDDEN", message: "You do not have permission to edit this task" },
@@ -186,8 +202,12 @@ export async function taskRoutes(fastify: FastifyInstance) {
   fastify.delete("/api/v1/tasks/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
 
+    const flowIdBySlug = await getFlowIdBySlug();
+    const teamSlugs = request.user.teams.map((t) => t.slug);
+    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+
     const task = await prisma.task.findFirst({
-      where: { id, isDeleted: false },
+      where: { id, isDeleted: false, ...viewWhere },
       include: { flow: true },
     });
 
@@ -197,7 +217,6 @@ export async function taskRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const teamSlugs = request.user.teams.map((t) => t.slug);
     if (!canPerformAction(teamSlugs, "delete", task.flow.slug)) {
       return reply.status(403).send({
         error: { code: "FORBIDDEN", message: "You do not have permission to delete this task" },
