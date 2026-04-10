@@ -11,10 +11,11 @@ const params = new URLSearchParams(window.location.search);
 const code = params.get("code");
 
 if (code) {
+  const redirectUri = `${window.location.origin}/login`;
   fetch(`${config.apiBaseUrl}/api/v1/auth/callback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, redirectUri }),
   })
     .then((res) => res.json())
     .then((data) => {

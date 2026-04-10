@@ -3,6 +3,7 @@ import { seedTeams } from "./seeders/teams.js";
 import { seedFlows } from "./seeders/flows.js";
 import { seedFlowStatuses } from "./seeders/flow-statuses.js";
 import { seedFlowTransitions } from "./seeders/flow-transitions.js";
+import { seedSampleTasks } from "./seeders/sample-tasks.js";
 
 const prisma = new PrismaClient();
 
@@ -14,6 +15,7 @@ async function main() {
     await seedFlows(prisma),
     await seedFlowStatuses(prisma),
     await seedFlowTransitions(prisma),
+    ...(await seedSampleTasks(prisma)),
   ];
 
   for (const r of results) {

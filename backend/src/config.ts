@@ -14,5 +14,5 @@ export const config = {
   jwtRefreshExpiresIn: "7d",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-  corsOrigins: (process.env.CORS_ALLOW_ORIGINS || "http://localhost:5173").split(","),
+  corsOrigins: (process.env.CORS_ALLOW_ORIGINS || "http://localhost:5173,http://localhost:5174").split(","),
 };
