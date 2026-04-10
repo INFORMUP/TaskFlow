@@ -1,19 +1,35 @@
-import { ref, provide, inject, type InjectionKey, type Ref } from "vue";
+import { ref, computed, provide, inject, type InjectionKey, type Ref, type ComputedRef } from "vue";
 import { apiFetch } from "@/api/client";
+
+export interface UserTeam {
+  id: string;
+  slug: string;
+  name: string;
+  isPrimary: boolean;
+}
 
 export interface UserProfile {
   id: string;
   email: string | null;
   displayName: string;
   actorType: string;
-  teams: { id: string; slug: string; name: string }[];
+  status: string;
+  teams: UserTeam[];
+}
+
+export interface TeamSelection {
+  slug: string;
+  isPrimary: boolean;
 }
 
 export interface CurrentUserStore {
   user: Ref<UserProfile | null>;
   loading: Ref<boolean>;
   error: Ref<string | null>;
+  needsTeamSelection: ComputedRef<boolean>;
   load: () => Promise<void>;
+  setTeams: (teams: TeamSelection[]) => Promise<void>;
+  clear: () => void;
 }
 
 const USER_KEY: InjectionKey<CurrentUserStore> = Symbol("currentUser");
@@ -23,27 +39,47 @@ export function provideCurrentUser(): CurrentUserStore {
   const loading = ref(false);
   const error = ref<string | null>(null);
 
+  const needsTeamSelection = computed(
+    () => !!user.value && user.value.teams.length === 0
+  );
+
   async function load() {
+    if (!localStorage.getItem("accessToken")) {
+      user.value = null;
+      return;
+    }
     loading.value = true;
     error.value = null;
     try {
-      // Use the users endpoint to get current user info
-      // For now, decode from JWT payload
-      const token = localStorage.getItem("accessToken");
-      if (!token) return;
-
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      const res = await apiFetch<{ data: UserProfile[] }>("/api/v1/users");
-      const me = res.data.find((u) => u.id === payload.sub);
-      if (me) user.value = me;
+      user.value = await apiFetch<UserProfile>("/api/v1/users/me");
     } catch (e: any) {
-      error.value = e.message || "Failed to load user";
+      error.value = e?.error?.message || "Failed to load user";
     } finally {
       loading.value = false;
     }
   }
 
-  const store: CurrentUserStore = { user, loading, error, load };
+  async function setTeams(teams: TeamSelection[]) {
+    user.value = await apiFetch<UserProfile>("/api/v1/users/me/teams", {
+      method: "PUT",
+      body: JSON.stringify({ teams }),
+    });
+  }
+
+  function clear() {
+    user.value = null;
+    error.value = null;
+  }
+
+  const store: CurrentUserStore = {
+    user,
+    loading,
+    error,
+    needsTeamSelection,
+    load,
+    setTeams,
+    clear,
+  };
   provide(USER_KEY, store);
   return store;
 }

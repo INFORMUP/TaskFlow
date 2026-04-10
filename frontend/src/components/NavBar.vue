@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "@/composables/useAuth";
-import { useCurrentUser } from "@/composables/useCurrentUser";
+import { useCurrentUser, type TeamSelection } from "@/composables/useCurrentUser";
+import TeamPickerModal from "@/features/auth/components/TeamPickerModal.vue";
 
 const route = useRoute();
 const router = useRouter();
 const { logout } = useAuth();
-const { user } = useCurrentUser();
+const { user, setTeams } = useCurrentUser();
 
 const flows = [
   { slug: "bug", name: "Bugs" },
@@ -14,9 +16,26 @@ const flows = [
   { slug: "improvement", name: "Improvements" },
 ];
 
+const showTeamPicker = ref(false);
+
+const primaryTeamName = computed(() => {
+  if (!user.value) return null;
+  const primary = user.value.teams.find((t) => t.isPrimary);
+  return primary?.name ?? user.value.teams[0]?.name ?? null;
+});
+
+const currentSelection = computed<TeamSelection[]>(() =>
+  (user.value?.teams ?? []).map((t) => ({ slug: t.slug, isPrimary: t.isPrimary }))
+);
+
 function handleLogout() {
   logout();
   router.push({ name: "login" });
+}
+
+async function handleTeamSubmit(teams: TeamSelection[]) {
+  await setTeams(teams);
+  showTeamPicker.value = false;
 }
 </script>
 
@@ -35,10 +54,32 @@ function handleLogout() {
       </router-link>
     </div>
     <div class="navbar__user">
+      <button
+        v-if="user && user.teams.length > 0"
+        class="navbar__team"
+        title="Manage your team memberships"
+        data-testid="navbar-team-button"
+        @click="showTeamPicker = true"
+      >
+        {{ primaryTeamName }}
+        <span v-if="user.teams.length > 1" class="navbar__team-count">
+          +{{ user.teams.length - 1 }}
+        </span>
+      </button>
       <span v-if="user">{{ user.displayName }}</span>
       <button class="navbar__logout" @click="handleLogout">Logout</button>
     </div>
   </nav>
+
+  <TeamPickerModal
+    v-if="showTeamPicker"
+    :initial-selection="currentSelection"
+    title="Manage your teams"
+    submit-label="Save"
+    :dismissible="true"
+    @submit="handleTeamSubmit"
+    @cancel="showTeamPicker = false"
+  />
 </template>
 
 <style scoped>
@@ -82,6 +123,28 @@ function handleLogout() {
   align-items: center;
   gap: 0.75rem;
   font-size: 0.875rem;
+}
+
+.navbar__team {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border-primary);
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.navbar__team:hover {
+  background: var(--bg-secondary, rgba(0, 0, 0, 0.04));
+}
+
+.navbar__team-count {
+  color: var(--text-secondary);
+  font-weight: 400;
 }
 
 .navbar__logout {

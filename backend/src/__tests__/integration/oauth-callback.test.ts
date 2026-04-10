@@ -78,7 +78,7 @@ describe("POST /api/v1/auth/callback", () => {
     // Verify user was created in DB
     const user = await prisma.user.findUnique({
       where: { email: "oauth-test@example.com" },
-      include: { oauthConnections: true },
+      include: { oauthConnections: true, teams: true },
     });
     expect(user).not.toBeNull();
     expect(user!.displayName).toBe("OAuth Test User");
@@ -87,6 +87,9 @@ describe("POST /api/v1/auth/callback", () => {
     expect(user!.oauthConnections).toHaveLength(1);
     expect(user!.oauthConnections[0].provider).toBe("google");
     expect(user!.oauthConnections[0].providerUserId).toBe("google-user-12345");
+
+    // New users start with no team memberships; frontend forces a team picker
+    expect(user!.teams).toHaveLength(0);
   });
 
   it("returns tokens for existing user on subsequent login", async () => {
