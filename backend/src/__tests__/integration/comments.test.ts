@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { buildApp } from "../helpers/app.js";
 import { mintTestToken, TEST_ENGINEER_ID, TEST_PRODUCT_ID } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
+import { seedTestProjects, TEST_PROJECT_ID } from "../helpers/seed-test-projects.js";
 
 const prisma = new PrismaClient();
 
@@ -11,7 +12,7 @@ async function createBugTask(app: any, token: string) {
     method: "POST",
     url: "/api/v1/tasks",
     headers: { authorization: `Bearer ${token}` },
-    payload: { flow: "bug", title: "Comment Test", priority: "medium" },
+    payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Comment Test", priority: "medium" },
   });
   return res.json();
 }
@@ -22,6 +23,7 @@ describe("comments API", () => {
 
   beforeAll(async () => {
     await seedTestUsers(prisma);
+    await seedTestProjects(prisma);
     engineerToken = mintTestToken(TEST_ENGINEER_ID);
     productToken = mintTestToken(TEST_PRODUCT_ID);
   });

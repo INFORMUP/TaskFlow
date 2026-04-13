@@ -7,6 +7,7 @@ import {
   TEST_PRODUCT_ID,
 } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
+import { seedTestProjects, TEST_PROJECT_ID } from "../helpers/seed-test-projects.js";
 
 const prisma = new PrismaClient();
 
@@ -15,6 +16,7 @@ describe("transition with reassign", () => {
 
   beforeAll(async () => {
     await seedTestUsers(prisma);
+    await seedTestProjects(prisma);
     engineerToken = mintTestToken(TEST_ENGINEER_ID);
   });
 
@@ -38,6 +40,7 @@ describe("transition with reassign", () => {
       url: "/api/v1/tasks",
       headers: { authorization: `Bearer ${engineerToken}` },
       payload: {
+        projectIds: [TEST_PROJECT_ID],
         flow: "bug",
         title: "Reassign me",
         priority: "medium",
@@ -77,7 +80,7 @@ describe("transition with reassign", () => {
       method: "POST",
       url: "/api/v1/tasks",
       headers: { authorization: `Bearer ${engineerToken}` },
-      payload: { flow: "bug", title: "T", priority: "low" },
+      payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "T", priority: "low" },
     });
     const taskId = create.json().id;
 
@@ -102,6 +105,7 @@ describe("transition with reassign", () => {
       url: "/api/v1/tasks",
       headers: { authorization: `Bearer ${engineerToken}` },
       payload: {
+        projectIds: [TEST_PROJECT_ID],
         flow: "bug",
         title: "Keep assignee",
         priority: "low",

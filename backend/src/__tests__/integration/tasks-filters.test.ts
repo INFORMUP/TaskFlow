@@ -68,7 +68,12 @@ describe("tasks list filters", () => {
       method: "POST",
       url: "/api/v1/tasks",
       headers: { authorization: `Bearer ${engineerToken}` },
-      payload: { flow: "bug", priority: "low", ...payload },
+      payload: {
+        flow: "bug",
+        priority: "low",
+        projectIds: [projectEngId],
+        ...payload,
+      },
     });
   }
 

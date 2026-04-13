@@ -111,6 +111,7 @@ describe("tasks ↔ projects", () => {
         flow: "bug",
         title: "Due soon",
         priority: "low",
+        projectIds: [projectAId],
         dueDate: "2026-05-01",
       },
     });

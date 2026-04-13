@@ -33,6 +33,12 @@ export async function taskRoutes(fastify: FastifyInstance) {
       });
     }
 
+    if (!projectIds || projectIds.length === 0) {
+      return reply.status(400).send({
+        error: { code: "PROJECT_REQUIRED", message: "At least one project is required" },
+      });
+    }
+
     // Validate flow exists
     const flowRecord = await prisma.flow.findUnique({ where: { slug: flow } });
     if (!flowRecord) {

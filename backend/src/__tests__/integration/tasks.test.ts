@@ -9,6 +9,7 @@ import {
   TEST_AGENT_ID,
 } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
+import { seedTestProjects, TEST_PROJECT_ID } from "../helpers/seed-test-projects.js";
 
 const prisma = new PrismaClient();
 
@@ -20,6 +21,7 @@ describe("tasks API", () => {
 
   beforeAll(async () => {
     await seedTestUsers(prisma);
+    await seedTestProjects(prisma);
     engineerToken = mintTestToken(TEST_ENGINEER_ID);
     productToken = mintTestToken(TEST_PRODUCT_ID);
     userToken = mintTestToken(TEST_USER_ID);
@@ -47,6 +49,7 @@ describe("tasks API", () => {
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
         payload: {
+          projectIds: [TEST_PROJECT_ID],
           flow: "bug",
           title: "Login fails on Safari",
           description: "Blank screen after OAuth redirect",
@@ -68,7 +71,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "feature", title: "Dark mode", priority: "medium" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "feature", title: "Dark mode", priority: "medium" },
       });
       expect(response.statusCode).toBe(201);
       expect(response.json().displayId).toMatch(/^FEAT-\d+$/);
@@ -81,7 +84,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "improvement", title: "Refactor auth", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "improvement", title: "Refactor auth", priority: "low" },
       });
       expect(response.statusCode).toBe(201);
       expect(response.json().displayId).toMatch(/^IMP-\d+$/);
@@ -94,13 +97,13 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Bug 1", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Bug 1", priority: "low" },
       });
       const r2 = await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Bug 2", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Bug 2", priority: "low" },
       });
       const id1 = parseInt(r1.json().displayId.split("-")[1]);
       const id2 = parseInt(r2.json().displayId.split("-")[1]);
@@ -112,7 +115,7 @@ describe("tasks API", () => {
       const response = await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
-        payload: { flow: "bug", title: "Test", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Test", priority: "low" },
       });
       expect(response.statusCode).toBe(401);
     });
@@ -123,7 +126,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${userToken}` },
-        payload: { flow: "improvement", title: "Test", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "improvement", title: "Test", priority: "low" },
       });
       expect(response.statusCode).toBe(403);
     });
@@ -134,9 +137,21 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", priority: "low" },
       });
       expect(response.statusCode).toBe(400);
+    });
+
+    it("returns 400 PROJECT_REQUIRED with missing projectIds", async () => {
+      const app = await buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/tasks",
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { flow: "bug", title: "No projects", priority: "low" },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.code).toBe("PROJECT_REQUIRED");
     });
 
     it("returns 422 with invalid flow", async () => {
@@ -145,7 +160,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "invalid", title: "Test", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "invalid", title: "Test", priority: "low" },
       });
       expect(response.statusCode).toBe(422);
     });
@@ -156,7 +171,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Test", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Test", priority: "low" },
       });
       const task = createRes.json();
       const transitions = await prisma.taskTransition.findMany({
@@ -176,13 +191,13 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Bug 1", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Bug 1", priority: "low" },
       });
       await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Bug 2", priority: "high" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Bug 2", priority: "high" },
       });
 
       const response = await app.inject({
@@ -202,13 +217,13 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Bug", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Bug", priority: "low" },
       });
       await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "feature", title: "Feature", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "feature", title: "Feature", priority: "low" },
       });
 
       const response = await app.inject({
@@ -227,13 +242,13 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "High Bug", priority: "high" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "High Bug", priority: "high" },
       });
       await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Low Bug", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Low Bug", priority: "low" },
       });
 
       const response = await app.inject({
@@ -253,14 +268,14 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Engineer's bug", priority: "high" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Engineer's bug", priority: "high" },
       });
       // User creates a bug
       await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${userToken}` },
-        payload: { flow: "bug", title: "My own bug", priority: "medium" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "My own bug", priority: "medium" },
       });
 
       const response = await app.inject({
@@ -280,13 +295,13 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Assigned to agent", priority: "high" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Assigned to agent", priority: "high" },
       });
       await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Unassigned", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Unassigned", priority: "low" },
       });
       await prisma.task.update({
         where: { id: r1.json().id },
@@ -310,19 +325,19 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "B", priority: "medium" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "B", priority: "medium" },
       });
       await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "feature", title: "F", priority: "medium" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "feature", title: "F", priority: "medium" },
       });
       await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "improvement", title: "I", priority: "medium" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "improvement", title: "I", priority: "medium" },
       });
 
       // User team: view scope is own_public on bug/feature, none on improvement.
@@ -342,14 +357,14 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${userToken}` },
-        payload: { flow: "bug", title: "User-filed bug", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "User-filed bug", priority: "low" },
       });
       // Engineer creates an improvement; user should NEVER see improvements
       await app.inject({
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "improvement", title: "Eng improvement", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "improvement", title: "Eng improvement", priority: "low" },
       });
 
       const response = await app.inject({
@@ -368,7 +383,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "To Delete", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "To Delete", priority: "low" },
       });
       const task = createRes.json();
 
@@ -394,7 +409,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Detail Test", description: "A bug", priority: "medium" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Detail Test", description: "A bug", priority: "medium" },
       });
       const task = createRes.json();
 
@@ -427,7 +442,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "improvement", title: "Private imp", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "improvement", title: "Private imp", priority: "low" },
       });
       const task = createRes.json();
 
@@ -446,7 +461,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Not your bug", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Not your bug", priority: "low" },
       });
       const response = await app.inject({
         method: "GET",
@@ -464,7 +479,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Original", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Original", priority: "low" },
       });
       const task = createRes.json();
 
@@ -484,7 +499,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Test", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Test", priority: "low" },
       });
       const task = createRes.json();
 
@@ -506,7 +521,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${userToken}` },
-        payload: { flow: "bug", title: "Own bug", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Own bug", priority: "low" },
       });
       const task = createRes.json();
 
@@ -527,7 +542,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "To Delete", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "To Delete", priority: "low" },
       });
       const task = createRes.json();
 
@@ -549,7 +564,7 @@ describe("tasks API", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { flow: "bug", title: "Test", priority: "low" },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Test", priority: "low" },
       });
       const task = createRes.json();
 
