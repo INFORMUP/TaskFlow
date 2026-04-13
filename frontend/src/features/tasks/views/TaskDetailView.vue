@@ -4,6 +4,8 @@ import { useRoute, useRouter } from "vue-router";
 import { getTask, type Task } from "@/api/tasks.api";
 import { getTransitions, createTransition, type Transition } from "@/api/transitions.api";
 import { getComments, createComment, deleteComment, type Comment } from "@/api/comments.api";
+import { apiFetch } from "@/api/client";
+import MarkdownView from "@/features/tasks/components/MarkdownView.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -18,10 +20,14 @@ const loading = ref(true);
 const transitionStatus = ref("");
 const transitionNote = ref("");
 const transitionResolution = ref("");
+const transitionReassignee = ref("");
 const transitionError = ref("");
 
 // Comment form state
 const newComment = ref("");
+
+// Users (for reassign dropdown)
+const users = ref<{ id: string; displayName: string }[]>([]);
 
 const RESOLUTIONS: Record<string, string[]> = {
   bug: ["fixed", "invalid", "duplicate", "wont_fix", "cannot_reproduce"],
@@ -56,10 +62,12 @@ async function handleTransition() {
       toStatus: transitionStatus.value,
       note: transitionNote.value,
       ...(transitionStatus.value === "closed" && { resolution: transitionResolution.value }),
+      ...(transitionReassignee.value && { newAssigneeUserId: transitionReassignee.value }),
     });
     transitionStatus.value = "";
     transitionNote.value = "";
     transitionResolution.value = "";
+    transitionReassignee.value = "";
     await loadAll();
   } catch (e: any) {
     transitionError.value = e?.error?.message || "Transition failed";
@@ -84,7 +92,14 @@ function goBack() {
   router.push(`/tasks/${route.params.flow}`);
 }
 
-onMounted(loadAll);
+onMounted(async () => {
+  await loadAll();
+  try {
+    users.value = (await apiFetch<{ data: any[] }>("/api/v1/users")).data;
+  } catch {
+    users.value = [];
+  }
+});
 </script>
 
 <template>
@@ -101,11 +116,28 @@ onMounted(loadAll);
     </div>
 
     <h1 class="detail__title">{{ task.title }}</h1>
-    <p class="detail__description" v-if="task.description">{{ task.description }}</p>
+
+    <div v-if="task.projects.length > 0" class="detail__projects">
+      <span
+        v-for="p in task.projects"
+        :key="p.id"
+        class="detail__project-chip"
+        :title="`Owner: ${p.owner.displayName}`"
+      >
+        <strong>{{ p.key }}</strong> · {{ p.name }}
+      </span>
+    </div>
+
+    <MarkdownView
+      v-if="task.description"
+      :source="task.description"
+      class="detail__description"
+    />
 
     <div class="detail__meta">
       <div>Created by: {{ task.creator.displayName }}</div>
       <div v-if="task.assignee">Assigned to: {{ task.assignee.displayName }}</div>
+      <div v-if="task.dueDate">Due: {{ new Date(task.dueDate).toLocaleDateString() }}</div>
       <div v-if="task.resolution">Resolution: {{ task.resolution }}</div>
     </div>
 
@@ -137,6 +169,12 @@ onMounted(loadAll);
           {{ r }}
         </option>
       </select>
+      <select v-model="transitionReassignee" class="detail__select">
+        <option value="">Reassign to... (optional)</option>
+        <option v-for="u in users" :key="u.id" :value="u.id">
+          {{ u.displayName }}
+        </option>
+      </select>
       <button
         class="detail__btn"
         :disabled="!transitionStatus || !transitionNote.trim()"
@@ -162,6 +200,9 @@ onMounted(loadAll);
             <span v-if="t.fromStatus">{{ t.fromStatus.name }}</span>
             <span v-else>Created</span>
             &rarr; {{ t.toStatus.name }}
+            <span v-if="t.newAssignee" class="timeline__reassign">
+              · reassigned to {{ t.newAssignee.displayName }}
+            </span>
           </div>
           <div class="timeline__note">{{ t.note }}</div>
         </div>
@@ -253,9 +294,33 @@ onMounted(loadAll);
 }
 
 .detail__description {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   margin-bottom: 1rem;
-  white-space: pre-wrap;
+}
+
+.detail__projects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+
+.detail__project-chip {
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  background: var(--bg-secondary, rgba(0, 0, 0, 0.05));
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.detail__project-chip strong {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.timeline__reassign {
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 .detail__meta {
