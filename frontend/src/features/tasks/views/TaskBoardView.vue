@@ -5,6 +5,10 @@ import { getTasks, type Task } from "@/api/tasks.api";
 import { apiFetch } from "@/api/client";
 import TaskColumn from "../components/TaskColumn.vue";
 import TaskCreateForm from "../components/TaskCreateForm.vue";
+import FilterBar from "../components/FilterBar.vue";
+import ViewToggle from "../components/ViewToggle.vue";
+import TaskListView from "./TaskListView.vue";
+import { useTaskFilters, toApiParams } from "../composables/useTaskFilters";
 
 const route = useRoute();
 const router = useRouter();
@@ -13,6 +17,8 @@ const statuses = ref<{ id: string; slug: string; name: string; sortOrder: number
 const loading = ref(false);
 const showCreateForm = ref(false);
 const flowSlug = ref(route.params.flow as string);
+
+const { filters } = useTaskFilters();
 
 interface FlowStatus {
   id: string;
@@ -57,7 +63,8 @@ async function loadStatuses() {
 async function loadTasks() {
   loading.value = true;
   try {
-    const res = await getTasks({ flow: flowSlug.value });
+    const params = toApiParams(filters.value, { flow: flowSlug.value });
+    const res = await getTasks(params);
     tasks.value = res.data;
   } finally {
     loading.value = false;
@@ -83,6 +90,20 @@ watch(() => route.params.flow, (newFlow) => {
   loadTasks();
 });
 
+// Refetch when any filter (except view) changes.
+watch(
+  () => [
+    filters.value.projectId,
+    filters.value.projectOwnerUserId,
+    filters.value.status,
+    filters.value.priority,
+    filters.value.assigneeUserId,
+    filters.value.dueAfter,
+    filters.value.dueBefore,
+  ],
+  () => loadTasks(),
+);
+
 onMounted(() => {
   loadStatuses();
   loadTasks();
@@ -93,8 +114,13 @@ onMounted(() => {
   <div class="board">
     <div class="board__header">
       <h2>{{ flowSlug.charAt(0).toUpperCase() + flowSlug.slice(1) }} Tasks</h2>
-      <button class="board__create-btn" @click="showCreateForm = true">+ New Task</button>
+      <div class="board__toolbar">
+        <ViewToggle />
+        <button class="board__create-btn" @click="showCreateForm = true">+ New Task</button>
+      </div>
     </div>
+
+    <FilterBar :statuses="statuses" />
 
     <TaskCreateForm
       v-if="showCreateForm"
@@ -103,7 +129,13 @@ onMounted(() => {
       @cancel="showCreateForm = false"
     />
 
-    <div class="board__columns" v-if="!loading">
+    <div v-if="loading" class="board__loading">Loading...</div>
+    <TaskListView
+      v-else-if="filters.view === 'list'"
+      :tasks="tasks"
+      :flow="flowSlug"
+    />
+    <div v-else class="board__columns">
       <TaskColumn
         v-for="status in statuses"
         :key="status.slug"
@@ -112,7 +144,6 @@ onMounted(() => {
         @task-click="handleTaskClick"
       />
     </div>
-    <div v-else class="board__loading">Loading...</div>
   </div>
 </template>
 
@@ -127,6 +158,12 @@ onMounted(() => {
 .board__header h2 {
   font-size: 1.25rem;
   font-weight: 600;
+}
+
+.board__toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
 }
 
 .board__create-btn {
