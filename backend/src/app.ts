@@ -10,6 +10,7 @@ import { transitionRoutes } from "./routes/transitions.js";
 import { assignmentRoutes } from "./routes/assignments.js";
 import { commentRoutes } from "./routes/comments.js";
 import { teamRoutes } from "./routes/teams.js";
+import { projectRoutes } from "./routes/projects.js";
 import { config } from "./config.js";
 import "./types/index.js";
 
@@ -27,6 +28,7 @@ export function createApp() {
   app.register(assignmentRoutes);
   app.register(commentRoutes);
   app.register(teamRoutes);
+  app.register(projectRoutes);
 
   return app;
 }
