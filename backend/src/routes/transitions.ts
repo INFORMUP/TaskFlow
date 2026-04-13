@@ -7,10 +7,11 @@ export async function transitionRoutes(fastify: FastifyInstance) {
   // Create transition
   fastify.post("/api/v1/tasks/:id/transitions", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { toStatus, note, resolution } = request.body as {
+    const { toStatus, note, resolution, newAssigneeUserId } = request.body as {
       toStatus?: string;
       note?: string;
       resolution?: string;
+      newAssigneeUserId?: string | null;
     };
 
     // Validate note
@@ -94,6 +95,16 @@ export async function transitionRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Validate new assignee exists and is active if supplied
+    if (newAssigneeUserId) {
+      const assignee = await prisma.user.findUnique({ where: { id: newAssigneeUserId } });
+      if (!assignee || assignee.status !== "active") {
+        return reply.status(422).send({
+          error: { code: "INVALID_USER", message: "New assignee must be an active user" },
+        });
+      }
+    }
+
     // Create transition and update task atomically
     await prisma.$transaction(async (tx) => {
       await tx.taskTransition.create({
@@ -104,6 +115,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
           actorId: request.user.id,
           note: note!,
           actorType: request.user.actorType,
+          newAssigneeId: newAssigneeUserId ?? null,
         },
       });
 
@@ -112,6 +124,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
         data: {
           currentStatusId: targetStatus.id,
           ...(targetStatus.slug === "closed" && { resolution }),
+          ...(newAssigneeUserId !== undefined && { assigneeId: newAssigneeUserId ?? null }),
         },
       });
     });
@@ -139,6 +152,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
         fromStatus: { select: { id: true, slug: true, name: true } },
         toStatus: { select: { id: true, slug: true, name: true } },
         actor: { select: { id: true, displayName: true, actorType: true } },
+        newAssignee: { select: { id: true, displayName: true, actorType: true } },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -151,6 +165,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
         actor: t.actor,
         actorType: t.actorType,
         note: t.note,
+        newAssignee: t.newAssignee,
         createdAt: t.createdAt,
       })),
     };
