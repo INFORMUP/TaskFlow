@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../prisma-client.js";
 import { buildTaskViewWhere, canPerformAction } from "../services/permission.service.js";
-import { createTask } from "../services/task.service.js";
+import { addProjectToTask, createTask, removeProjectFromTask, taskInclude, TaskServiceError } from "../services/task.service.js";
 
 async function getFlowIdBySlug(): Promise<Map<string, string>> {
   const flows = await prisma.flow.findMany();
@@ -11,11 +11,14 @@ async function getFlowIdBySlug(): Promise<Map<string, string>> {
 export async function taskRoutes(fastify: FastifyInstance) {
   // Create task
   fastify.post("/api/v1/tasks", async (request, reply) => {
-    const { flow, title, description, priority } = request.body as {
+    const { flow, title, description, priority, projectIds, dueDate, assigneeUserId } = request.body as {
       flow?: string;
       title?: string;
       description?: string;
       priority?: string;
+      projectIds?: string[];
+      dueDate?: string | null;
+      assigneeUserId?: string | null;
     };
 
     if (!title) {
@@ -46,16 +49,82 @@ export async function taskRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const task = await createTask({
-      flowSlug: flow,
-      title,
-      description,
-      priority: priority || "medium",
-      createdBy: request.user.id,
-      actorType: request.user.actorType,
-    });
+    try {
+      const task = await createTask({
+        flowSlug: flow,
+        title,
+        description,
+        priority: priority || "medium",
+        createdBy: request.user.id,
+        actorType: request.user.actorType,
+        assigneeUserId: assigneeUserId ?? null,
+        projectIds: projectIds ?? [],
+        dueDate: dueDate ?? null,
+      });
+      return reply.status(201).send(formatTask(task!));
+    } catch (err) {
+      if (err instanceof TaskServiceError) {
+        return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+      }
+      throw err;
+    }
+  });
 
-    return reply.status(201).send(formatTask(task!));
+  // Task ↔ project membership
+  fastify.post("/api/v1/tasks/:id/projects", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { projectId } = request.body as { projectId?: string };
+    if (!projectId) {
+      return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "projectId is required" } });
+    }
+
+    const flowIdBySlug = await getFlowIdBySlug();
+    const teamSlugs = request.user.teams.map((t) => t.slug);
+    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+    const task = await prisma.task.findFirst({
+      where: { id, isDeleted: false, ...viewWhere },
+      include: { flow: true },
+    });
+    if (!task) return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
+    if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+      return reply.status(403).send({ error: { code: "FORBIDDEN", message: "Insufficient permission" } });
+    }
+
+    try {
+      await addProjectToTask(id, projectId);
+      return reply.status(204).send();
+    } catch (err) {
+      if (err instanceof TaskServiceError) {
+        return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+      }
+      throw err;
+    }
+  });
+
+  fastify.delete("/api/v1/tasks/:id/projects/:projectId", async (request, reply) => {
+    const { id, projectId } = request.params as { id: string; projectId: string };
+
+    const flowIdBySlug = await getFlowIdBySlug();
+    const teamSlugs = request.user.teams.map((t) => t.slug);
+    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+    const task = await prisma.task.findFirst({
+      where: { id, isDeleted: false, ...viewWhere },
+      include: { flow: true },
+    });
+    if (!task) return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
+    if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+      return reply.status(403).send({ error: { code: "FORBIDDEN", message: "Insufficient permission" } });
+    }
+
+    try {
+      await removeProjectFromTask(id, projectId);
+      return reply.status(204).send();
+    } catch (err) {
+      if (err instanceof TaskServiceError) {
+        return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+      }
+      throw err;
+    }
   });
 
   // List tasks
@@ -105,12 +174,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
     const tasks = await prisma.task.findMany({
       where,
-      include: {
-        flow: true,
-        currentStatus: true,
-        creator: { select: { id: true, displayName: true, actorType: true } },
-        assignee: { select: { id: true, displayName: true, actorType: true } },
-      },
+      include: taskInclude,
       orderBy: { createdAt: "desc" },
       take: limit + 1, // Fetch one extra to detect next page
     });
@@ -137,12 +201,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
     const task = await prisma.task.findFirst({
       where: { id, isDeleted: false, ...viewWhere },
-      include: {
-        flow: true,
-        currentStatus: true,
-        creator: { select: { id: true, displayName: true, actorType: true } },
-        assignee: { select: { id: true, displayName: true, actorType: true } },
-      },
+      include: taskInclude,
     });
 
     if (!task) {
@@ -157,7 +216,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
   // Update task
   fastify.patch("/api/v1/tasks/:id", async (request, reply) => {
     const { id } = request.params as { id: string };
-    const updates = request.body as { title?: string; description?: string; priority?: string };
+    const updates = request.body as { title?: string; description?: string; priority?: string; dueDate?: string | null };
 
     const flowIdBySlug = await getFlowIdBySlug();
     const teamSlugs = request.user.teams.map((t) => t.slug);
@@ -186,13 +245,9 @@ export async function taskRoutes(fastify: FastifyInstance) {
         ...(updates.title && { title: updates.title }),
         ...(updates.description !== undefined && { description: updates.description }),
         ...(updates.priority && { priority: updates.priority }),
+        ...(updates.dueDate !== undefined && { dueDate: updates.dueDate ? new Date(updates.dueDate) : null }),
       },
-      include: {
-        flow: true,
-        currentStatus: true,
-        creator: { select: { id: true, displayName: true, actorType: true } },
-        assignee: { select: { id: true, displayName: true, actorType: true } },
-      },
+      include: taskInclude,
     });
 
     return formatTask(updated);
@@ -240,6 +295,7 @@ function formatTask(task: any) {
     description: task.description,
     priority: task.priority,
     resolution: task.resolution,
+    dueDate: task.dueDate ?? null,
     isDeleted: task.isDeleted,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
@@ -247,5 +303,11 @@ function formatTask(task: any) {
     currentStatus: { id: task.currentStatus.id, slug: task.currentStatus.slug, name: task.currentStatus.name },
     creator: task.creator,
     assignee: task.assignee,
+    projects: (task.projects ?? []).map((tp: any) => ({
+      id: tp.project.id,
+      key: tp.project.key,
+      name: tp.project.name,
+      owner: tp.project.owner,
+    })),
   };
 }
