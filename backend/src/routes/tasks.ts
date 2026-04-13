@@ -133,7 +133,12 @@ export async function taskRoutes(fastify: FastifyInstance) {
       flow?: string;
       status?: string;
       assignee?: string;
+      assigneeUserId?: string;
       priority?: string;
+      projectId?: string;
+      projectOwnerUserId?: string;
+      dueBefore?: string;
+      dueAfter?: string;
       cursor?: string;
       limit?: string;
     };
@@ -158,12 +163,34 @@ export async function taskRoutes(fastify: FastifyInstance) {
       }
     }
 
-    if (query.assignee) {
-      where.assigneeId = query.assignee;
+    const assigneeParam = query.assigneeUserId ?? query.assignee;
+    if (assigneeParam) {
+      where.assigneeId = assigneeParam === "me" ? request.user.id : assigneeParam;
     }
 
     if (query.priority) {
       where.priority = query.priority;
+    }
+
+    if (query.projectId) {
+      where.projects = { some: { projectId: query.projectId } };
+    }
+
+    if (query.projectOwnerUserId) {
+      const existingProjects = (where.projects as any) ?? {};
+      where.projects = {
+        some: {
+          ...(existingProjects.some ?? {}),
+          project: { ownerUserId: query.projectOwnerUserId },
+        },
+      };
+    }
+
+    if (query.dueBefore || query.dueAfter) {
+      const due: Record<string, Date> = {};
+      if (query.dueAfter) due.gte = new Date(query.dueAfter);
+      if (query.dueBefore) due.lte = new Date(query.dueBefore);
+      where.dueDate = due;
     }
 
     const limit = Math.min(parseInt(query.limit || "25", 10), 100);
