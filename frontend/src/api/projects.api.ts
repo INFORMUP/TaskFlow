@@ -1,0 +1,84 @@
+import { apiFetch } from "@/api/client";
+
+export interface ProjectUser {
+  id: string;
+  displayName: string;
+  actorType: string;
+}
+
+export interface ProjectFlow {
+  id: string;
+  slug: string;
+  name: string;
+}
+
+export interface ProjectTeam {
+  id: string;
+  slug: string;
+  name: string;
+}
+
+export interface Project {
+  id: string;
+  key: string;
+  name: string;
+  owner: ProjectUser;
+  defaultAssignee: ProjectUser | null;
+  defaultFlow: ProjectFlow | null;
+  teams: ProjectTeam[];
+  createdAt: string;
+  archivedAt: string | null;
+}
+
+export interface CreateProjectPayload {
+  key: string;
+  name: string;
+  ownerUserId: string;
+  defaultAssigneeUserId?: string | null;
+  defaultFlowId?: string | null;
+  teamIds: string[];
+}
+
+export interface UpdateProjectPayload {
+  name?: string;
+  ownerUserId?: string;
+  defaultAssigneeUserId?: string | null;
+  defaultFlowId?: string | null;
+}
+
+export async function listProjects(opts: { archived?: boolean } = {}): Promise<Project[]> {
+  const qs = opts.archived ? "?archived=true" : "";
+  const res = await apiFetch<{ data: Project[] }>(`/api/v1/projects${qs}`);
+  return res.data;
+}
+
+export function getProject(id: string): Promise<Project> {
+  return apiFetch(`/api/v1/projects/${id}`);
+}
+
+export function createProject(payload: CreateProjectPayload): Promise<Project> {
+  return apiFetch("/api/v1/projects", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function updateProject(id: string, payload: UpdateProjectPayload): Promise<Project> {
+  return apiFetch(`/api/v1/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function archiveProject(id: string): Promise<Project> {
+  return apiFetch(`/api/v1/projects/${id}/archive`, { method: "POST" });
+}
+
+export function unarchiveProject(id: string): Promise<Project> {
+  return apiFetch(`/api/v1/projects/${id}/archive`, { method: "DELETE" });
+}
+
+export function addProjectTeam(id: string, teamId: string): Promise<Project> {
+  return apiFetch(`/api/v1/projects/${id}/teams`, {
+    method: "POST",
+    body: JSON.stringify({ teamId }),
+  });
+}
+
+export function removeProjectTeam(id: string, teamId: string): Promise<Project> {
+  return apiFetch(`/api/v1/projects/${id}/teams/${teamId}`, { method: "DELETE" });
+}

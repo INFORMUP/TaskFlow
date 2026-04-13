@@ -1,5 +1,12 @@
 import { apiFetch } from "./client";
 
+export interface TaskProjectChip {
+  id: string;
+  key: string;
+  name: string;
+  owner: { id: string; displayName: string; actorType: string };
+}
+
 export interface Task {
   id: string;
   displayId: string;
@@ -7,10 +14,12 @@ export interface Task {
   description: string | null;
   priority: string;
   resolution: string | null;
+  dueDate: string | null;
   flow: { id: string; slug: string; name: string };
   currentStatus: { id: string; slug: string; name: string };
   creator: { id: string; displayName: string; actorType: string };
   assignee: { id: string; displayName: string; actorType: string } | null;
+  projects: TaskProjectChip[];
   createdAt: string;
   updatedAt: string;
 }
@@ -34,6 +43,9 @@ export function createTask(data: {
   title: string;
   description?: string;
   priority: string;
+  projectIds?: string[];
+  assigneeUserId?: string | null;
+  dueDate?: string | null;
 }): Promise<Task> {
   return apiFetch("/api/v1/tasks", {
     method: "POST",
@@ -41,9 +53,20 @@ export function createTask(data: {
   });
 }
 
+export function addTaskProject(id: string, projectId: string): Promise<void> {
+  return apiFetch(`/api/v1/tasks/${id}/projects`, {
+    method: "POST",
+    body: JSON.stringify({ projectId }),
+  });
+}
+
+export function removeTaskProject(id: string, projectId: string): Promise<void> {
+  return apiFetch(`/api/v1/tasks/${id}/projects/${projectId}`, { method: "DELETE" });
+}
+
 export function updateTask(
   id: string,
-  data: { title?: string; description?: string; priority?: string }
+  data: { title?: string; description?: string; priority?: string; dueDate?: string | null }
 ): Promise<Task> {
   return apiFetch(`/api/v1/tasks/${id}`, {
     method: "PATCH",

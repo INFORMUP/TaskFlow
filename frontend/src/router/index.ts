@@ -27,6 +27,24 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/features/tasks/views/TaskDetailView.vue"),
     meta: { layout: "app" },
   },
+  {
+    path: "/projects",
+    name: "project-list",
+    component: () => import("@/features/projects/views/ProjectListView.vue"),
+    meta: { layout: "app" },
+  },
+  {
+    path: "/projects/new",
+    name: "project-new",
+    component: () => import("@/features/projects/views/ProjectNewView.vue"),
+    meta: { layout: "app" },
+  },
+  {
+    path: "/projects/:id",
+    name: "project-detail",
+    component: () => import("@/features/projects/views/ProjectDetailView.vue"),
+    meta: { layout: "app" },
+  },
 ];
 
 const router = createRouter({

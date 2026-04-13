@@ -52,6 +52,13 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
       >
         {{ flow.name }}
       </router-link>
+      <router-link
+        to="/projects"
+        class="navbar__tab"
+        :class="{ 'navbar__tab--active': route.path.startsWith('/projects') }"
+      >
+        Projects
+      </router-link>
     </div>
     <div class="navbar__user">
       <button
