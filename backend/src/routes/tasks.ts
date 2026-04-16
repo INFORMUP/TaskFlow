@@ -1,7 +1,98 @@
 import { FastifyInstance } from "fastify";
+import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { buildTaskViewWhere, canPerformAction, enforceScope } from "../services/permission.service.js";
 import { addProjectToTask, createTask, removeProjectFromTask, taskInclude, TaskServiceError } from "../services/task.service.js";
+import { CommonErrorResponses, IdParams, UserSummary } from "./_schemas.js";
+
+const FlowRef = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    slug: Type.String(),
+    name: Type.String(),
+  },
+  { additionalProperties: true }
+);
+
+const StatusRef = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    slug: Type.String(),
+    name: Type.String(),
+  },
+  { additionalProperties: true }
+);
+
+const ProjectMembership = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    key: Type.String(),
+    name: Type.String(),
+    owner: Type.Optional(UserSummary),
+  },
+  { additionalProperties: true }
+);
+
+const TaskRecord = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    displayId: Type.String(),
+    title: Type.String(),
+    description: Type.Union([Type.String(), Type.Null()]),
+    priority: Type.String(),
+    resolution: Type.Union([Type.String(), Type.Null()]),
+    dueDate: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+    isDeleted: Type.Boolean(),
+    createdAt: Type.String({ format: "date-time" }),
+    updatedAt: Type.String({ format: "date-time" }),
+    flow: FlowRef,
+    currentStatus: StatusRef,
+    creator: UserSummary,
+    assignee: Type.Union([UserSummary, Type.Null()]),
+    projects: Type.Array(ProjectMembership),
+  },
+  { additionalProperties: true }
+);
+
+const CreateTaskBody = Type.Object({
+  flow: Type.String({ minLength: 1 }),
+  title: Type.String({ minLength: 1 }),
+  description: Type.Optional(Type.String()),
+  priority: Type.Optional(Type.String()),
+  // Marked optional in the schema so the handler can return a specific
+  // PROJECT_REQUIRED error code that callers depend on. Semantically required —
+  // empty array or omission both produce PROJECT_REQUIRED.
+  projectIds: Type.Optional(Type.Array(Type.String({ format: "uuid" }))),
+  dueDate: Type.Optional(
+    Type.Union([Type.String({ description: "ISO 8601 date or date-time." }), Type.Null()])
+  ),
+  assigneeUserId: Type.Optional(Type.Union([Type.String({ format: "uuid" }), Type.Null()])),
+});
+
+const UpdateTaskBody = Type.Object({
+  title: Type.Optional(Type.String({ minLength: 1 })),
+  description: Type.Optional(Type.String()),
+  priority: Type.Optional(Type.String()),
+  dueDate: Type.Optional(
+    Type.Union([Type.String({ description: "ISO 8601 date or date-time." }), Type.Null()])
+  ),
+});
+
+const ProjectIdBody = Type.Object({ projectId: Type.String({ format: "uuid" }) });
+
+const ListTasksQuery = Type.Object({
+  flow: Type.Optional(Type.String()),
+  status: Type.Optional(Type.String()),
+  assignee: Type.Optional(Type.String({ description: "User ID or the literal 'me'." })),
+  assigneeUserId: Type.Optional(Type.String()),
+  priority: Type.Optional(Type.String()),
+  projectId: Type.Optional(Type.String({ format: "uuid" })),
+  projectOwnerUserId: Type.Optional(Type.String({ format: "uuid" })),
+  dueBefore: Type.Optional(Type.String({ description: "ISO 8601 date or date-time." })),
+  dueAfter: Type.Optional(Type.String({ description: "ISO 8601 date or date-time." })),
+  cursor: Type.Optional(Type.String({ description: "Opaque cursor — an ISO timestamp from a previous response." })),
+  limit: Type.Optional(Type.String({ description: "Integer 1–100 as a string." })),
+});
 
 async function getFlowIdBySlug(): Promise<Map<string, string>> {
   const flows = await prisma.flow.findMany();
@@ -9,322 +100,386 @@ async function getFlowIdBySlug(): Promise<Map<string, string>> {
 }
 
 export async function taskRoutes(fastify: FastifyInstance) {
-  // Create task
-  fastify.post("/api/v1/tasks", async (request, reply) => {
-    if (!enforceScope(request, reply, "tasks:write")) return;
-    const { flow, title, description, priority, projectIds, dueDate, assigneeUserId } = request.body as {
-      flow?: string;
-      title?: string;
-      description?: string;
-      priority?: string;
-      projectIds?: string[];
-      dueDate?: string | null;
-      assigneeUserId?: string | null;
-    };
+  fastify.post<{ Body: Static<typeof CreateTaskBody> }>(
+    "/api/v1/tasks",
+    {
+      schema: {
+        summary: "Create a task",
+        description:
+          "Requires tasks:write scope and `create` permission for the target flow. `projectIds` must be non-empty — returns 400 PROJECT_REQUIRED if missing.",
+        tags: ["tasks"],
+        body: CreateTaskBody,
+        response: { 201: TaskRecord, ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:write")) return;
+      const { flow, title, description, priority, projectIds, dueDate, assigneeUserId } = request.body;
 
-    if (!title) {
-      return reply.status(400).send({
-        error: { code: "BAD_REQUEST", message: "Title is required" },
-      });
-    }
-
-    if (!flow) {
-      return reply.status(400).send({
-        error: { code: "BAD_REQUEST", message: "Flow is required" },
-      });
-    }
-
-    if (!projectIds || projectIds.length === 0) {
-      return reply.status(400).send({
-        error: { code: "PROJECT_REQUIRED", message: "At least one project is required" },
-      });
-    }
-
-    // Validate flow exists
-    const flowRecord = await prisma.flow.findFirst({ where: { slug: flow } });
-    if (!flowRecord) {
-      return reply.status(422).send({
-        error: { code: "INVALID_FLOW", message: `Unknown flow: ${flow}` },
-      });
-    }
-
-    // Check create permission
-    const teamSlugs = request.user.teams.map((t) => t.slug);
-    if (!canPerformAction(teamSlugs, "create", flow)) {
-      return reply.status(403).send({
-        error: { code: "FORBIDDEN", message: "You do not have permission to create tasks in this flow" },
-      });
-    }
-
-    try {
-      const task = await createTask({
-        flowSlug: flow,
-        title,
-        description,
-        priority: priority || "medium",
-        createdBy: request.user.id,
-        actorType: request.user.actorType,
-        assigneeUserId: assigneeUserId ?? null,
-        projectIds: projectIds ?? [],
-        dueDate: dueDate ?? null,
-      });
-      return reply.status(201).send(formatTask(task!));
-    } catch (err) {
-      if (err instanceof TaskServiceError) {
-        return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+      if (!projectIds || projectIds.length === 0) {
+        return reply.status(400).send({
+          error: { code: "PROJECT_REQUIRED", message: "At least one project is required" },
+        });
       }
-      throw err;
-    }
-  });
 
-  // Task ↔ project membership
-  fastify.post("/api/v1/tasks/:id/projects", async (request, reply) => {
-    if (!enforceScope(request, reply, "tasks:write")) return;
-    const { id } = request.params as { id: string };
-    const { projectId } = request.body as { projectId?: string };
-    if (!projectId) {
-      return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "projectId is required" } });
-    }
-
-    const flowIdBySlug = await getFlowIdBySlug();
-    const teamSlugs = request.user.teams.map((t) => t.slug);
-    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
-    const task = await prisma.task.findFirst({
-      where: { id, isDeleted: false, ...viewWhere },
-      include: { flow: true },
-    });
-    if (!task) return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
-    if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
-      return reply.status(403).send({ error: { code: "FORBIDDEN", message: "Insufficient permission" } });
-    }
-
-    try {
-      await addProjectToTask(id, projectId);
-      return reply.status(204).send();
-    } catch (err) {
-      if (err instanceof TaskServiceError) {
-        return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+      const flowRecord = await prisma.flow.findFirst({ where: { slug: flow } });
+      if (!flowRecord) {
+        return reply.status(422).send({
+          error: { code: "INVALID_FLOW", message: `Unknown flow: ${flow}` },
+        });
       }
-      throw err;
-    }
-  });
 
-  fastify.delete("/api/v1/tasks/:id/projects/:projectId", async (request, reply) => {
-    if (!enforceScope(request, reply, "tasks:write")) return;
-    const { id, projectId } = request.params as { id: string; projectId: string };
-
-    const flowIdBySlug = await getFlowIdBySlug();
-    const teamSlugs = request.user.teams.map((t) => t.slug);
-    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
-    const task = await prisma.task.findFirst({
-      where: { id, isDeleted: false, ...viewWhere },
-      include: { flow: true },
-    });
-    if (!task) return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
-    if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
-      return reply.status(403).send({ error: { code: "FORBIDDEN", message: "Insufficient permission" } });
-    }
-
-    try {
-      await removeProjectFromTask(id, projectId);
-      return reply.status(204).send();
-    } catch (err) {
-      if (err instanceof TaskServiceError) {
-        return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      if (!canPerformAction(teamSlugs, "create", flow)) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "You do not have permission to create tasks in this flow" },
+        });
       }
-      throw err;
-    }
-  });
 
-  // List tasks
-  fastify.get("/api/v1/tasks", async (request, reply) => {
-    if (!enforceScope(request, reply, "tasks:read")) return;
-    const query = request.query as {
-      flow?: string;
-      status?: string;
-      assignee?: string;
-      assigneeUserId?: string;
-      priority?: string;
-      projectId?: string;
-      projectOwnerUserId?: string;
-      dueBefore?: string;
-      dueAfter?: string;
-      cursor?: string;
-      limit?: string;
-    };
-
-    const flowIdBySlug = await getFlowIdBySlug();
-    const teamSlugs = request.user.teams.map((t) => t.slug);
-    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
-
-    const where: Record<string, unknown> = { isDeleted: false, ...viewWhere };
-
-    if (query.flow) {
-      const flow = await prisma.flow.findFirst({ where: { slug: query.flow } });
-      if (flow) where.flowId = flow.id;
-    }
-
-    if (query.status) {
-      const statuses = await prisma.flowStatus.findMany({
-        where: { slug: query.status },
-      });
-      if (statuses.length > 0) {
-        where.currentStatusId = { in: statuses.map((s) => s.id) };
+      try {
+        const task = await createTask({
+          flowSlug: flow,
+          title,
+          description,
+          priority: priority || "medium",
+          createdBy: request.user.id,
+          actorType: request.user.actorType,
+          assigneeUserId: assigneeUserId ?? null,
+          projectIds: projectIds ?? [],
+          dueDate: dueDate ?? null,
+        });
+        return reply.status(201).send(formatTask(task!));
+      } catch (err) {
+        if (err instanceof TaskServiceError) {
+          return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+        }
+        throw err;
       }
     }
+  );
 
-    const assigneeParam = query.assigneeUserId ?? query.assignee;
-    if (assigneeParam) {
-      where.assigneeId = assigneeParam === "me" ? request.user.id : assigneeParam;
+  fastify.post<{ Params: { id: string }; Body: Static<typeof ProjectIdBody> }>(
+    "/api/v1/tasks/:id/projects",
+    {
+      schema: {
+        summary: "Add a project to a task",
+        tags: ["tasks"],
+        params: IdParams,
+        body: ProjectIdBody,
+        response: { 204: Type.Null(), ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:write")) return;
+      const { id } = request.params;
+      const { projectId } = request.body;
+
+      const flowIdBySlug = await getFlowIdBySlug();
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+      const task = await prisma.task.findFirst({
+        where: { id, isDeleted: false, ...viewWhere },
+        include: { flow: true },
+      });
+      if (!task) return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+        return reply.status(403).send({ error: { code: "FORBIDDEN", message: "Insufficient permission" } });
+      }
+
+      try {
+        await addProjectToTask(id, projectId);
+        return reply.status(204).send();
+      } catch (err) {
+        if (err instanceof TaskServiceError) {
+          return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+        }
+        throw err;
+      }
     }
+  );
 
-    if (query.priority) {
-      where.priority = query.priority;
+  fastify.delete<{ Params: { id: string; projectId: string } }>(
+    "/api/v1/tasks/:id/projects/:projectId",
+    {
+      schema: {
+        summary: "Remove a project from a task",
+        description: "Returns 400 LAST_PROJECT if removing the only project on the task.",
+        tags: ["tasks"],
+        params: Type.Object({
+          id: Type.String({ format: "uuid" }),
+          projectId: Type.String({ format: "uuid" }),
+        }),
+        response: { 204: Type.Null(), ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:write")) return;
+      const { id, projectId } = request.params;
+
+      const flowIdBySlug = await getFlowIdBySlug();
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+      const task = await prisma.task.findFirst({
+        where: { id, isDeleted: false, ...viewWhere },
+        include: { flow: true },
+      });
+      if (!task) return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+        return reply.status(403).send({ error: { code: "FORBIDDEN", message: "Insufficient permission" } });
+      }
+
+      try {
+        await removeProjectFromTask(id, projectId);
+        return reply.status(204).send();
+      } catch (err) {
+        if (err instanceof TaskServiceError) {
+          return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+        }
+        throw err;
+      }
     }
+  );
 
-    if (query.projectId) {
-      where.projects = { some: { projectId: query.projectId } };
-    }
-
-    if (query.projectOwnerUserId) {
-      const existingProjects = (where.projects as any) ?? {};
-      where.projects = {
-        some: {
-          ...(existingProjects.some ?? {}),
-          project: { ownerUserId: query.projectOwnerUserId },
+  fastify.get<{ Querystring: Static<typeof ListTasksQuery> }>(
+    "/api/v1/tasks",
+    {
+      schema: {
+        summary: "List tasks",
+        description:
+          "Requires tasks:read scope. Filters visible tasks by flow, status, assignee, priority, project, due-date window. Cursor-paginated (`cursor` is a `createdAt` ISO timestamp; `limit` max 100).",
+        tags: ["tasks"],
+        querystring: ListTasksQuery,
+        response: {
+          200: Type.Object(
+            {
+              data: Type.Array(TaskRecord),
+              pagination: Type.Object(
+                {
+                  cursor: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+                  hasMore: Type.Boolean(),
+                },
+                { additionalProperties: true }
+              ),
+            },
+            { additionalProperties: true }
+          ),
+          ...CommonErrorResponses,
         },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:read")) return;
+      const query = request.query;
+
+      const flowIdBySlug = await getFlowIdBySlug();
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+
+      const where: Record<string, unknown> = { isDeleted: false, ...viewWhere };
+
+      if (query.flow) {
+        const flow = await prisma.flow.findFirst({ where: { slug: query.flow } });
+        if (flow) where.flowId = flow.id;
+      }
+
+      if (query.status) {
+        const statuses = await prisma.flowStatus.findMany({
+          where: { slug: query.status },
+        });
+        if (statuses.length > 0) {
+          where.currentStatusId = { in: statuses.map((s) => s.id) };
+        }
+      }
+
+      const assigneeParam = query.assigneeUserId ?? query.assignee;
+      if (assigneeParam) {
+        where.assigneeId = assigneeParam === "me" ? request.user.id : assigneeParam;
+      }
+
+      if (query.priority) {
+        where.priority = query.priority;
+      }
+
+      if (query.projectId) {
+        where.projects = { some: { projectId: query.projectId } };
+      }
+
+      if (query.projectOwnerUserId) {
+        const existingProjects = (where.projects as any) ?? {};
+        where.projects = {
+          some: {
+            ...(existingProjects.some ?? {}),
+            project: { ownerUserId: query.projectOwnerUserId },
+          },
+        };
+      }
+
+      if (query.dueBefore || query.dueAfter) {
+        const due: Record<string, Date> = {};
+        if (query.dueAfter) due.gte = new Date(query.dueAfter);
+        if (query.dueBefore) due.lte = new Date(query.dueBefore);
+        where.dueDate = due;
+      }
+
+      const limit = Math.min(parseInt(query.limit || "25", 10), 100);
+
+      if (query.cursor) {
+        where.createdAt = { lt: new Date(query.cursor) };
+      }
+
+      const tasks = await prisma.task.findMany({
+        where,
+        include: taskInclude,
+        orderBy: { createdAt: "desc" },
+        take: limit + 1,
+      });
+
+      const hasMore = tasks.length > limit;
+      const data = tasks.slice(0, limit);
+      const nextCursor = hasMore && data.length > 0
+        ? data[data.length - 1].createdAt.toISOString()
+        : null;
+
+      return {
+        data: data.map(formatTask),
+        pagination: { cursor: nextCursor, hasMore },
       };
     }
+  );
 
-    if (query.dueBefore || query.dueAfter) {
-      const due: Record<string, Date> = {};
-      if (query.dueAfter) due.gte = new Date(query.dueAfter);
-      if (query.dueBefore) due.lte = new Date(query.dueBefore);
-      where.dueDate = due;
-    }
-
-    const limit = Math.min(parseInt(query.limit || "25", 10), 100);
-
-    if (query.cursor) {
-      where.createdAt = { lt: new Date(query.cursor) };
-    }
-
-    const tasks = await prisma.task.findMany({
-      where,
-      include: taskInclude,
-      orderBy: { createdAt: "desc" },
-      take: limit + 1, // Fetch one extra to detect next page
-    });
-
-    const hasMore = tasks.length > limit;
-    const data = tasks.slice(0, limit);
-    const nextCursor = hasMore && data.length > 0
-      ? data[data.length - 1].createdAt.toISOString()
-      : null;
-
-    return {
-      data: data.map(formatTask),
-      pagination: { cursor: nextCursor, hasMore },
-    };
-  });
-
-  // Get task detail
-  fastify.get("/api/v1/tasks/:id", async (request, reply) => {
-    if (!enforceScope(request, reply, "tasks:read")) return;
-    const { id } = request.params as { id: string };
-
-    const flowIdBySlug = await getFlowIdBySlug();
-    const teamSlugs = request.user.teams.map((t) => t.slug);
-    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
-
-    const task = await prisma.task.findFirst({
-      where: { id, isDeleted: false, ...viewWhere },
-      include: taskInclude,
-    });
-
-    if (!task) {
-      return reply.status(404).send({
-        error: { code: "NOT_FOUND", message: "Task not found" },
-      });
-    }
-
-    return formatTask(task);
-  });
-
-  // Update task
-  fastify.patch("/api/v1/tasks/:id", async (request, reply) => {
-    if (!enforceScope(request, reply, "tasks:write")) return;
-    const { id } = request.params as { id: string };
-    const updates = request.body as { title?: string; description?: string; priority?: string; dueDate?: string | null };
-
-    const flowIdBySlug = await getFlowIdBySlug();
-    const teamSlugs = request.user.teams.map((t) => t.slug);
-    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
-
-    const task = await prisma.task.findFirst({
-      where: { id, isDeleted: false, ...viewWhere },
-      include: { flow: true },
-    });
-
-    if (!task) {
-      return reply.status(404).send({
-        error: { code: "NOT_FOUND", message: "Task not found" },
-      });
-    }
-
-    if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
-      return reply.status(403).send({
-        error: { code: "FORBIDDEN", message: "You do not have permission to edit this task" },
-      });
-    }
-
-    const updated = await prisma.task.update({
-      where: { id },
-      data: {
-        ...(updates.title && { title: updates.title }),
-        ...(updates.description !== undefined && { description: updates.description }),
-        ...(updates.priority && { priority: updates.priority }),
-        ...(updates.dueDate !== undefined && { dueDate: updates.dueDate ? new Date(updates.dueDate) : null }),
+  fastify.get<{ Params: { id: string } }>(
+    "/api/v1/tasks/:id",
+    {
+      schema: {
+        summary: "Get a task",
+        tags: ["tasks"],
+        params: IdParams,
+        response: { 200: TaskRecord, ...CommonErrorResponses },
       },
-      include: taskInclude,
-    });
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:read")) return;
+      const { id } = request.params;
 
-    return formatTask(updated);
-  });
+      const flowIdBySlug = await getFlowIdBySlug();
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
 
-  // Delete task (soft)
-  fastify.delete("/api/v1/tasks/:id", async (request, reply) => {
-    if (!enforceScope(request, reply, "tasks:write")) return;
-    const { id } = request.params as { id: string };
-
-    const flowIdBySlug = await getFlowIdBySlug();
-    const teamSlugs = request.user.teams.map((t) => t.slug);
-    const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
-
-    const task = await prisma.task.findFirst({
-      where: { id, isDeleted: false, ...viewWhere },
-      include: { flow: true },
-    });
-
-    if (!task) {
-      return reply.status(404).send({
-        error: { code: "NOT_FOUND", message: "Task not found" },
+      const task = await prisma.task.findFirst({
+        where: { id, isDeleted: false, ...viewWhere },
+        include: taskInclude,
       });
-    }
 
-    if (!canPerformAction(teamSlugs, "delete", task.flow.slug)) {
-      return reply.status(403).send({
-        error: { code: "FORBIDDEN", message: "You do not have permission to delete this task" },
+      if (!task) {
+        return reply.status(404).send({
+          error: { code: "NOT_FOUND", message: "Task not found" },
+        });
+      }
+
+      return formatTask(task);
+    }
+  );
+
+  fastify.patch<{ Params: { id: string }; Body: Static<typeof UpdateTaskBody> }>(
+    "/api/v1/tasks/:id",
+    {
+      schema: {
+        summary: "Update a task",
+        description: "Requires tasks:write scope and `edit` permission for the task's flow.",
+        tags: ["tasks"],
+        params: IdParams,
+        body: UpdateTaskBody,
+        response: { 200: TaskRecord, ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:write")) return;
+      const { id } = request.params;
+      const updates = request.body;
+
+      const flowIdBySlug = await getFlowIdBySlug();
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+
+      const task = await prisma.task.findFirst({
+        where: { id, isDeleted: false, ...viewWhere },
+        include: { flow: true },
       });
+
+      if (!task) {
+        return reply.status(404).send({
+          error: { code: "NOT_FOUND", message: "Task not found" },
+        });
+      }
+
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "You do not have permission to edit this task" },
+        });
+      }
+
+      const updated = await prisma.task.update({
+        where: { id },
+        data: {
+          ...(updates.title && { title: updates.title }),
+          ...(updates.description !== undefined && { description: updates.description }),
+          ...(updates.priority && { priority: updates.priority }),
+          ...(updates.dueDate !== undefined && { dueDate: updates.dueDate ? new Date(updates.dueDate) : null }),
+        },
+        include: taskInclude,
+      });
+
+      return formatTask(updated);
     }
+  );
 
-    await prisma.task.update({
-      where: { id },
-      data: { isDeleted: true },
-    });
+  fastify.delete<{ Params: { id: string } }>(
+    "/api/v1/tasks/:id",
+    {
+      schema: {
+        summary: "Delete a task (soft)",
+        description: "Requires tasks:write scope and `delete` permission for the task's flow.",
+        tags: ["tasks"],
+        params: IdParams,
+        response: {
+          200: Type.Object({ success: Type.Literal(true) }, { additionalProperties: true }),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:write")) return;
+      const { id } = request.params;
 
-    return { success: true };
-  });
+      const flowIdBySlug = await getFlowIdBySlug();
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+
+      const task = await prisma.task.findFirst({
+        where: { id, isDeleted: false, ...viewWhere },
+        include: { flow: true },
+      });
+
+      if (!task) {
+        return reply.status(404).send({
+          error: { code: "NOT_FOUND", message: "Task not found" },
+        });
+      }
+
+      if (!canPerformAction(teamSlugs, "delete", task.flow.slug)) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "You do not have permission to delete this task" },
+        });
+      }
+
+      await prisma.task.update({
+        where: { id },
+        data: { isDeleted: true },
+      });
+
+      return { success: true as const };
+    }
+  );
 }
 
 function formatTask(task: any) {
@@ -335,10 +490,10 @@ function formatTask(task: any) {
     description: task.description,
     priority: task.priority,
     resolution: task.resolution,
-    dueDate: task.dueDate ?? null,
+    dueDate: task.dueDate ? task.dueDate.toISOString() : null,
     isDeleted: task.isDeleted,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
+    createdAt: task.createdAt.toISOString(),
+    updatedAt: task.updatedAt.toISOString(),
     flow: { id: task.flow.id, slug: task.flow.slug, name: task.flow.name },
     currentStatus: { id: task.currentStatus.id, slug: task.currentStatus.slug, name: task.currentStatus.name },
     creator: task.creator,

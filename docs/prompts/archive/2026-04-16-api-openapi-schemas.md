@@ -1,5 +1,7 @@
 # Populate OpenAPI schemas across all routes
 
+**Completed:** 2026-04-16. TypeBox type provider attached in `backend/src/app.ts`; shared schemas live in `backend/src/routes/_schemas.ts`; all 38 operations across 11 route files now publish `summary`, `tags`, `params`/`querystring`/`body` (where applicable), and per-status response schemas on `/docs`. Hand-validated `BAD_REQUEST` field-presence checks were dropped in favour of schema validation (returns `FST_ERR_VALIDATION` via the existing error-handler). Business-specific error codes (`PROJECT_REQUIRED`, `UNKNOWN_SCOPE`, `INVALID_USER`, etc.) are preserved as handler-level checks. Response objects use `additionalProperties: true` so `fast-json-stringify` doesn't strip undocumented fields. All 243 backend tests pass.
+
 **Goal:** The backend now serves Swagger UI at `/docs` and the OpenAPI JSON at `/docs/json` (wired via `@fastify/swagger` + `@fastify/swagger-ui` in `backend/src/app.ts`). But routes have no Fastify schemas attached, so the spec lists paths with no parameters, request bodies, or responses — the page is a shell. Fill in per-route schemas so `/docs` becomes a real, usable API reference.
 
 ## Precondition

@@ -249,7 +249,11 @@ describe("api tokens", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${plaintext}` },
-        payload: { flow: "bug", title: "x", projectIds: ["irrelevant"] },
+        payload: {
+          flow: "bug",
+          title: "x",
+          projectIds: ["00000000-0000-0000-0000-000000000000"],
+        },
       });
       expect(response.statusCode).toBe(403);
       expect(response.json().error.code).toBe("INSUFFICIENT_SCOPE");
@@ -293,7 +297,11 @@ describe("api tokens", () => {
         method: "POST",
         url: "/api/v1/tasks",
         headers: { authorization: `Bearer ${plaintext}` },
-        payload: { flow: "improvement", title: "x", projectIds: ["irrelevant"] },
+        payload: {
+          flow: "improvement",
+          title: "x",
+          projectIds: ["00000000-0000-0000-0000-000000000000"],
+        },
       });
       // Scope check passes, but team permission rejects with FORBIDDEN.
       expect(response.statusCode).toBe(403);

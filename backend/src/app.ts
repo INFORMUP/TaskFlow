@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
+import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { errorHandler } from "./plugins/error-handler.js";
 import { authPlugin } from "./plugins/auth.js";
 import { rateLimitPlugin } from "./plugins/rate-limit.js";
@@ -20,7 +21,7 @@ import { config } from "./config.js";
 import "./types/index.js";
 
 export function createApp() {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
 
   app.register(cors, { origin: config.corsOrigins });
   app.register(errorHandler);
