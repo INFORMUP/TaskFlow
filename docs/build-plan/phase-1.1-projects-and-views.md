@@ -1,5 +1,7 @@
 # Phase 1.1 — Projects, Filtering, and View Polish
 
+**Status:** ✅ Shipped 2026-04-16.
+
 **Goal:** Address first-round feedback from product review of the MVP. Introduce Projects as a first-class organizing entity, make tasks easier to triage with filters and a list view, and tighten the create-task UX around the required fields that actually matter.
 
 ## Backend

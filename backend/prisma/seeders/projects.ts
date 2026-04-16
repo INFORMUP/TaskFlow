@@ -11,14 +11,18 @@ interface ProjectDef {
   defaultAssigneeId: string;
   defaultFlowSlug: string;
   teamSlugs: string[];
+  flowSlugs: string[];
 }
 
+const ENGINEERING_FLOWS = ["bug", "feature", "improvement"] as const;
+const FUNDRAISING_FLOWS = ["grant-application", "donor-outreach", "event"] as const;
+
 const PROJECTS: ProjectDef[] = [
-  { key: "REP", name: "Reportal", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "bug", teamSlugs: ["engineer", "product", "agent"] },
-  { key: "WEB", name: "Website", ownerId: USER_ID_PRIYA, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "feature", teamSlugs: ["engineer", "product"] },
-  { key: "DASH", name: "Dashboard", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "feature", teamSlugs: ["engineer", "product", "agent"] },
-  { key: "TF", name: "TaskFlow", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "improvement", teamSlugs: ["engineer", "product", "agent"] },
-  { key: "FUND", name: "Fundraising", ownerId: USER_ID_PRIYA, defaultAssigneeId: USER_ID_PRIYA, defaultFlowSlug: "feature", teamSlugs: ["product"] },
+  { key: "REP", name: "Reportal", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "bug", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS] },
+  { key: "WEB", name: "Website", ownerId: USER_ID_PRIYA, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "feature", teamSlugs: ["engineer", "product"], flowSlugs: [...ENGINEERING_FLOWS] },
+  { key: "DASH", name: "Dashboard", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "feature", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS] },
+  { key: "TF", name: "TaskFlow", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "improvement", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS] },
+  { key: "FUND", name: "Fundraising", ownerId: USER_ID_PRIYA, defaultAssigneeId: USER_ID_PRIYA, defaultFlowSlug: "grant-application", teamSlugs: ["product"], flowSlugs: [...FUNDRAISING_FLOWS] },
 ];
 
 const TEAM_SLUGS = ["engineer", "product", "user", "agent"] as const;
@@ -28,6 +32,7 @@ export async function seedProjects(prisma: PrismaClient): Promise<SeederResult[]
   const unsortedResult = makeResult("unsorted_projects");
   const backfillResult = makeResult("task_project_backfill");
   const settingResult = makeResult("app_settings");
+  const projectFlowResult = makeResult("project_flows");
 
   // Ensure owners/assignees exist (personas seeder usually runs first via sample-tasks).
   const ensureUser = async (id: string) => {
@@ -43,52 +48,81 @@ export async function seedProjects(prisma: PrismaClient): Promise<SeederResult[]
   for (const def of PROJECTS) {
     const id = seedUuid("project", def.key);
     const existing = await prisma.project.findUnique({ where: { id } });
-    if (existing) {
-      namedResult.skipped++;
-      continue;
-    }
-    const flow = await prisma.flow.findUnique({ where: { slug: def.defaultFlowSlug } });
-    await prisma.project.create({
-      data: {
-        id,
-        key: def.key,
-        name: def.name,
-        ownerUserId: def.ownerId,
-        defaultAssigneeUserId: def.defaultAssigneeId,
-        defaultFlowId: flow?.id ?? null,
-        teams: {
-          create: def.teamSlugs.map((slug) => ({ teamId: seedUuid("team", slug) })),
+    if (!existing) {
+      const flow = await prisma.flow.findFirst({ where: { slug: def.defaultFlowSlug } });
+      await prisma.project.create({
+        data: {
+          id,
+          key: def.key,
+          name: def.name,
+          ownerUserId: def.ownerId,
+          defaultAssigneeUserId: def.defaultAssigneeId,
+          defaultFlowId: flow?.id ?? null,
+          teams: {
+            create: def.teamSlugs.map((slug) => ({ teamId: seedUuid("team", slug) })),
+          },
         },
-      },
-    });
-    namedResult.created++;
+      });
+      namedResult.created++;
+    } else {
+      namedResult.skipped++;
+    }
+
+    // Attach flows (idempotent)
+    for (const flowSlug of def.flowSlugs) {
+      const flow = await prisma.flow.findFirst({ where: { slug: flowSlug } });
+      if (!flow) continue;
+      const existingAttach = await prisma.projectFlow.findUnique({
+        where: { projectId_flowId: { projectId: id, flowId: flow.id } },
+      });
+      if (existingAttach) {
+        projectFlowResult.skipped++;
+        continue;
+      }
+      await prisma.projectFlow.create({ data: { projectId: id, flowId: flow.id } });
+      projectFlowResult.created++;
+    }
   }
 
-  // Per-team Unsorted projects
+  // Per-team Unsorted projects — keep legacy tasks valid under the new union rule.
   for (const slug of TEAM_SLUGS) {
     const id = seedUuid("project", `unsorted-${slug}`);
     const existing = await prisma.project.findUnique({ where: { id } });
-    if (existing) {
+    if (!existing) {
+      const teamId = seedUuid("team", slug);
+      await prisma.project.create({
+        data: {
+          id,
+          key: `UNSORTED-${slug.toUpperCase()}`,
+          name: `Unsorted (${slug})`,
+          ownerUserId: USER_ID_MAX,
+          defaultAssigneeUserId: null,
+          defaultFlowId: null,
+          teams: { create: [{ teamId }] },
+        },
+      });
+      unsortedResult.created++;
+    } else {
       unsortedResult.skipped++;
-      continue;
     }
-    const teamId = seedUuid("team", slug);
-    await prisma.project.create({
-      data: {
-        id,
-        key: `UNSORTED-${slug.toUpperCase()}`,
-        name: `Unsorted (${slug})`,
-        ownerUserId: USER_ID_MAX,
-        defaultAssigneeUserId: null,
-        defaultFlowId: null,
-        teams: { create: [{ teamId }] },
-      },
-    });
-    unsortedResult.created++;
+
+    // Attach every flow so any legacy task is reachable via its Unsorted project.
+    const allFlows = await prisma.flow.findMany({ select: { id: true } });
+    for (const flow of allFlows) {
+      const existingAttach = await prisma.projectFlow.findUnique({
+        where: { projectId_flowId: { projectId: id, flowId: flow.id } },
+      });
+      if (existingAttach) {
+        projectFlowResult.skipped++;
+        continue;
+      }
+      await prisma.projectFlow.create({ data: { projectId: id, flowId: flow.id } });
+      projectFlowResult.created++;
+    }
   }
 
   // AppSetting singleton (default flow = bug)
-  const bugFlow = await prisma.flow.findUnique({ where: { slug: "bug" } });
+  const bugFlow = await prisma.flow.findFirst({ where: { slug: "bug" } });
   await prisma.appSetting.upsert({
     where: { id: "singleton" },
     update: {},
@@ -117,5 +151,5 @@ export async function seedProjects(prisma: PrismaClient): Promise<SeederResult[]
     backfillResult.created++;
   }
 
-  return [namedResult, unsortedResult, settingResult, backfillResult];
+  return [namedResult, unsortedResult, projectFlowResult, settingResult, backfillResult];
 }

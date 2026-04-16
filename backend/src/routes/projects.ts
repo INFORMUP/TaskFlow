@@ -2,10 +2,13 @@ import { FastifyInstance } from "fastify";
 import {
   addProjectTeam,
   archiveProject,
+  attachProjectFlow,
   canManageProject,
   createProject,
+  detachProjectFlow,
   getProject,
   isAdmin,
+  listProjectFlows,
   listProjects,
   ProjectServiceError,
   removeProjectTeam,
@@ -132,6 +135,49 @@ export async function projectRoutes(fastify: FastifyInstance) {
     }
     try {
       return await removeProjectTeam(id, teamId);
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.get("/api/v1/projects/:id/flows", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      return { data: await listProjectFlows(id) };
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.post("/api/v1/projects/:id/flows", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const teamSlugs = request.user.teams.map((t) => t.slug);
+    if (!(await canManageProject(id, request.user.id, teamSlugs))) {
+      return reply.status(403).send({
+        error: { code: "FORBIDDEN", message: "Only the project owner or admins can modify flows" },
+      });
+    }
+    const { flowId } = request.body as { flowId?: string };
+    if (!flowId) {
+      return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "flowId is required" } });
+    }
+    try {
+      return { data: await attachProjectFlow(id, flowId) };
+    } catch (err) {
+      return handleError(reply, err);
+    }
+  });
+
+  fastify.delete("/api/v1/projects/:id/flows/:flowId", async (request, reply) => {
+    const { id, flowId } = request.params as { id: string; flowId: string };
+    const teamSlugs = request.user.teams.map((t) => t.slug);
+    if (!(await canManageProject(id, request.user.id, teamSlugs))) {
+      return reply.status(403).send({
+        error: { code: "FORBIDDEN", message: "Only the project owner or admins can modify flows" },
+      });
+    }
+    try {
+      return { data: await detachProjectFlow(id, flowId) };
     } catch (err) {
       return handleError(reply, err);
     }

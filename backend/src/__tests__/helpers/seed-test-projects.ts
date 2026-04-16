@@ -26,4 +26,15 @@ export async function seedTestProjects(prisma: PrismaClient) {
       },
     });
   }
+
+  // Attach every existing flow so tasks on any flow stay valid under the
+  // union-membership rule introduced in phase 1.2.
+  const flows = await prisma.flow.findMany({ select: { id: true } });
+  for (const flow of flows) {
+    await prisma.projectFlow.upsert({
+      where: { projectId_flowId: { projectId: TEST_PROJECT_ID, flowId: flow.id } },
+      update: {},
+      create: { projectId: TEST_PROJECT_ID, flowId: flow.id },
+    });
+  }
 }

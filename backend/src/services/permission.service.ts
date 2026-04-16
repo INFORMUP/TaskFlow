@@ -22,6 +22,24 @@ const PERMISSIONS: Record<string, Record<string, Partial<Record<Action, boolean>
     user:     {},
     agent:    { create: true, view: true, comment: true, transition: true, edit: true },
   },
+  "grant-application": {
+    engineer: { view: true, comment: true },
+    product:  { create: true, view: true, comment: true, transition: true, edit: true, assign: true, delete: true },
+    user:     { view: true, comment: true },
+    agent:    { view: true, comment: true },
+  },
+  "donor-outreach": {
+    engineer: { view: true, comment: true },
+    product:  { create: true, view: true, comment: true, transition: true, edit: true, assign: true, delete: true },
+    user:     { view: true, comment: true },
+    agent:    { view: true, comment: true },
+  },
+  event: {
+    engineer: { view: true, comment: true },
+    product:  { create: true, view: true, comment: true, transition: true, edit: true, assign: true, delete: true },
+    user:     { view: true, comment: true },
+    agent:    { view: true, comment: true },
+  },
 };
 
 // View scope: what subset of tasks a team member can see
@@ -43,6 +61,24 @@ const VIEW_SCOPES: Record<string, Record<string, ViewScope>> = {
     product: "all",
     user: "none",
     agent: "assigned",
+  },
+  "grant-application": {
+    engineer: "all",
+    product: "all",
+    user: "own_public",
+    agent: "none",
+  },
+  "donor-outreach": {
+    engineer: "all",
+    product: "all",
+    user: "own_public",
+    agent: "none",
+  },
+  event: {
+    engineer: "all",
+    product: "all",
+    user: "own_public",
+    agent: "none",
   },
 };
 
@@ -72,6 +108,27 @@ const TRANSITION_PERMISSIONS: Record<string, Record<string, string[]>> = {
     implement: ["engineer", "agent"],
     validate:  ["engineer", "agent"],
     closed:    ["engineer"],
+  },
+  "grant-application": {
+    research:  ["product"],
+    draft:     ["product"],
+    submitted: ["product"],
+    awarded:   ["product"],
+    closed:    ["product"],
+  },
+  "donor-outreach": {
+    identify:  ["product"],
+    contact:   ["product"],
+    engaged:   ["product"],
+    committed: ["product"],
+    closed:    ["product"],
+  },
+  event: {
+    plan:    ["product"],
+    promote: ["product"],
+    host:    ["product"],
+    recap:   ["product"],
+    closed:  ["product"],
   },
 };
 

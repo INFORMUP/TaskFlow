@@ -67,10 +67,54 @@ const IMPROVEMENT_TRANSITIONS: TransitionDef[] = [
   { from: "implement", to: "closed" },
 ];
 
+// Grant: Research → Draft → Submitted → Awarded → Closed
+const GRANT_TRANSITIONS: TransitionDef[] = [
+  { from: "research", to: "draft" },
+  { from: "draft", to: "submitted" },
+  { from: "submitted", to: "awarded" },
+  { from: "awarded", to: "closed" },
+  { from: "draft", to: "research" },
+  { from: "submitted", to: "draft" },
+  // Any-to-Closed (rejection / withdrawal)
+  { from: "research", to: "closed" },
+  { from: "draft", to: "closed" },
+  { from: "submitted", to: "closed" },
+];
+
+// Donor: Identify → Contact → Engaged → Committed → Closed
+const DONOR_TRANSITIONS: TransitionDef[] = [
+  { from: "identify", to: "contact" },
+  { from: "contact", to: "engaged" },
+  { from: "engaged", to: "committed" },
+  { from: "committed", to: "closed" },
+  { from: "engaged", to: "contact" },
+  { from: "committed", to: "engaged" },
+  // Any-to-Closed
+  { from: "identify", to: "closed" },
+  { from: "contact", to: "closed" },
+  { from: "engaged", to: "closed" },
+];
+
+// Event: Plan → Promote → Host → Recap → Closed
+const EVENT_TRANSITIONS: TransitionDef[] = [
+  { from: "plan", to: "promote" },
+  { from: "promote", to: "host" },
+  { from: "host", to: "recap" },
+  { from: "recap", to: "closed" },
+  { from: "promote", to: "plan" },
+  // Any-to-Closed
+  { from: "plan", to: "closed" },
+  { from: "promote", to: "closed" },
+  { from: "host", to: "closed" },
+];
+
 const FLOW_TRANSITIONS: Record<string, TransitionDef[]> = {
   bug: BUG_TRANSITIONS,
   feature: FEATURE_TRANSITIONS,
   improvement: IMPROVEMENT_TRANSITIONS,
+  "grant-application": GRANT_TRANSITIONS,
+  "donor-outreach": DONOR_TRANSITIONS,
+  event: EVENT_TRANSITIONS,
 };
 
 export async function seedFlowTransitions(prisma: PrismaClient): Promise<SeederResult> {

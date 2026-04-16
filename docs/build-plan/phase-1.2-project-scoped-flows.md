@@ -1,5 +1,7 @@
 # Phase 1.2 — Project-Scoped Flows
 
+**Status:** ✅ Shipped 2026-04-16.
+
 **Goal:** Make flows belong to projects so non-engineering work (Fundraising, and anything else added later) can use status sets that actually fit the domain. Engineering projects keep sharing the bug-fix / feature / refactor flows; Fundraising gets its own. Builds directly on Phase 1.1's projects and task↔project M:N.
 
 ## Backend

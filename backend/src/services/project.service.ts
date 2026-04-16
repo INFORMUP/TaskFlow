@@ -131,6 +131,17 @@ export async function updateProject(id: string, patch: UpdateProjectInput) {
   if (patch.defaultFlowId) {
     const flow = await prisma.flow.findUnique({ where: { id: patch.defaultFlowId } });
     if (!flow) throw new ProjectServiceError("INVALID_FLOW", "Default flow not found", 422);
+    // default_flow_id must be in this project's attached flows.
+    const attached = await prisma.projectFlow.findUnique({
+      where: { projectId_flowId: { projectId: id, flowId: patch.defaultFlowId } },
+    });
+    if (!attached) {
+      throw new ProjectServiceError(
+        "FLOW_NOT_ATTACHED",
+        "Default flow must first be attached to this project",
+        422,
+      );
+    }
   }
 
   const updated = await prisma.project.update({
@@ -220,4 +231,82 @@ export async function resolveDefaultFlow(projectIds: string[]): Promise<string |
   }
   const setting = await prisma.appSetting.findUnique({ where: { id: "singleton" } });
   return setting?.defaultFlowId ?? null;
+}
+
+export async function listProjectFlows(projectId: string) {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
+
+  const rows = await prisma.projectFlow.findMany({
+    where: { projectId },
+    include: { flow: { select: { id: true, slug: true, name: true, description: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((r) => ({
+    ...r.flow,
+    isDefault: r.flowId === project.defaultFlowId,
+  }));
+}
+
+export async function attachProjectFlow(projectId: string, flowId: string) {
+  const [project, flow] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId } }),
+    prisma.flow.findUnique({ where: { id: flowId } }),
+  ]);
+  if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
+  if (!flow) throw new ProjectServiceError("INVALID_FLOW", "Flow not found", 422);
+
+  await prisma.projectFlow.upsert({
+    where: { projectId_flowId: { projectId, flowId } },
+    update: {},
+    create: { projectId, flowId },
+  });
+
+  return listProjectFlows(projectId);
+}
+
+export async function detachProjectFlow(projectId: string, flowId: string) {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
+
+  // Guard: block if any non-archived task on this project uses the flow and has
+  // no other attached project that also offers it.
+  const tasksUsingFlow = await prisma.task.findMany({
+    where: {
+      isDeleted: false,
+      flowId,
+      projects: { some: { projectId } },
+    },
+    select: { id: true, projects: { select: { projectId: true } } },
+  });
+
+  for (const task of tasksUsingFlow) {
+    const otherProjectIds = task.projects.map((p) => p.projectId).filter((id) => id !== projectId);
+    if (otherProjectIds.length === 0) {
+      throw new ProjectServiceError(
+        "FLOW_IN_USE",
+        "Cannot detach a flow while tasks on this project still use it",
+        400,
+      );
+    }
+    const alternateOffer = await prisma.projectFlow.findFirst({
+      where: { projectId: { in: otherProjectIds }, flowId },
+      select: { projectId: true },
+    });
+    if (!alternateOffer) {
+      throw new ProjectServiceError(
+        "FLOW_IN_USE",
+        "Cannot detach a flow while tasks on this project still use it and no other attached project offers it",
+        400,
+      );
+    }
+  }
+
+  // Clear default if it pointed at the flow being detached.
+  if (project.defaultFlowId === flowId) {
+    await prisma.project.update({ where: { id: projectId }, data: { defaultFlowId: null } });
+  }
+
+  await prisma.projectFlow.deleteMany({ where: { projectId, flowId } });
+  return listProjectFlows(projectId);
 }

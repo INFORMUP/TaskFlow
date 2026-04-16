@@ -5,6 +5,9 @@ const FLOWS = [
   { slug: "bug", name: "Bug", description: "Defect resolution" },
   { slug: "feature", name: "Feature", description: "New functionality" },
   { slug: "improvement", name: "Improvement", description: "Tech debt, refactoring, optimization" },
+  { slug: "grant-application", name: "Grant Application", description: "Fundraising grant submissions" },
+  { slug: "donor-outreach", name: "Donor Outreach", description: "Fundraising donor pipeline" },
+  { slug: "event", name: "Event", description: "Fundraising events" },
 ] as const;
 
 export async function seedFlows(prisma: PrismaClient): Promise<SeederResult> {

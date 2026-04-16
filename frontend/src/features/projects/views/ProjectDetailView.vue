@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ProjectForm from "@/features/projects/components/ProjectForm.vue";
+import ProjectFlowsSection from "@/features/projects/components/ProjectFlowsSection.vue";
 import {
   archiveProject,
   getProject,
@@ -97,6 +98,12 @@ async function toggleArchive() {
       :error="error"
       @submit="handleSubmit"
       @cancel="router.push('/projects')"
+    />
+
+    <ProjectFlowsSection
+      :project-id="project.id"
+      :all-flows="flows"
+      @changed="load"
     />
   </section>
   <p v-else>Loading…</p>

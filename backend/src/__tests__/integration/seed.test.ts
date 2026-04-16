@@ -33,15 +33,22 @@ describe("seed data", () => {
     expect(slugs).toEqual(["agent", "engineer", "product", "user"]);
   });
 
-  it("creates 3 flows", async () => {
+  it("creates 6 flows", async () => {
     const flows = await prisma.flow.findMany();
-    expect(flows).toHaveLength(3);
+    expect(flows).toHaveLength(6);
     const slugs = flows.map((f) => f.slug).sort();
-    expect(slugs).toEqual(["bug", "feature", "improvement"]);
+    expect(slugs).toEqual([
+      "bug",
+      "donor-outreach",
+      "event",
+      "feature",
+      "grant-application",
+      "improvement",
+    ]);
   });
 
   it("bug flow has 6 statuses in correct order", async () => {
-    const flow = await prisma.flow.findUnique({ where: { slug: "bug" } });
+    const flow = await prisma.flow.findFirst({ where: { slug: "bug" } });
     const statuses = await prisma.flowStatus.findMany({
       where: { flowId: flow!.id },
       orderBy: { sortOrder: "asc" },
@@ -53,7 +60,7 @@ describe("seed data", () => {
   });
 
   it("feature flow has 7 statuses in correct order", async () => {
-    const flow = await prisma.flow.findUnique({ where: { slug: "feature" } });
+    const flow = await prisma.flow.findFirst({ where: { slug: "feature" } });
     const statuses = await prisma.flowStatus.findMany({
       where: { flowId: flow!.id },
       orderBy: { sortOrder: "asc" },
@@ -65,7 +72,7 @@ describe("seed data", () => {
   });
 
   it("improvement flow has 5 statuses in correct order", async () => {
-    const flow = await prisma.flow.findUnique({ where: { slug: "improvement" } });
+    const flow = await prisma.flow.findFirst({ where: { slug: "improvement" } });
     const statuses = await prisma.flowStatus.findMany({
       where: { flowId: flow!.id },
       orderBy: { sortOrder: "asc" },
@@ -77,7 +84,7 @@ describe("seed data", () => {
   });
 
   it("bug flow has 14 transitions", async () => {
-    const flow = await prisma.flow.findUnique({ where: { slug: "bug" } });
+    const flow = await prisma.flow.findFirst({ where: { slug: "bug" } });
     const transitions = await prisma.flowTransition.findMany({
       where: { flowId: flow!.id },
     });
@@ -85,7 +92,7 @@ describe("seed data", () => {
   });
 
   it("feature flow has 17 transitions", async () => {
-    const flow = await prisma.flow.findUnique({ where: { slug: "feature" } });
+    const flow = await prisma.flow.findFirst({ where: { slug: "feature" } });
     const transitions = await prisma.flowTransition.findMany({
       where: { flowId: flow!.id },
     });
@@ -93,7 +100,7 @@ describe("seed data", () => {
   });
 
   it("improvement flow has 9 transitions", async () => {
-    const flow = await prisma.flow.findUnique({ where: { slug: "improvement" } });
+    const flow = await prisma.flow.findFirst({ where: { slug: "improvement" } });
     const transitions = await prisma.flowTransition.findMany({
       where: { flowId: flow!.id },
     });
@@ -141,10 +148,10 @@ describe("seed data", () => {
     expect(teamsResult.created).toBe(0);
     expect(teamsResult.skipped).toBe(4);
     expect(flowsResult.created).toBe(0);
-    expect(flowsResult.skipped).toBe(3);
+    expect(flowsResult.skipped).toBe(6);
     expect(statusesResult.created).toBe(0);
-    expect(statusesResult.skipped).toBe(18);
+    expect(statusesResult.skipped).toBe(33);
     expect(transitionsResult.created).toBe(0);
-    expect(transitionsResult.skipped).toBe(39);
+    expect(transitionsResult.skipped).toBe(65);
   });
 });

@@ -31,12 +31,14 @@ describe("projects API", () => {
   beforeEach(async () => {
     await prisma.projectTeam.deleteMany();
     await prisma.taskProject.deleteMany();
+    await prisma.projectFlow.deleteMany();
     await prisma.project.deleteMany();
   });
 
   afterAll(async () => {
     await prisma.projectTeam.deleteMany();
     await prisma.taskProject.deleteMany();
+    await prisma.projectFlow.deleteMany();
     await prisma.project.deleteMany();
     await prisma.$disconnect();
   });

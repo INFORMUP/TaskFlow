@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { createTask } from "@/api/tasks.api";
-import { listProjects, type Project } from "@/api/projects.api";
+import { listProjects, listProjectFlows, type AttachedFlow, type Project } from "@/api/projects.api";
 import { apiFetch } from "@/api/client";
 
 const props = defineProps<{
@@ -20,9 +20,12 @@ const dueDate = ref("");
 const selectedProjectIds = ref<string[]>([]);
 const assigneeUserId = ref("");
 const assigneeTouched = ref(false);
+const selectedFlowSlug = ref(props.flow);
 
 const projects = ref<Project[]>([]);
 const users = ref<{ id: string; displayName: string }[]>([]);
+// Flows attached per project, loaded lazily on selection.
+const flowsByProject = ref<Record<string, AttachedFlow[]>>({});
 
 const submitting = ref(false);
 const error = ref("");
@@ -37,12 +40,56 @@ onMounted(async () => {
 });
 
 // Auto-fill assignee from the first selected project's default, unless the
-// user has manually touched the field.
-watch(selectedProjectIds, (ids) => {
-  if (assigneeTouched.value || ids.length === 0) return;
-  const first = projects.value.find((p) => p.id === ids[0]);
-  if (first?.defaultAssignee) {
-    assigneeUserId.value = first.defaultAssignee.id;
+// user has manually touched the field. Load flow menus for newly-selected
+// projects. Deep watch so array mutations (push/splice) are tracked.
+watch(
+  selectedProjectIds,
+  async (ids) => {
+    if (!assigneeTouched.value && ids.length > 0) {
+      const first = projects.value.find((p) => p.id === ids[0]);
+      if (first?.defaultAssignee) {
+        assigneeUserId.value = first.defaultAssignee.id;
+      }
+    }
+    for (const id of ids) {
+      if (!flowsByProject.value[id]) {
+        try {
+          flowsByProject.value[id] = await listProjectFlows(id);
+        } catch {
+          flowsByProject.value[id] = [];
+        }
+      }
+    }
+  },
+  { deep: true },
+);
+
+// Union of flows across selected projects, deduped by slug.
+const availableFlows = computed<AttachedFlow[]>(() => {
+  const seen = new Set<string>();
+  const out: AttachedFlow[] = [];
+  for (const id of selectedProjectIds.value) {
+    for (const f of flowsByProject.value[id] ?? []) {
+      if (seen.has(f.slug)) continue;
+      seen.add(f.slug);
+      out.push(f);
+    }
+  }
+  return out;
+});
+
+const defaultFlowHint = computed(() => {
+  if (selectedProjectIds.value.length === 0) return null;
+  const firstId = selectedProjectIds.value[0];
+  const firstFlows = flowsByProject.value[firstId] ?? [];
+  return firstFlows.find((f) => f.isDefault) ?? null;
+});
+
+// When selected projects change, ensure selectedFlowSlug remains valid.
+watch(availableFlows, (flows) => {
+  if (flows.length === 0) return;
+  if (!flows.some((f) => f.slug === selectedFlowSlug.value)) {
+    selectedFlowSlug.value = defaultFlowHint.value?.slug ?? flows[0].slug;
   }
 });
 
@@ -53,19 +100,23 @@ function toggleProject(id: string) {
 }
 
 const canSubmit = computed(
-  () => title.value.trim() && selectedProjectIds.value.length > 0 && assigneeUserId.value,
+  () =>
+    title.value.trim() &&
+    selectedProjectIds.value.length > 0 &&
+    assigneeUserId.value &&
+    selectedFlowSlug.value,
 );
 
 async function handleSubmit() {
   if (!canSubmit.value) {
-    error.value = "Title, at least one project, and an assignee are required";
+    error.value = "Title, at least one project, a flow, and an assignee are required";
     return;
   }
   submitting.value = true;
   error.value = "";
   try {
     await createTask({
-      flow: props.flow,
+      flow: selectedFlowSlug.value,
       title: title.value,
       description: description.value || undefined,
       priority: priority.value,
@@ -106,6 +157,22 @@ async function handleSubmit() {
         {{ p.name }}
       </label>
     </div>
+
+    <label class="create-form__label">Flow *</label>
+    <select v-model="selectedFlowSlug" class="create-form__select">
+      <option v-if="availableFlows.length === 0" value="">
+        — select projects first —
+      </option>
+      <option v-for="f in availableFlows" :key="f.id" :value="f.slug">
+        {{ f.name }}
+      </option>
+    </select>
+    <p
+      v-if="defaultFlowHint && selectedFlowSlug !== defaultFlowHint.slug"
+      class="create-form__hint"
+    >
+      Default for this project: {{ defaultFlowHint.name }}
+    </p>
 
     <label class="create-form__label">Assignee *</label>
     <select
@@ -243,5 +310,12 @@ async function handleSubmit() {
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--accent);
+}
+
+.create-form__hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: -0.25rem;
+  margin-bottom: 0.5rem;
 }
 </style>

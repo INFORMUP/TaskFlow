@@ -26,6 +26,7 @@ describe("tasks ↔ projects", () => {
     await prisma.comment.deleteMany();
     await prisma.taskProject.deleteMany();
     await prisma.task.deleteMany();
+    await prisma.projectFlow.deleteMany();
     await prisma.projectTeam.deleteMany();
     await prisma.project.deleteMany();
 
@@ -50,6 +51,13 @@ describe("tasks ↔ projects", () => {
     });
     projectAId = a.id;
     projectBId = b.id;
+
+    const flows = await prisma.flow.findMany({ select: { id: true } });
+    for (const projectId of [projectAId, projectBId]) {
+      for (const flow of flows) {
+        await prisma.projectFlow.create({ data: { projectId, flowId: flow.id } });
+      }
+    }
   });
 
   afterAll(async () => {
@@ -57,6 +65,7 @@ describe("tasks ↔ projects", () => {
     await prisma.comment.deleteMany();
     await prisma.taskProject.deleteMany();
     await prisma.task.deleteMany();
+    await prisma.projectFlow.deleteMany();
     await prisma.projectTeam.deleteMany();
     await prisma.project.deleteMany();
     await prisma.$disconnect();

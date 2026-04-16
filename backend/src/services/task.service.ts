@@ -4,13 +4,16 @@ const FLOW_PREFIXES: Record<string, string> = {
   bug: "BUG",
   feature: "FEAT",
   improvement: "IMP",
+  "grant-application": "GRNT",
+  "donor-outreach": "OUTR",
+  event: "EVNT",
 };
 
 export async function generateDisplayId(flowSlug: string): Promise<string> {
   const prefix = FLOW_PREFIXES[flowSlug];
   if (!prefix) throw new Error(`Unknown flow: ${flowSlug}`);
 
-  const flow = await prisma.flow.findUnique({ where: { slug: flowSlug } });
+  const flow = await prisma.flow.findFirst({ where: { slug: flowSlug } });
   if (!flow) throw new Error(`Flow not found: ${flowSlug}`);
 
   // Find highest existing display_id number for this flow
@@ -54,7 +57,7 @@ export class TaskServiceError extends Error {
 }
 
 export async function createTask(input: CreateTaskInput) {
-  const flow = await prisma.flow.findUnique({ where: { slug: input.flowSlug } });
+  const flow = await prisma.flow.findFirst({ where: { slug: input.flowSlug } });
   if (!flow) return null;
 
   const initialStatus = await getInitialStatus(flow.id);
@@ -68,6 +71,19 @@ export async function createTask(input: CreateTaskInput) {
     });
     if (found.length !== projectIds.length) {
       throw new TaskServiceError("INVALID_PROJECT", "One or more projects do not exist", 422);
+    }
+
+    // Union-membership rule: flow must be attached to at least one of the selected projects.
+    const match = await prisma.projectFlow.findFirst({
+      where: { projectId: { in: projectIds }, flowId: flow.id },
+      select: { projectId: true },
+    });
+    if (!match) {
+      throw new TaskServiceError(
+        "FLOW_NOT_IN_PROJECTS",
+        "Flow is not attached to any of the selected projects",
+        422,
+      );
     }
   }
 
@@ -173,5 +189,23 @@ export async function removeProjectFromTask(taskId: string, projectId: string) {
       400,
     );
   }
+
+  // Guard: the task's current flow must still be reachable through at least one
+  // remaining project after the removal.
+  const remainingProjectIds = task.projects
+    .map((tp) => tp.projectId)
+    .filter((id) => id !== projectId);
+  const reachable = await prisma.projectFlow.findFirst({
+    where: { projectId: { in: remainingProjectIds }, flowId: task.flowId },
+    select: { projectId: true },
+  });
+  if (!reachable) {
+    throw new TaskServiceError(
+      "FLOW_UNREACHABLE",
+      "Removing this project would leave the task's flow unreachable",
+      400,
+    );
+  }
+
   await prisma.taskProject.deleteMany({ where: { taskId, projectId } });
 }

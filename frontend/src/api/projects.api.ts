@@ -82,3 +82,31 @@ export function addProjectTeam(id: string, teamId: string): Promise<Project> {
 export function removeProjectTeam(id: string, teamId: string): Promise<Project> {
   return apiFetch(`/api/v1/projects/${id}/teams/${teamId}`, { method: "DELETE" });
 }
+
+export interface AttachedFlow {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  isDefault: boolean;
+}
+
+export async function listProjectFlows(projectId: string): Promise<AttachedFlow[]> {
+  const res = await apiFetch<{ data: AttachedFlow[] }>(`/api/v1/projects/${projectId}/flows`);
+  return res.data;
+}
+
+export async function attachProjectFlow(projectId: string, flowId: string): Promise<AttachedFlow[]> {
+  const res = await apiFetch<{ data: AttachedFlow[] }>(`/api/v1/projects/${projectId}/flows`, {
+    method: "POST",
+    body: JSON.stringify({ flowId }),
+  });
+  return res.data;
+}
+
+export async function detachProjectFlow(projectId: string, flowId: string): Promise<AttachedFlow[]> {
+  const res = await apiFetch<{ data: AttachedFlow[] }>(`/api/v1/projects/${projectId}/flows/${flowId}`, {
+    method: "DELETE",
+  });
+  return res.data;
+}

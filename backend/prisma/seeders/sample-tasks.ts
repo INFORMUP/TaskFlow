@@ -91,7 +91,7 @@ async function seedFlowTasks(
   tasks: TaskDef[],
   result: SeederResult
 ) {
-  const flow = await prisma.flow.findUnique({ where: { slug: flowSlug } });
+  const flow = await prisma.flow.findFirst({ where: { slug: flowSlug } });
   if (!flow) throw new Error(`Flow '${flowSlug}' not found`);
 
   const statuses = await prisma.flowStatus.findMany({ where: { flowId: flow.id } });

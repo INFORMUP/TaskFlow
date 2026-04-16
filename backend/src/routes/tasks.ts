@@ -40,7 +40,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
     }
 
     // Validate flow exists
-    const flowRecord = await prisma.flow.findUnique({ where: { slug: flow } });
+    const flowRecord = await prisma.flow.findFirst({ where: { slug: flow } });
     if (!flowRecord) {
       return reply.status(422).send({
         error: { code: "INVALID_FLOW", message: `Unknown flow: ${flow}` },
@@ -156,7 +156,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
     const where: Record<string, unknown> = { isDeleted: false, ...viewWhere };
 
     if (query.flow) {
-      const flow = await prisma.flow.findUnique({ where: { slug: query.flow } });
+      const flow = await prisma.flow.findFirst({ where: { slug: query.flow } });
       if (flow) where.flowId = flow.id;
     }
 
