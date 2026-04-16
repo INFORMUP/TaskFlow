@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../prisma-client.js";
-import { buildTaskViewWhere, canPerformAction } from "../services/permission.service.js";
+import { buildTaskViewWhere, canPerformAction, enforceScope } from "../services/permission.service.js";
 import { addProjectToTask, createTask, removeProjectFromTask, taskInclude, TaskServiceError } from "../services/task.service.js";
 
 async function getFlowIdBySlug(): Promise<Map<string, string>> {
@@ -11,6 +11,7 @@ async function getFlowIdBySlug(): Promise<Map<string, string>> {
 export async function taskRoutes(fastify: FastifyInstance) {
   // Create task
   fastify.post("/api/v1/tasks", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:write")) return;
     const { flow, title, description, priority, projectIds, dueDate, assigneeUserId } = request.body as {
       flow?: string;
       title?: string;
@@ -78,6 +79,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
   // Task ↔ project membership
   fastify.post("/api/v1/tasks/:id/projects", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:write")) return;
     const { id } = request.params as { id: string };
     const { projectId } = request.body as { projectId?: string };
     if (!projectId) {
@@ -108,6 +110,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
   });
 
   fastify.delete("/api/v1/tasks/:id/projects/:projectId", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:write")) return;
     const { id, projectId } = request.params as { id: string; projectId: string };
 
     const flowIdBySlug = await getFlowIdBySlug();
@@ -135,6 +138,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
   // List tasks
   fastify.get("/api/v1/tasks", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:read")) return;
     const query = request.query as {
       flow?: string;
       status?: string;
@@ -226,6 +230,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
   // Get task detail
   fastify.get("/api/v1/tasks/:id", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:read")) return;
     const { id } = request.params as { id: string };
 
     const flowIdBySlug = await getFlowIdBySlug();
@@ -248,6 +253,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
   // Update task
   fastify.patch("/api/v1/tasks/:id", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:write")) return;
     const { id } = request.params as { id: string };
     const updates = request.body as { title?: string; description?: string; priority?: string; dueDate?: string | null };
 
@@ -288,6 +294,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
   // Delete task (soft)
   fastify.delete("/api/v1/tasks/:id", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:write")) return;
     const { id } = request.params as { id: string };
 
     const flowIdBySlug = await getFlowIdBySlug();

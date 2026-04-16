@@ -1,6 +1,47 @@
 type Action = "create" | "view" | "comment" | "transition" | "edit" | "assign" | "delete" | "admin";
 type ViewScope = "all" | "assigned" | "own_public" | "none";
 
+export type TokenScope =
+  | "tasks:read"
+  | "tasks:write"
+  | "transitions:write"
+  | "comments:write";
+
+export const ALL_TOKEN_SCOPES: TokenScope[] = [
+  "tasks:read",
+  "tasks:write",
+  "transitions:write",
+  "comments:write",
+];
+
+// A session's effective scopes are the intersection of the token's scopes
+// with what the user's teams already allow. JWT sessions have `scopes === null`,
+// meaning no scope gating (full access subject to team permissions).
+export function hasScope(
+  sessionScopes: string[] | null,
+  required: TokenScope
+): boolean {
+  if (sessionScopes === null) return true;
+  return sessionScopes.includes(required);
+}
+
+// Route helper: returns true if the request carries the required scope.
+// Otherwise sends a 403 INSUFFICIENT_SCOPE response and returns false so
+// the caller can early-return.
+export function enforceScope(
+  request: { user: { scopes: string[] | null } },
+  reply: {
+    status: (code: number) => { send: (body: unknown) => unknown };
+  },
+  scope: TokenScope
+): boolean {
+  if (hasScope(request.user.scopes, scope)) return true;
+  reply.status(403).send({
+    error: { code: "INSUFFICIENT_SCOPE", message: `API token lacks required scope: ${scope}` },
+  });
+  return false;
+}
+
 // Permission matrix: PERMISSIONS[flow][team][action] = boolean
 // Derived from docs/permissions.md
 const PERMISSIONS: Record<string, Record<string, Partial<Record<Action, boolean>>>> = {

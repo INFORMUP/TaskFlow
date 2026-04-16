@@ -1,11 +1,12 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../prisma-client.js";
-import { canTransitionToStatus } from "../services/permission.service.js";
+import { canTransitionToStatus, enforceScope } from "../services/permission.service.js";
 import { validateTransition, validateNote, validateResolution } from "../services/transition.service.js";
 
 export async function transitionRoutes(fastify: FastifyInstance) {
   // Create transition
   fastify.post("/api/v1/tasks/:id/transitions", async (request, reply) => {
+    if (!enforceScope(request, reply, "transitions:write")) return;
     const { id } = request.params as { id: string };
     const { toStatus, note, resolution, newAssigneeUserId } = request.body as {
       toStatus?: string;
@@ -134,6 +135,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
 
   // Get transition history
   fastify.get("/api/v1/tasks/:id/transitions", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:read")) return;
     const { id } = request.params as { id: string };
 
     const task = await prisma.task.findFirst({

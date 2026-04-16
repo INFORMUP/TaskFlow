@@ -1,10 +1,11 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../prisma-client.js";
-import { canPerformAction } from "../services/permission.service.js";
+import { canPerformAction, enforceScope } from "../services/permission.service.js";
 
 export async function commentRoutes(fastify: FastifyInstance) {
   // Create comment
   fastify.post("/api/v1/tasks/:id/comments", async (request, reply) => {
+    if (!enforceScope(request, reply, "comments:write")) return;
     const { id } = request.params as { id: string };
     const { body } = request.body as { body?: string };
 
@@ -54,6 +55,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
 
   // List comments
   fastify.get("/api/v1/tasks/:id/comments", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:read")) return;
     const { id } = request.params as { id: string };
 
     const task = await prisma.task.findFirst({
@@ -87,6 +89,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
 
   // Edit comment (own only)
   fastify.patch("/api/v1/tasks/:id/comments/:commentId", async (request, reply) => {
+    if (!enforceScope(request, reply, "comments:write")) return;
     const { commentId } = request.params as { id: string; commentId: string };
     const { body } = request.body as { body?: string };
 
@@ -125,6 +128,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
 
   // Delete comment (soft, own only or with delete permission)
   fastify.delete("/api/v1/tasks/:id/comments/:commentId", async (request, reply) => {
+    if (!enforceScope(request, reply, "comments:write")) return;
     const { id, commentId } = request.params as { id: string; commentId: string };
 
     const comment = await prisma.comment.findFirst({

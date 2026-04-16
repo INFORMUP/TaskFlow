@@ -5,11 +5,23 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: resolve(__dirname, "../.env") });
 
+const isProduction = process.env.NODE_ENV === "production";
+
+function requireSecret(name: string, devFallback: string): string {
+  const value = process.env[name];
+  if (value) return value;
+  if (isProduction) {
+    throw new Error(`${name} must be set in production`);
+  }
+  return devFallback;
+}
+
 export const config = {
   port: parseInt(process.env.PORT || "3000", 10),
   databaseUrl: process.env.DATABASE_URL || "",
-  jwtSecret: process.env.JWT_SECRET || "dev-jwt-secret",
-  jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || "dev-jwt-refresh-secret",
+  jwtSecret: requireSecret("JWT_SECRET", "dev-jwt-secret"),
+  jwtRefreshSecret: requireSecret("JWT_REFRESH_SECRET", "dev-jwt-refresh-secret"),
+  tokenHashSecret: requireSecret("TOKEN_HASH_SECRET", "dev-token-hash-secret"),
   jwtAccessExpiresIn: "1h",
   jwtRefreshExpiresIn: "7d",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",

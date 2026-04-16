@@ -1,10 +1,11 @@
 import { FastifyInstance } from "fastify";
 import { prisma } from "../prisma-client.js";
-import { canPerformAction } from "../services/permission.service.js";
+import { canPerformAction, enforceScope } from "../services/permission.service.js";
 
 export async function assignmentRoutes(fastify: FastifyInstance) {
   // Assign task
   fastify.post("/api/v1/tasks/:id/assign", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:write")) return;
     const { id } = request.params as { id: string };
     const { assigneeId, note } = request.body as { assigneeId?: string; note?: string };
 
@@ -67,6 +68,7 @@ export async function assignmentRoutes(fastify: FastifyInstance) {
 
   // Unassign task
   fastify.delete("/api/v1/tasks/:id/assign", async (request, reply) => {
+    if (!enforceScope(request, reply, "tasks:write")) return;
     const { id } = request.params as { id: string };
 
     const task = await prisma.task.findFirst({

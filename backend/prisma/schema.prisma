@@ -39,6 +39,7 @@ model User {
   comments          Comment[]
   ownedProjects     Project[]         @relation("ProjectOwner")
   defaultOnProjects Project[]         @relation("ProjectDefaultAssignee")
+  apiTokens         ApiToken[]
 
   @@map("users")
 }
@@ -247,6 +248,47 @@ model AppSetting {
   defaultFlow Flow? @relation(fields: [defaultFlowId], references: [id])
 
   @@map("app_settings")
+}
+
+model ApiToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenHash   String    @unique @map("token_hash")
+  name        String
+  integration Boolean   @default(false)
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz()
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz()
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz()
+
+  user   User            @relation(fields: [userId], references: [id])
+  scopes ApiTokenScope[]
+
+  @@index([userId])
+  @@map("api_tokens")
+}
+
+model Scope {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  tokens ApiTokenScope[]
+
+  @@map("scopes")
+}
+
+model ApiTokenScope {
+  tokenId String @map("token_id") @db.Uuid
+  scopeId String @map("scope_id") @db.Uuid
+
+  token ApiToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  scope Scope    @relation(fields: [scopeId], references: [id], onDelete: Cascade)
+
+  @@id([tokenId, scopeId])
+  @@index([scopeId])
+  @@map("api_token_scopes")
 }
 
 model Comment {
