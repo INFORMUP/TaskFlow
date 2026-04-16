@@ -80,7 +80,7 @@ async function authenticateJwt(rawToken: string): Promise<AuthUser> {
 }
 
 export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance) {
-  fastify.decorateRequest("user", null);
+  fastify.decorateRequest("user", undefined as unknown as AuthUser);
 
   fastify.addHook("onRequest", async (request: FastifyRequest, _reply: FastifyReply) => {
     const PUBLIC_ROUTES = [

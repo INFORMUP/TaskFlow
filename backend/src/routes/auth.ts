@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import jwt from "jsonwebtoken";
+import type { StringValue } from "ms";
 import { config } from "../config.js";
 import { prisma } from "../prisma-client.js";
 import {
@@ -111,13 +112,13 @@ export async function authRoutes(fastify: FastifyInstance) {
       const accessToken = jwt.sign(
         { sub: userId, type: "access" },
         config.jwtSecret,
-        { expiresIn: config.jwtAccessExpiresIn }
+        { expiresIn: config.jwtAccessExpiresIn as StringValue }
       );
 
       const refreshToken = jwt.sign(
         { sub: userId, type: "refresh" },
         config.jwtRefreshSecret,
-        { expiresIn: config.jwtRefreshExpiresIn }
+        { expiresIn: config.jwtRefreshExpiresIn as StringValue }
       );
 
       return { accessToken, refreshToken };
@@ -153,7 +154,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         const accessToken = jwt.sign(
           { sub: payload.sub, type: "access" },
           config.jwtSecret,
-          { expiresIn: config.jwtAccessExpiresIn }
+          { expiresIn: config.jwtAccessExpiresIn as StringValue }
         );
 
         return { accessToken };

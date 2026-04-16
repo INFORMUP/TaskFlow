@@ -1,8 +1,8 @@
 import fp from "fastify-plugin";
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, FastifyError } from "fastify";
 
 export const errorHandler = fp(async function errorHandler(fastify: FastifyInstance) {
-  fastify.setErrorHandler((error, _request, reply) => {
+  fastify.setErrorHandler((error: FastifyError, _request, reply) => {
     const statusCode = error.statusCode ?? 500;
 
     reply.status(statusCode).send({
