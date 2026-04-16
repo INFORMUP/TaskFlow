@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Task } from "@/api/tasks.api";
+import ActorLabel from "@/components/ActorLabel.vue";
 
 defineProps<{
   task: Task;
@@ -26,7 +27,9 @@ const priorityColors: Record<string, string> = {
     </div>
     <div class="card__title">{{ task.title }}</div>
     <div class="card__footer" v-if="task.assignee">
-      <span class="card__assignee">{{ task.assignee.displayName }}</span>
+      <span class="card__assignee">
+        <ActorLabel :actor="task.assignee" />
+      </span>
     </div>
   </div>
 </template>

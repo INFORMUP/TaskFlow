@@ -51,7 +51,42 @@ const TokenSummary = Type.Object(
   { additionalProperties: true }
 );
 
+const ScopeItem = Type.Object(
+  {
+    key: Type.String(),
+    description: Type.String(),
+  },
+  { additionalProperties: true }
+);
+
 export async function apiTokenRoutes(fastify: FastifyInstance) {
+  fastify.get(
+    "/api/v1/scopes",
+    {
+      schema: {
+        summary: "List available API token scopes",
+        description:
+          "Returns the catalog of scopes that can be granted when minting an API token.",
+        tags: ["api-tokens"],
+        response: {
+          200: Type.Object(
+            { data: Type.Array(ScopeItem) },
+            { additionalProperties: true }
+          ),
+          401: ErrorResponse,
+          429: ErrorResponse,
+          500: ErrorResponse,
+        },
+      },
+    },
+    async () => {
+      const scopes = await prisma.scope.findMany({ orderBy: { key: "asc" } });
+      return {
+        data: scopes.map((s) => ({ key: s.key, description: s.description })),
+      };
+    }
+  );
+
   fastify.post<{ Body: Static<typeof CreateTokenBody> }>(
     "/api/v1/auth/tokens",
     {

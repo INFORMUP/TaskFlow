@@ -10,7 +10,7 @@ Each phase lives in its own subdirectory. `overview.md` inside that directory is
 - [Phase 2 — Agent Access and Programmatic Use](phase-2-agent-access/overview.md)
   - [Phase 2.1 — Token Infrastructure](phase-2-agent-access/phase-2.1-token-infrastructure.md) ✅ Shipped
   - [Phase 2.2 — Rate Limiting and Agent Users](phase-2-agent-access/phase-2.2-rate-limiting-and-agent-users.md) ✅ Shipped
-  - [Phase 2.3 — Token UI and Agent Display](phase-2-agent-access/phase-2.3-token-ui.md)
+  - [Phase 2.3 — Token UI and Agent Display](phase-2-agent-access/phase-2.3-token-ui.md) ✅ Shipped
   - [Phase 2.4 — Claude Code Skill](phase-2-agent-access/phase-2.4-claude-code-skill.md)
 - [Phase 3 — Collaboration Features](phase-3-collaboration/overview.md)
 - [Phase 4 — Slack Integration](phase-4-slack/overview.md)

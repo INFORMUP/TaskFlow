@@ -1,5 +1,7 @@
 # Phase 2.3 — Token UI and Agent Actor Display
 
+**Status:** ✅ Shipped 2026-04-16.
+
 **Goal:** Users can create and manage API tokens from the web UI, and humans can tell at a glance when an agent acted on a task.
 
 **Depends on:** Phase 2.1 (token endpoints) and Phase 2.2 (agent user seeding for distinct display).

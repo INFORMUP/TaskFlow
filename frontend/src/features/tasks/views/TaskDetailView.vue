@@ -6,6 +6,7 @@ import { getTransitions, createTransition, type Transition } from "@/api/transit
 import { getComments, createComment, deleteComment, type Comment } from "@/api/comments.api";
 import { apiFetch } from "@/api/client";
 import MarkdownView from "@/features/tasks/components/MarkdownView.vue";
+import ActorLabel from "@/components/ActorLabel.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -135,8 +136,10 @@ onMounted(async () => {
     />
 
     <div class="detail__meta">
-      <div>Created by: {{ task.creator.displayName }}</div>
-      <div v-if="task.assignee">Assigned to: {{ task.assignee.displayName }}</div>
+      <div>Created by: <ActorLabel :actor="task.creator" /></div>
+      <div v-if="task.assignee">
+        Assigned to: <ActorLabel :actor="task.assignee" />
+      </div>
       <div v-if="task.dueDate">Due: {{ new Date(task.dueDate).toLocaleDateString() }}</div>
       <div v-if="task.resolution">Resolution: {{ task.resolution }}</div>
     </div>
@@ -191,8 +194,7 @@ onMounted(async () => {
         <div v-for="t in transitions" :key="t.id" class="timeline__item">
           <div class="timeline__header">
             <span class="timeline__actor">
-              {{ t.actor.displayName }}
-              <span v-if="t.actorType === 'agent'" class="timeline__badge">Agent</span>
+              <ActorLabel :actor="t.actor" />
             </span>
             <span class="timeline__date">{{ new Date(t.createdAt).toLocaleString() }}</span>
           </div>
@@ -201,7 +203,7 @@ onMounted(async () => {
             <span v-else>Created</span>
             &rarr; {{ t.toStatus.name }}
             <span v-if="t.newAssignee" class="timeline__reassign">
-              · reassigned to {{ t.newAssignee.displayName }}
+              · reassigned to <ActorLabel :actor="t.newAssignee" />
             </span>
           </div>
           <div class="timeline__note">{{ t.note }}</div>
@@ -215,7 +217,9 @@ onMounted(async () => {
       <div class="comments">
         <div v-for="c in comments" :key="c.id" class="comment">
           <div class="comment__header">
-            <span class="comment__author">{{ c.author.displayName }}</span>
+            <span class="comment__author">
+              <ActorLabel :actor="c.author" />
+            </span>
             <span class="comment__date">{{ new Date(c.createdAt).toLocaleString() }}</span>
             <button class="comment__delete" @click="handleDeleteComment(c.id)">Delete</button>
           </div>
@@ -385,15 +389,6 @@ onMounted(async () => {
 
 .timeline__actor {
   font-weight: 600;
-}
-
-.timeline__badge {
-  background: #dbeafe;
-  color: #1d4ed8;
-  padding: 0 0.375rem;
-  border-radius: 3px;
-  font-size: 0.6875rem;
-  margin-left: 0.25rem;
 }
 
 .timeline__date {

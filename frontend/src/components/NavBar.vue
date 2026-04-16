@@ -59,6 +59,14 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
       >
         Projects
       </router-link>
+      <router-link
+        to="/settings"
+        class="navbar__tab"
+        :class="{ 'navbar__tab--active': route.path.startsWith('/settings') }"
+        data-testid="navbar-settings-link"
+      >
+        Settings
+      </router-link>
     </div>
     <div class="navbar__user">
       <button

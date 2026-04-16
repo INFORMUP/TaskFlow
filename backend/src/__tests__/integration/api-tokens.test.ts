@@ -120,6 +120,43 @@ describe("api tokens", () => {
     });
   });
 
+  describe("GET /api/v1/scopes", () => {
+    it("returns the catalog of available scopes", async () => {
+      const app = await buildApp();
+      const jwt = mintTestToken(TEST_ENGINEER_ID);
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/scopes",
+        headers: { authorization: `Bearer ${jwt}` },
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(Array.isArray(body.data)).toBe(true);
+      const keys = body.data.map((s: { key: string }) => s.key);
+      expect(keys).toEqual(
+        expect.arrayContaining([
+          "tasks:read",
+          "tasks:write",
+          "transitions:write",
+          "comments:write",
+        ])
+      );
+      for (const s of body.data) {
+        expect(typeof s.key).toBe("string");
+        expect(typeof s.description).toBe("string");
+      }
+    });
+
+    it("requires authentication", async () => {
+      const app = await buildApp();
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/scopes",
+      });
+      expect(response.statusCode).toBe(401);
+    });
+  });
+
   describe("GET /api/v1/auth/tokens", () => {
     it("lists the authenticated user's tokens without secrets", async () => {
       const app = await buildApp();
