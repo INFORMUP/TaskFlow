@@ -26,8 +26,8 @@ external/      # Reference projects (git submodules)
 2. `npm run dev` (starts on port 5173)
 
 ## Running Tests
-- Backend: `cd backend && npm test` (131 tests)
-- Frontend: `cd frontend && npm test` (4 tests)
+- Backend: `cd backend && npm test` (Vitest; unit + integration against the real dev DB)
+- Frontend: `cd frontend && npm test` (Vitest with happy-dom; component tests via `@vue/test-utils`). Use `npm run test:watch` for watch mode.
 
 ## Key Architecture Decisions
 - **Fastify plugins** with `fastify-plugin` for encapsulation breaking (auth, error handler)
