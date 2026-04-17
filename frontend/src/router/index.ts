@@ -3,7 +3,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    redirect: "/tasks/bug",
+    redirect: "/flows",
   },
   {
     path: "/login",
@@ -13,7 +13,13 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: "/tasks",
-    redirect: "/tasks/bug",
+    redirect: "/flows",
+  },
+  {
+    path: "/flows",
+    name: "flow-list",
+    component: () => import("@/features/flows/views/FlowListView.vue"),
+    meta: { layout: "app" },
   },
   {
     path: "/tasks/:flow",

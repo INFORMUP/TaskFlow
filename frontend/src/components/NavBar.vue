@@ -10,12 +10,6 @@ const router = useRouter();
 const { logout } = useAuth();
 const { user, setTeams } = useCurrentUser();
 
-const flows = [
-  { slug: "bug", name: "Bugs" },
-  { slug: "feature", name: "Features" },
-  { slug: "improvement", name: "Improvements" },
-];
-
 const showTeamPicker = ref(false);
 
 const primaryTeamName = computed(() => {
@@ -44,13 +38,11 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
     <div class="navbar__brand">TaskFlow</div>
     <div class="navbar__tabs">
       <router-link
-        v-for="flow in flows"
-        :key="flow.slug"
-        :to="`/tasks/${flow.slug}`"
+        to="/flows"
         class="navbar__tab"
-        :class="{ 'navbar__tab--active': route.params.flow === flow.slug }"
+        :class="{ 'navbar__tab--active': route.path.startsWith('/flows') || route.path.startsWith('/tasks') }"
       >
-        {{ flow.name }}
+        Flows
       </router-link>
       <router-link
         to="/projects"
