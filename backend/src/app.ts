@@ -23,7 +23,10 @@ import "./types/index.js";
 export function createApp() {
   const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
 
-  app.register(cors, { origin: config.corsOrigins });
+  app.register(cors, {
+    origin: config.corsOrigins,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  });
   app.register(errorHandler);
   app.register(authPlugin);
   app.register(rateLimitPlugin);
