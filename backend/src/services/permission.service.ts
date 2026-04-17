@@ -175,11 +175,22 @@ const TRANSITION_PERMISSIONS: Record<string, Record<string, string[]>> = {
 
 const SCOPE_PRIORITY: ViewScope[] = ["all", "own_public", "assigned", "none"];
 
+export type OrgRole = "owner" | "admin" | "member";
+
+// Org owner/admin implicitly has every team-level permission within the org.
+// A member inherits only from their explicit team memberships.
+export function orgRoleGrantsAll(orgRole: OrgRole | undefined): boolean {
+  return orgRole === "owner" || orgRole === "admin";
+}
+
 export function canPerformAction(
   teamSlugs: string[],
   action: Action,
-  flowSlug: string
+  flowSlug: string,
+  orgRole?: OrgRole,
 ): boolean {
+  if (orgRoleGrantsAll(orgRole)) return true;
+
   const flowPerms = PERMISSIONS[flowSlug];
   if (!flowPerms) return false;
 

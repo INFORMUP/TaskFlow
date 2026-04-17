@@ -119,7 +119,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
     },
     async (request) => {
       const includeArchived = request.query.archived === "true";
-      return { data: await listProjects({ includeArchived }) };
+      return { data: await listProjects(request.org.id, { includeArchived }) };
     }
   );
 
@@ -135,7 +135,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       const { id } = request.params;
-      const project = await getProject(id);
+      const project = await getProject(request.org.id, id);
       if (!project) {
         return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Project not found" } });
       }
@@ -156,7 +156,8 @@ export async function projectRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!isAdmin(teamSlugs)) {
+      const orgRole = request.org.role;
+      if (orgRole !== "owner" && orgRole !== "admin" && !isAdmin(teamSlugs)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "Only engineer or product team members can create projects" },
         });
@@ -164,6 +165,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
       const body = request.body;
       try {
         const project = await createProject({
+          orgId: request.org.id,
           key: body.key,
           name: body.name,
           ownerUserId: body.ownerUserId,
@@ -193,13 +195,13 @@ export async function projectRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params;
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!(await canManageProject(id, request.user.id, teamSlugs))) {
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "Only the project owner or admins can edit this project" },
         });
       }
       try {
-        return await updateProject(id, request.body as any);
+        return await updateProject(request.org.id, id, request.body as any);
       } catch (err) {
         return handleError(reply, err);
       }
@@ -219,13 +221,13 @@ export async function projectRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params;
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!(await canManageProject(id, request.user.id, teamSlugs))) {
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "Only the project owner or admins can archive this project" },
         });
       }
       try {
-        return await archiveProject(id, true);
+        return await archiveProject(request.org.id, id, true);
       } catch (err) {
         return handleError(reply, err);
       }
@@ -245,13 +247,13 @@ export async function projectRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params;
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!(await canManageProject(id, request.user.id, teamSlugs))) {
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "Only the project owner or admins can unarchive this project" },
         });
       }
       try {
-        return await archiveProject(id, false);
+        return await archiveProject(request.org.id, id, false);
       } catch (err) {
         return handleError(reply, err);
       }
@@ -272,14 +274,14 @@ export async function projectRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params;
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!(await canManageProject(id, request.user.id, teamSlugs))) {
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "Only the project owner or admins can modify teams" },
         });
       }
       const { teamId } = request.body;
       try {
-        return await addProjectTeam(id, teamId);
+        return await addProjectTeam(request.org.id, id, teamId);
       } catch (err) {
         return handleError(reply, err);
       }
@@ -302,13 +304,13 @@ export async function projectRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id, teamId } = request.params;
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!(await canManageProject(id, request.user.id, teamSlugs))) {
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "Only the project owner or admins can modify teams" },
         });
       }
       try {
-        return await removeProjectTeam(id, teamId);
+        return await removeProjectTeam(request.org.id, id, teamId);
       } catch (err) {
         return handleError(reply, err);
       }
@@ -334,7 +336,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params;
       try {
-        return { data: await listProjectFlows(id) };
+        return { data: await listProjectFlows(request.org.id, id) };
       } catch (err) {
         return handleError(reply, err);
       }
@@ -361,14 +363,14 @@ export async function projectRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params;
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!(await canManageProject(id, request.user.id, teamSlugs))) {
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "Only the project owner or admins can modify flows" },
         });
       }
       const { flowId } = request.body;
       try {
-        return { data: await attachProjectFlow(id, flowId) };
+        return { data: await attachProjectFlow(request.org.id, id, flowId) };
       } catch (err) {
         return handleError(reply, err);
       }
@@ -397,13 +399,13 @@ export async function projectRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id, flowId } = request.params;
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!(await canManageProject(id, request.user.id, teamSlugs))) {
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "Only the project owner or admins can modify flows" },
         });
       }
       try {
-        return { data: await detachProjectFlow(id, flowId) };
+        return { data: await detachProjectFlow(request.org.id, id, flowId) };
       } catch (err) {
         return handleError(reply, err);
       }

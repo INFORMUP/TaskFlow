@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { buildApp } from "../helpers/app.js";
 import { mintTestToken, TEST_ENGINEER_ID, TEST_USER_ID } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
+import { DEFAULT_ORG_ID } from "../../constants/org.js";
 
 const prisma = new PrismaClient();
 
@@ -21,6 +22,7 @@ describe("users and teams API", () => {
 
     // Fresh user with NO team memberships for /me and /me/teams tests
     await prisma.userTeam.deleteMany({ where: { userId: NEW_USER_ID } });
+    await prisma.orgMember.deleteMany({ where: { userId: NEW_USER_ID } });
     await prisma.user.deleteMany({ where: { id: NEW_USER_ID } });
     await prisma.user.create({
       data: {
@@ -31,11 +33,15 @@ describe("users and teams API", () => {
         status: "active",
       },
     });
+    await prisma.orgMember.create({
+      data: { orgId: DEFAULT_ORG_ID, userId: NEW_USER_ID, role: "member" },
+    });
     noTeamToken = mintTestToken(NEW_USER_ID);
   });
 
   afterAll(async () => {
     await prisma.userTeam.deleteMany({ where: { userId: NEW_USER_ID } });
+    await prisma.orgMember.deleteMany({ where: { userId: NEW_USER_ID } });
     await prisma.user.deleteMany({ where: { id: NEW_USER_ID } });
     await prisma.$disconnect();
   });

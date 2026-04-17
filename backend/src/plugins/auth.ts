@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { config } from "../config.js";
 import { prisma } from "../prisma-client.js";
 import { TOKEN_PREFIX, hashToken } from "../services/token.service.js";
-import type { AuthUser } from "../types/index.js";
+import type { AuthUser, OrgRole, RequestOrg } from "../types/index.js";
 import "../types/index.js";
 
 function unauthorized(message: string): Error {
@@ -14,7 +14,19 @@ function unauthorized(message: string): Error {
   });
 }
 
-async function authenticateApiToken(plaintext: string): Promise<AuthUser> {
+function forbidden(message: string): Error {
+  return Object.assign(new Error(message), {
+    statusCode: 403,
+    code: "FORBIDDEN",
+  });
+}
+
+interface AuthResult {
+  user: AuthUser;
+  orgId: string;
+}
+
+async function authenticateApiToken(plaintext: string): Promise<AuthResult> {
   const tokenHash = hashToken(plaintext);
   const token = await prisma.apiToken.findUnique({
     where: { tokenHash },
@@ -34,18 +46,21 @@ async function authenticateApiToken(plaintext: string): Promise<AuthUser> {
   }
 
   return {
-    id: token.user.id,
-    email: token.user.email,
-    displayName: token.user.displayName,
-    actorType: token.user.actorType,
-    teams: token.user.teams.map((ut) => ({ id: ut.team.id, slug: ut.team.slug })),
-    scopes: token.scopes.map((s) => s.scope.key),
-    apiTokenId: token.id,
-    integrationToken: token.integration,
+    orgId: token.orgId,
+    user: {
+      id: token.user.id,
+      email: token.user.email,
+      displayName: token.user.displayName,
+      actorType: token.user.actorType,
+      teams: token.user.teams.map((ut) => ({ id: ut.team.id, slug: ut.team.slug })),
+      scopes: token.scopes.map((s) => s.scope.key),
+      apiTokenId: token.id,
+      integrationToken: token.integration,
+    },
   };
 }
 
-async function authenticateJwt(rawToken: string): Promise<AuthUser> {
+async function authenticateJwt(rawToken: string): Promise<AuthResult> {
   let payload: jwt.JwtPayload;
   try {
     payload = jwt.verify(rawToken, config.jwtSecret) as jwt.JwtPayload;
@@ -57,6 +72,8 @@ async function authenticateJwt(rawToken: string): Promise<AuthUser> {
 
   const userId = payload.sub;
   if (!userId) throw unauthorized("Invalid token");
+  const orgId = payload.orgId as string | undefined;
+  if (!orgId) throw unauthorized("Token missing org claim");
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -68,19 +85,23 @@ async function authenticateJwt(rawToken: string): Promise<AuthUser> {
   }
 
   return {
-    id: user.id,
-    email: user.email,
-    displayName: user.displayName,
-    actorType: user.actorType,
-    teams: user.teams.map((ut) => ({ id: ut.team.id, slug: ut.team.slug })),
-    scopes: null,
-    apiTokenId: null,
-    integrationToken: false,
+    orgId,
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      actorType: user.actorType,
+      teams: user.teams.map((ut) => ({ id: ut.team.id, slug: ut.team.slug })),
+      scopes: null,
+      apiTokenId: null,
+      integrationToken: false,
+    },
   };
 }
 
 export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance) {
   fastify.decorateRequest("user", undefined as unknown as AuthUser);
+  fastify.decorateRequest("org", undefined as unknown as RequestOrg);
 
   fastify.addHook("onRequest", async (request: FastifyRequest, _reply: FastifyReply) => {
     const PUBLIC_ROUTES = [
@@ -101,8 +122,18 @@ export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance)
 
     const rawToken = authHeader.slice(7);
 
-    request.user = rawToken.startsWith(TOKEN_PREFIX)
+    const result = rawToken.startsWith(TOKEN_PREFIX)
       ? await authenticateApiToken(rawToken)
       : await authenticateJwt(rawToken);
+
+    const membership = await prisma.orgMember.findUnique({
+      where: { orgId_userId: { orgId: result.orgId, userId: result.user.id } },
+    });
+    if (!membership) {
+      throw forbidden("Not a member of the requested organization");
+    }
+
+    request.user = result.user;
+    request.org = { id: result.orgId, role: membership.role as OrgRole };
   });
 });

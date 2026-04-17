@@ -1,5 +1,7 @@
 # Phase 1 — Schema and seeders
 
+**Completed:** 2026-04-17. Landed in commit 9ddfc1c — added Organization/OrgMember models, scoped all top-level entities to orgId, updated seeders.
+
 **Prerequisite:** none. This is the first phase of the org-tenant epic (see [`README.md`](./README.md)).
 
 **Goal:** Introduce `Organization` / `OrgMember` and make every top-level entity carry `orgId`, without changing any runtime behavior yet. After this phase, the DB shape supports multi-tenancy but auth and services still ignore it.

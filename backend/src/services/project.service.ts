@@ -1,7 +1,8 @@
 import { prisma } from "../prisma-client.js";
-import { DEFAULT_ORG_ID } from "../constants/org.js";
+import { orgScopedWhere } from "./org-scope.js";
 
 export interface CreateProjectInput {
+  orgId: string;
   key: string;
   name: string;
   ownerUserId: string;
@@ -32,11 +33,14 @@ async function assertActiveUser(id: string, label: string) {
   }
 }
 
-async function assertTeamsExist(ids: string[]) {
+async function assertTeamsExist(orgId: string, ids: string[]) {
   if (ids.length === 0) {
     throw new ProjectServiceError("BAD_REQUEST", "At least one team is required", 400);
   }
-  const found = await prisma.team.findMany({ where: { id: { in: ids } }, select: { id: true } });
+  const found = await prisma.team.findMany({
+    where: { id: { in: ids }, orgId },
+    select: { id: true },
+  });
   if (found.length !== ids.length) {
     throw new ProjectServiceError("INVALID_TEAM", "One or more teams do not exist", 422);
   }
@@ -63,8 +67,11 @@ export function formatProject(project: any) {
   };
 }
 
-export async function listProjects(opts: { includeArchived?: boolean; teamIds?: string[] } = {}) {
-  const where: Record<string, unknown> = {};
+export async function listProjects(
+  orgId: string,
+  opts: { includeArchived?: boolean; teamIds?: string[] } = {},
+) {
+  const where: Record<string, unknown> = orgScopedWhere(orgId);
   if (!opts.includeArchived) where.archivedAt = null;
   if (opts.teamIds && opts.teamIds.length > 0) {
     where.teams = { some: { teamId: { in: opts.teamIds } } };
@@ -77,8 +84,11 @@ export async function listProjects(opts: { includeArchived?: boolean; teamIds?: 
   return projects.map(formatProject);
 }
 
-export async function getProject(id: string) {
-  const project = await prisma.project.findUnique({ where: { id }, include: projectInclude });
+export async function getProject(orgId: string, id: string) {
+  const project = await prisma.project.findFirst({
+    where: { id, orgId },
+    include: projectInclude,
+  });
   return project ? formatProject(project) : null;
 }
 
@@ -91,7 +101,7 @@ export async function createProject(input: CreateProjectInput) {
   }
 
   const existing = await prisma.project.findUnique({
-    where: { orgId_key: { orgId: DEFAULT_ORG_ID, key: input.key } },
+    where: { orgId_key: { orgId: input.orgId, key: input.key } },
   });
   if (existing) {
     throw new ProjectServiceError("KEY_TAKEN", `Project key ${input.key} already exists`, 409);
@@ -101,16 +111,18 @@ export async function createProject(input: CreateProjectInput) {
   if (input.defaultAssigneeUserId) {
     await assertActiveUser(input.defaultAssigneeUserId, "Default assignee");
   }
-  await assertTeamsExist(input.teamIds);
+  await assertTeamsExist(input.orgId, input.teamIds);
 
   if (input.defaultFlowId) {
-    const flow = await prisma.flow.findUnique({ where: { id: input.defaultFlowId } });
+    const flow = await prisma.flow.findFirst({
+      where: { id: input.defaultFlowId, orgId: input.orgId },
+    });
     if (!flow) throw new ProjectServiceError("INVALID_FLOW", "Default flow not found", 422);
   }
 
   const project = await prisma.project.create({
     data: {
-      orgId: DEFAULT_ORG_ID,
+      orgId: input.orgId,
       key: input.key,
       name: input.name.trim(),
       ownerUserId: input.ownerUserId,
@@ -124,8 +136,8 @@ export async function createProject(input: CreateProjectInput) {
   return formatProject(project);
 }
 
-export async function updateProject(id: string, patch: UpdateProjectInput) {
-  const project = await prisma.project.findUnique({ where: { id } });
+export async function updateProject(orgId: string, id: string, patch: UpdateProjectInput) {
+  const project = await prisma.project.findFirst({ where: { id, orgId } });
   if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
 
   if (patch.ownerUserId) await assertActiveUser(patch.ownerUserId, "Owner");
@@ -133,9 +145,8 @@ export async function updateProject(id: string, patch: UpdateProjectInput) {
     await assertActiveUser(patch.defaultAssigneeUserId, "Default assignee");
   }
   if (patch.defaultFlowId) {
-    const flow = await prisma.flow.findUnique({ where: { id: patch.defaultFlowId } });
+    const flow = await prisma.flow.findFirst({ where: { id: patch.defaultFlowId, orgId } });
     if (!flow) throw new ProjectServiceError("INVALID_FLOW", "Default flow not found", 422);
-    // default_flow_id must be in this project's attached flows.
     const attached = await prisma.projectFlow.findUnique({
       where: { projectId_flowId: { projectId: id, flowId: patch.defaultFlowId } },
     });
@@ -162,8 +173,8 @@ export async function updateProject(id: string, patch: UpdateProjectInput) {
   return formatProject(updated);
 }
 
-export async function archiveProject(id: string, archived: boolean) {
-  const project = await prisma.project.findUnique({ where: { id } });
+export async function archiveProject(orgId: string, id: string, archived: boolean) {
+  const project = await prisma.project.findFirst({ where: { id, orgId } });
   if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
 
   const updated = await prisma.project.update({
@@ -174,10 +185,10 @@ export async function archiveProject(id: string, archived: boolean) {
   return formatProject(updated);
 }
 
-export async function addProjectTeam(projectId: string, teamId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+export async function addProjectTeam(orgId: string, projectId: string, teamId: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
   if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
-  const team = await prisma.team.findUnique({ where: { id: teamId } });
+  const team = await prisma.team.findFirst({ where: { id: teamId, orgId } });
   if (!team) throw new ProjectServiceError("INVALID_TEAM", "Team not found", 422);
 
   await prisma.projectTeam.upsert({
@@ -186,12 +197,12 @@ export async function addProjectTeam(projectId: string, teamId: string) {
     create: { projectId, teamId },
   });
 
-  return getProject(projectId);
+  return getProject(orgId, projectId);
 }
 
-export async function removeProjectTeam(projectId: string, teamId: string) {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
+export async function removeProjectTeam(orgId: string, projectId: string, teamId: string) {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, orgId },
     include: { teams: true },
   });
   if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
@@ -203,42 +214,49 @@ export async function removeProjectTeam(projectId: string, teamId: string) {
     );
   }
   await prisma.projectTeam.deleteMany({ where: { projectId, teamId } });
-  return getProject(projectId);
+  return getProject(orgId, projectId);
 }
 
 export function isAdmin(teamSlugs: string[]): boolean {
   return teamSlugs.includes("engineer") || teamSlugs.includes("product");
 }
 
-export async function canManageProject(projectId: string, userId: string, teamSlugs: string[]): Promise<boolean> {
+export async function canManageProject(
+  orgId: string,
+  projectId: string,
+  userId: string,
+  teamSlugs: string[],
+  orgRole?: string,
+): Promise<boolean> {
+  if (orgRole === "owner" || orgRole === "admin") return true;
   if (isAdmin(teamSlugs)) return true;
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
   return !!project && project.ownerUserId === userId;
 }
 
-export async function resolveDefaultAssignee(projectIds: string[]): Promise<string | null> {
+export async function resolveDefaultAssignee(orgId: string, projectIds: string[]): Promise<string | null> {
   if (projectIds.length === 0) return null;
-  const project = await prisma.project.findUnique({
-    where: { id: projectIds[0] },
+  const project = await prisma.project.findFirst({
+    where: { id: projectIds[0], orgId },
     select: { defaultAssigneeUserId: true },
   });
   return project?.defaultAssigneeUserId ?? null;
 }
 
-export async function resolveDefaultFlow(projectIds: string[]): Promise<string | null> {
+export async function resolveDefaultFlow(orgId: string, projectIds: string[]): Promise<string | null> {
   if (projectIds.length > 0) {
-    const project = await prisma.project.findUnique({
-      where: { id: projectIds[0] },
+    const project = await prisma.project.findFirst({
+      where: { id: projectIds[0], orgId },
       select: { defaultFlowId: true },
     });
     if (project?.defaultFlowId) return project.defaultFlowId;
   }
-  const setting = await prisma.appSetting.findUnique({ where: { orgId: DEFAULT_ORG_ID } });
+  const setting = await prisma.appSetting.findUnique({ where: { orgId } });
   return setting?.defaultFlowId ?? null;
 }
 
-export async function listProjectFlows(projectId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+export async function listProjectFlows(orgId: string, projectId: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
   if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
 
   const rows = await prisma.projectFlow.findMany({
@@ -252,10 +270,10 @@ export async function listProjectFlows(projectId: string) {
   }));
 }
 
-export async function attachProjectFlow(projectId: string, flowId: string) {
+export async function attachProjectFlow(orgId: string, projectId: string, flowId: string) {
   const [project, flow] = await Promise.all([
-    prisma.project.findUnique({ where: { id: projectId } }),
-    prisma.flow.findUnique({ where: { id: flowId } }),
+    prisma.project.findFirst({ where: { id: projectId, orgId } }),
+    prisma.flow.findFirst({ where: { id: flowId, orgId } }),
   ]);
   if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
   if (!flow) throw new ProjectServiceError("INVALID_FLOW", "Flow not found", 422);
@@ -266,15 +284,13 @@ export async function attachProjectFlow(projectId: string, flowId: string) {
     create: { projectId, flowId },
   });
 
-  return listProjectFlows(projectId);
+  return listProjectFlows(orgId, projectId);
 }
 
-export async function detachProjectFlow(projectId: string, flowId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId } });
+export async function detachProjectFlow(orgId: string, projectId: string, flowId: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
   if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
 
-  // Guard: block if any non-archived task on this project uses the flow and has
-  // no other attached project that also offers it.
   const tasksUsingFlow = await prisma.task.findMany({
     where: {
       isDeleted: false,
@@ -306,11 +322,10 @@ export async function detachProjectFlow(projectId: string, flowId: string) {
     }
   }
 
-  // Clear default if it pointed at the flow being detached.
   if (project.defaultFlowId === flowId) {
     await prisma.project.update({ where: { id: projectId }, data: { defaultFlowId: null } });
   }
 
   await prisma.projectFlow.deleteMany({ where: { projectId, flowId } });
-  return listProjectFlows(projectId);
+  return listProjectFlows(orgId, projectId);
 }

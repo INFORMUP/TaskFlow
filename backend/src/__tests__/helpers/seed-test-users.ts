@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { seedUuid } from "../../../prisma/seeders/common.js";
+import { DEFAULT_ORG_ID } from "../../constants/org.js";
 import {
   TEST_ENGINEER_ID,
   TEST_PRODUCT_ID,
@@ -8,6 +9,11 @@ import {
 } from "./auth.js";
 
 export async function seedTestUsers(prisma: PrismaClient) {
+  await prisma.organization.upsert({
+    where: { id: DEFAULT_ORG_ID },
+    update: {},
+    create: { id: DEFAULT_ORG_ID, slug: "default", name: "Default" },
+  });
   const engineerTeamId = seedUuid("team", "engineer");
   const productTeamId = seedUuid("team", "product");
   const userTeamId = seedUuid("team", "user");
@@ -65,6 +71,12 @@ export async function seedTestUsers(prisma: PrismaClient) {
       where: { userId_teamId: { userId: u.id, teamId: u.teamId } },
       update: {},
       create: { userId: u.id, teamId: u.teamId, isPrimary: true },
+    });
+    // Add org membership (default org)
+    await prisma.orgMember.upsert({
+      where: { orgId_userId: { orgId: DEFAULT_ORG_ID, userId: u.id } },
+      update: {},
+      create: { orgId: DEFAULT_ORG_ID, userId: u.id, role: "member" },
     });
   }
 }

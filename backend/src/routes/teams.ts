@@ -43,8 +43,11 @@ export async function teamRoutes(fastify: FastifyInstance) {
         },
       },
     },
-    async () => {
-      const teams = await prisma.team.findMany({ orderBy: { name: "asc" } });
+    async (request) => {
+      const teams = await prisma.team.findMany({
+        where: { orgId: request.org.id },
+        orderBy: { name: "asc" },
+      });
       return {
         data: teams.map((t) => ({
           id: t.id,
@@ -75,7 +78,7 @@ export async function teamRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params;
 
-      const team = await prisma.team.findUnique({ where: { id } });
+      const team = await prisma.team.findFirst({ where: { id, orgId: request.org.id } });
       if (!team) {
         return reply.status(404).send({
           error: { code: "NOT_FOUND", message: "Team not found" },

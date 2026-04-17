@@ -3,6 +3,7 @@ import { watch } from "vue";
 import { useRoute } from "vue-router";
 import { provideAuth } from "@/composables/useAuth";
 import { provideCurrentUser, type TeamSelection } from "@/composables/useCurrentUser";
+import { provideOrg } from "@/composables/useOrg";
 import AppLayout from "@/layouts/AppLayout.vue";
 import AuthLayout from "@/layouts/AuthLayout.vue";
 import TeamPickerModal from "@/features/auth/components/TeamPickerModal.vue";
@@ -11,6 +12,7 @@ const route = useRoute();
 
 const auth = provideAuth();
 const currentUser = provideCurrentUser();
+const org = provideOrg();
 
 // Load whenever the authentication state flips to true, and clear on logout.
 watch(
@@ -18,8 +20,10 @@ watch(
   (authed) => {
     if (authed) {
       currentUser.load();
+      org.hydrate();
     } else {
       currentUser.clear();
+      org.clear();
     }
   },
   { immediate: true }

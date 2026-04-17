@@ -28,6 +28,9 @@ describe("POST /api/v1/auth/callback", () => {
     await prisma.userTeam.deleteMany({
       where: { user: { email: "oauth-test@example.com" } },
     });
+    await prisma.orgMember.deleteMany({
+      where: { user: { email: "oauth-test@example.com" } },
+    });
     await prisma.user.deleteMany({
       where: { email: "oauth-test@example.com" },
     });
@@ -39,6 +42,9 @@ describe("POST /api/v1/auth/callback", () => {
       where: { providerUserId: "google-user-12345" },
     });
     await prisma.userTeam.deleteMany({
+      where: { user: { email: "oauth-test@example.com" } },
+    });
+    await prisma.orgMember.deleteMany({
       where: { user: { email: "oauth-test@example.com" } },
     });
     await prisma.user.deleteMany({

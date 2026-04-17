@@ -94,8 +94,8 @@ const ListTasksQuery = Type.Object({
   limit: Type.Optional(Type.String({ description: "Integer 1–100 as a string." })),
 });
 
-async function getFlowIdBySlug(): Promise<Map<string, string>> {
-  const flows = await prisma.flow.findMany();
+async function getFlowIdBySlug(orgId: string): Promise<Map<string, string>> {
+  const flows = await prisma.flow.findMany({ where: { orgId } });
   return new Map(flows.map((f) => [f.slug, f.id]));
 }
 
@@ -122,7 +122,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const flowRecord = await prisma.flow.findFirst({ where: { slug: flow } });
+      const flowRecord = await prisma.flow.findFirst({ where: { slug: flow, orgId: request.org.id } });
       if (!flowRecord) {
         return reply.status(422).send({
           error: { code: "INVALID_FLOW", message: `Unknown flow: ${flow}` },
@@ -138,6 +138,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
       try {
         const task = await createTask({
+          orgId: request.org.id,
           flowSlug: flow,
           title,
           description,
@@ -174,7 +175,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
       const { projectId } = request.body;
 
-      const flowIdBySlug = await getFlowIdBySlug();
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
       const teamSlugs = request.user.teams.map((t) => t.slug);
       const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
       const task = await prisma.task.findFirst({
@@ -187,7 +188,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        await addProjectToTask(id, projectId);
+        await addProjectToTask(request.org.id, id, projectId);
         return reply.status(204).send();
       } catch (err) {
         if (err instanceof TaskServiceError) {
@@ -216,7 +217,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       if (!enforceScope(request, reply, "tasks:write")) return;
       const { id, projectId } = request.params;
 
-      const flowIdBySlug = await getFlowIdBySlug();
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
       const teamSlugs = request.user.teams.map((t) => t.slug);
       const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
       const task = await prisma.task.findFirst({
@@ -229,7 +230,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        await removeProjectFromTask(id, projectId);
+        await removeProjectFromTask(request.org.id, id, projectId);
         return reply.status(204).send();
       } catch (err) {
         if (err instanceof TaskServiceError) {
@@ -271,20 +272,20 @@ export async function taskRoutes(fastify: FastifyInstance) {
       if (!enforceScope(request, reply, "tasks:read")) return;
       const query = request.query;
 
-      const flowIdBySlug = await getFlowIdBySlug();
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
       const teamSlugs = request.user.teams.map((t) => t.slug);
       const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
 
       const where: Record<string, unknown> = { isDeleted: false, ...viewWhere };
 
       if (query.flow) {
-        const flow = await prisma.flow.findFirst({ where: { slug: query.flow } });
+        const flow = await prisma.flow.findFirst({ where: { slug: query.flow, orgId: request.org.id } });
         if (flow) where.flowId = flow.id;
       }
 
       if (query.status) {
         const statuses = await prisma.flowStatus.findMany({
-          where: { slug: query.status },
+          where: { slug: query.status, flow: { orgId: request.org.id } },
         });
         if (statuses.length > 0) {
           where.currentStatusId = { in: statuses.map((s) => s.id) };
@@ -361,7 +362,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       if (!enforceScope(request, reply, "tasks:read")) return;
       const { id } = request.params;
 
-      const flowIdBySlug = await getFlowIdBySlug();
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
       const teamSlugs = request.user.teams.map((t) => t.slug);
       const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
 
@@ -397,7 +398,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
       const updates = request.body;
 
-      const flowIdBySlug = await getFlowIdBySlug();
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
       const teamSlugs = request.user.teams.map((t) => t.slug);
       const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
 
@@ -451,7 +452,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       if (!enforceScope(request, reply, "tasks:write")) return;
       const { id } = request.params;
 
-      const flowIdBySlug = await getFlowIdBySlug();
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
       const teamSlugs = request.user.teams.map((t) => t.slug);
       const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
 

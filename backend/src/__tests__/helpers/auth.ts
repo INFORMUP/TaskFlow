@@ -1,20 +1,18 @@
 import jwt from "jsonwebtoken";
 import { config } from "../../config.js";
-
-interface TestUser {
-  id: string;
-  email: string;
-  displayName: string;
-  actorType: string;
-  teams: { id: string; slug: string }[];
-}
+import { DEFAULT_ORG_ID } from "../../constants/org.js";
 
 export function mintTestToken(
   userId: string,
-  options?: { expiresIn?: string }
+  options?: { expiresIn?: string; orgId?: string; orgRole?: string }
 ): string {
   return jwt.sign(
-    { sub: userId, type: "access" },
+    {
+      sub: userId,
+      type: "access",
+      orgId: options?.orgId ?? DEFAULT_ORG_ID,
+      orgRole: options?.orgRole ?? "member",
+    },
     config.jwtSecret,
     { expiresIn: options?.expiresIn ?? "1h" }
   );
@@ -22,7 +20,7 @@ export function mintTestToken(
 
 export function mintExpiredToken(userId: string): string {
   return jwt.sign(
-    { sub: userId, type: "access" },
+    { sub: userId, type: "access", orgId: DEFAULT_ORG_ID, orgRole: "member" },
     config.jwtSecret,
     { expiresIn: "0s" }
   );

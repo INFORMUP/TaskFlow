@@ -65,7 +65,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
       }
 
       const task = await prisma.task.findFirst({
-        where: { id, isDeleted: false },
+        where: { id, isDeleted: false, flow: { orgId: request.org.id } },
         include: {
           flow: true,
           currentStatus: true,
@@ -190,7 +190,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
 
       const task = await prisma.task.findFirst({
-        where: { id, isDeleted: false },
+        where: { id, isDeleted: false, flow: { orgId: request.org.id } },
       });
 
       if (!task) {

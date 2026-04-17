@@ -3,12 +3,19 @@ import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAuth } from "@/composables/useAuth";
 import { useCurrentUser, type TeamSelection } from "@/composables/useCurrentUser";
+import { useOrg } from "@/composables/useOrg";
 import TeamPickerModal from "@/features/auth/components/TeamPickerModal.vue";
+import OrgSwitcher from "@/components/OrgSwitcher.vue";
 
 const route = useRoute();
 const router = useRouter();
 const { logout } = useAuth();
 const { user, setTeams } = useCurrentUser();
+const org = useOrg();
+
+const canManageOrg = computed(
+  () => org.activeOrg.value !== null && org.activeOrg.value.role !== "member"
+);
 
 const showTeamPicker = ref(false);
 
@@ -52,6 +59,15 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
         Projects
       </router-link>
       <router-link
+        v-if="canManageOrg"
+        to="/organization"
+        class="navbar__tab"
+        :class="{ 'navbar__tab--active': route.path.startsWith('/organization') }"
+        data-testid="navbar-organization-link"
+      >
+        Organization
+      </router-link>
+      <router-link
         to="/settings"
         class="navbar__tab"
         :class="{ 'navbar__tab--active': route.path.startsWith('/settings') }"
@@ -61,6 +77,7 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
       </router-link>
     </div>
     <div class="navbar__user">
+      <OrgSwitcher />
       <button
         v-if="user && user.teams.length > 0"
         class="navbar__team"

@@ -3,7 +3,6 @@ import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { generateToken } from "../services/token.service.js";
 import { CommonErrorResponses, ErrorResponse } from "./_schemas.js";
-import { DEFAULT_ORG_ID } from "../constants/org.js";
 
 function rejectIfApiToken(request: FastifyRequest, reply: FastifyReply): boolean {
   if (request.user.apiTokenId !== null) {
@@ -120,7 +119,7 @@ export async function apiTokenRoutes(fastify: FastifyInstance) {
       const { plaintext, hash } = generateToken();
       const created = await prisma.apiToken.create({
         data: {
-          orgId: DEFAULT_ORG_ID,
+          orgId: request.org.id,
           userId: request.user.id,
           tokenHash: hash,
           name: name.trim(),
@@ -163,7 +162,7 @@ export async function apiTokenRoutes(fastify: FastifyInstance) {
     },
     async (request) => {
       const tokens = await prisma.apiToken.findMany({
-        where: { userId: request.user.id },
+        where: { userId: request.user.id, orgId: request.org.id },
         include: { scopes: { include: { scope: true } } },
         orderBy: { createdAt: "desc" },
       });
@@ -202,7 +201,7 @@ export async function apiTokenRoutes(fastify: FastifyInstance) {
 
       const { id } = request.params;
       const token = await prisma.apiToken.findFirst({
-        where: { id, userId: request.user.id },
+        where: { id, userId: request.user.id, orgId: request.org.id },
       });
       if (!token) {
         return reply.status(404).send({

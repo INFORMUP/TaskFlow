@@ -299,4 +299,20 @@ describe("permission.service", () => {
       });
     });
   });
+
+  describe("org role overrides", () => {
+    it("org owner can perform actions regardless of team membership", () => {
+      expect(canPerformAction([], "create", "improvement", "owner")).toBe(true);
+      expect(canPerformAction([], "delete", "grant-application", "owner")).toBe(true);
+    });
+
+    it("org admin can perform actions regardless of team membership", () => {
+      expect(canPerformAction([], "edit", "improvement", "admin")).toBe(true);
+    });
+
+    it("org member does not bypass the team matrix", () => {
+      expect(canPerformAction(["user"], "create", "improvement", "member")).toBe(false);
+      expect(canPerformAction(["user"], "create", "improvement")).toBe(false);
+    });
+  });
 });

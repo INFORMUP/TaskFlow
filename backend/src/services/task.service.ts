@@ -39,6 +39,7 @@ export async function getInitialStatus(flowId: string) {
 }
 
 interface CreateTaskInput {
+  orgId: string;
   flowSlug: string;
   title: string;
   description?: string;
@@ -57,7 +58,7 @@ export class TaskServiceError extends Error {
 }
 
 export async function createTask(input: CreateTaskInput) {
-  const flow = await prisma.flow.findFirst({ where: { slug: input.flowSlug } });
+  const flow = await prisma.flow.findFirst({ where: { slug: input.flowSlug, orgId: input.orgId } });
   if (!flow) return null;
 
   const initialStatus = await getInitialStatus(flow.id);
@@ -66,7 +67,7 @@ export async function createTask(input: CreateTaskInput) {
   const projectIds = input.projectIds ?? [];
   if (projectIds.length > 0) {
     const found = await prisma.project.findMany({
-      where: { id: { in: projectIds } },
+      where: { id: { in: projectIds }, orgId: input.orgId },
       select: { id: true },
     });
     if (found.length !== projectIds.length) {
@@ -89,8 +90,8 @@ export async function createTask(input: CreateTaskInput) {
 
   let assigneeId = input.assigneeUserId ?? null;
   if (!assigneeId && projectIds.length > 0) {
-    const firstProject = await prisma.project.findUnique({
-      where: { id: projectIds[0] },
+    const firstProject = await prisma.project.findFirst({
+      where: { id: projectIds[0], orgId: input.orgId },
       select: { defaultAssigneeUserId: true },
     });
     assigneeId = firstProject?.defaultAssigneeUserId ?? null;
@@ -161,10 +162,10 @@ export const taskInclude = {
   },
 } as const;
 
-export async function addProjectToTask(taskId: string, projectId: string) {
+export async function addProjectToTask(orgId: string, taskId: string, projectId: string) {
   const [task, project] = await Promise.all([
-    prisma.task.findUnique({ where: { id: taskId } }),
-    prisma.project.findUnique({ where: { id: projectId } }),
+    prisma.task.findFirst({ where: { id: taskId, flow: { orgId } } }),
+    prisma.project.findFirst({ where: { id: projectId, orgId } }),
   ]);
   if (!task) throw new TaskServiceError("NOT_FOUND", "Task not found", 404);
   if (!project) throw new TaskServiceError("INVALID_PROJECT", "Project not found", 422);
@@ -176,9 +177,9 @@ export async function addProjectToTask(taskId: string, projectId: string) {
   });
 }
 
-export async function removeProjectFromTask(taskId: string, projectId: string) {
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
+export async function removeProjectFromTask(orgId: string, taskId: string, projectId: string) {
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, flow: { orgId } },
     include: { projects: true },
   });
   if (!task) throw new TaskServiceError("NOT_FOUND", "Task not found", 404);

@@ -47,7 +47,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
       const { body } = request.body;
 
       const task = await prisma.task.findFirst({
-        where: { id, isDeleted: false },
+        where: { id, isDeleted: false, flow: { orgId: request.org.id } },
         include: { flow: true },
       });
 
@@ -107,7 +107,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
 
       const task = await prisma.task.findFirst({
-        where: { id, isDeleted: false },
+        where: { id, isDeleted: false, flow: { orgId: request.org.id } },
       });
 
       if (!task) {
@@ -154,7 +154,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
       const { body } = request.body;
 
       const comment = await prisma.comment.findFirst({
-        where: { id: commentId, isDeleted: false },
+        where: { id: commentId, isDeleted: false, task: { flow: { orgId: request.org.id } } },
       });
 
       if (!comment) {
@@ -207,7 +207,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
       const { id, commentId } = request.params;
 
       const comment = await prisma.comment.findFirst({
-        where: { id: commentId, isDeleted: false },
+        where: { id: commentId, isDeleted: false, task: { flow: { orgId: request.org.id } } },
       });
 
       if (!comment) {
@@ -218,7 +218,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
 
       if (comment.authorId !== request.user.id) {
         const task = await prisma.task.findFirst({
-          where: { id, isDeleted: false },
+          where: { id, isDeleted: false, flow: { orgId: request.org.id } },
           include: { flow: true },
         });
         const teamSlugs = request.user.teams.map((t) => t.slug);

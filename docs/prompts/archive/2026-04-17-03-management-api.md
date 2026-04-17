@@ -1,5 +1,7 @@
 # Phase 3 — Organization management API
 
+**Completed:** 2026-04-17. Added `/api/v1/organizations` routes (list/create/detail/add-member/patch-role/remove) and `POST /api/v1/auth/switch-org`; 17 new integration tests covering happy path + owner/admin/member permission matrix; 278/278 backend tests green.
+
 **Prerequisite:** Phase 2 ([`02-auth-and-scoping.md`](./02-auth-and-scoping.md)) is merged to `main`. Every request is already org-scoped; this phase adds the surface to list/create orgs, manage members, and switch the active org on a token.
 
 **Goal:** A user can list their memberships, create a new org, manage members, and swap the active org on their access token — all over HTTP.

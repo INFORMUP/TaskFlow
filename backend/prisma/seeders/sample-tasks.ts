@@ -5,10 +5,11 @@ import { DEFAULT_ORG_ID, ensureDefaultOrg } from "./organization.seeder.js";
 // Seeded personas — one per team so every team has something to look at when
 // a fresh OAuth user joins that team on staging. Idempotent via deterministic
 // UUIDs. The Max UUID is hardcoded (pre-existing) and must not change.
-const USER_ID_MAX = "a4faad20-55aa-46e1-98c2-2bb8bb6647d8"; // engineer, human
+const USER_ID_MAX = "a4faad20-55aa-46e1-98c2-2bb8bb6647d8"; // engineer, human — real Google login (maxachis@gmail.com), admin
 const USER_ID_PRIYA = seedUuid("user", "priya");            // product, human
 const USER_ID_SAM = seedUuid("user", "sam");                // user, human
 const USER_ID_ATLAS = seedUuid("user", "atlas");            // agent, agent
+const USER_ID_OWNER = seedUuid("user", "taskflow-owner");   // org owner for admin-role testing
 
 interface PersonaDef {
   id: string;
@@ -19,10 +20,11 @@ interface PersonaDef {
 }
 
 const PERSONAS: PersonaDef[] = [
-  { id: USER_ID_MAX, email: "max@taskflow.dev", displayName: "Max", actorType: "human", teamSlug: "engineer" },
+  { id: USER_ID_MAX, email: "maxachis@gmail.com", displayName: "Max Chis", actorType: "human", teamSlug: "engineer" },
   { id: USER_ID_PRIYA, email: "priya@taskflow.dev", displayName: "Priya", actorType: "human", teamSlug: "product" },
   { id: USER_ID_SAM, email: "sam@taskflow.dev", displayName: "Sam", actorType: "human", teamSlug: "user" },
   { id: USER_ID_ATLAS, email: null, displayName: "Atlas", actorType: "agent", teamSlug: "agent" },
+  { id: USER_ID_OWNER, email: "owner@taskflow.dev", displayName: "Org Owner", actorType: "human", teamSlug: "engineer" },
 ];
 
 interface TaskDef {
@@ -66,28 +68,43 @@ const IMPROVEMENTS: TaskDef[] = [
 
 async function seedPersonas(prisma: PrismaClient, orgId: string) {
   for (const persona of PERSONAS) {
-    await prisma.user.upsert({
-      where: { id: persona.id },
-      update: {},
-      create: {
-        id: persona.id,
-        email: persona.email,
-        displayName: persona.displayName,
-        actorType: persona.actorType,
-        status: "active",
-      },
-    });
+    // If a real OAuth login has already created this user, latch onto that
+    // row by email instead of creating a duplicate with the seeded UUID.
+    const existingByEmail = persona.email
+      ? await prisma.user.findUnique({ where: { email: persona.email } })
+      : null;
+    const userId = existingByEmail?.id ?? persona.id;
+
+    if (!existingByEmail) {
+      await prisma.user.upsert({
+        where: { id: persona.id },
+        update: {},
+        create: {
+          id: persona.id,
+          email: persona.email,
+          displayName: persona.displayName,
+          actorType: persona.actorType,
+          status: "active",
+        },
+      });
+    }
+
     const teamId = seedUuid("team", persona.teamSlug);
     await prisma.userTeam.upsert({
-      where: { userId_teamId: { userId: persona.id, teamId } },
+      where: { userId_teamId: { userId, teamId } },
       update: {},
-      create: { userId: persona.id, teamId, isPrimary: true },
+      create: { userId, teamId, isPrimary: true },
     });
-    const role = persona.id === USER_ID_MAX ? "owner" : "member";
+    const role =
+      persona.id === USER_ID_OWNER
+        ? "owner"
+        : persona.id === USER_ID_MAX
+          ? "admin"
+          : "member";
     await prisma.orgMember.upsert({
-      where: { orgId_userId: { orgId, userId: persona.id } },
+      where: { orgId_userId: { orgId, userId } },
       update: { role },
-      create: { orgId, userId: persona.id, role },
+      create: { orgId, userId, role },
     });
   }
 }

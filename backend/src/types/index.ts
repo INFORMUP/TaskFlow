@@ -1,3 +1,5 @@
+export type OrgRole = "owner" | "admin" | "member";
+
 export interface AuthUser {
   id: string;
   email: string | null;
@@ -13,8 +15,14 @@ export interface AuthUser {
   integrationToken: boolean;
 }
 
+export interface RequestOrg {
+  id: string;
+  role: OrgRole;
+}
+
 declare module "fastify" {
   interface FastifyRequest {
     user: AuthUser;
+    org: RequestOrg;
   }
 }

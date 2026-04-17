@@ -32,8 +32,11 @@ export async function flowRoutes(fastify: FastifyInstance) {
         },
       },
     },
-    async () => {
-      const flows = await prisma.flow.findMany({ orderBy: { slug: "asc" } });
+    async (request) => {
+      const flows = await prisma.flow.findMany({
+        where: { orgId: request.org.id },
+        orderBy: { slug: "asc" },
+      });
       return {
         data: flows.map((f) => ({
           id: f.id,

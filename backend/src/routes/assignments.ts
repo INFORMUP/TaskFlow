@@ -34,7 +34,7 @@ export async function assignmentRoutes(fastify: FastifyInstance) {
       const { assigneeId, note } = request.body;
 
       const task = await prisma.task.findFirst({
-        where: { id, isDeleted: false },
+        where: { id, isDeleted: false, flow: { orgId: request.org.id } },
         include: { flow: true },
       });
 
@@ -51,7 +51,12 @@ export async function assignmentRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const assignee = await prisma.user.findUnique({ where: { id: assigneeId } });
+      const assignee = await prisma.user.findFirst({
+        where: {
+          id: assigneeId,
+          orgMemberships: { some: { orgId: request.org.id } },
+        },
+      });
       if (!assignee) {
         return reply.status(404).send({
           error: { code: "NOT_FOUND", message: "Assignee not found" },
@@ -99,7 +104,7 @@ export async function assignmentRoutes(fastify: FastifyInstance) {
       const { id } = request.params;
 
       const task = await prisma.task.findFirst({
-        where: { id, isDeleted: false },
+        where: { id, isDeleted: false, flow: { orgId: request.org.id } },
         include: { flow: true },
       });
 

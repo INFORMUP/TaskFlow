@@ -3,12 +3,13 @@ import { Type, type Static } from "@sinclair/typebox";
 import jwt from "jsonwebtoken";
 import type { StringValue } from "ms";
 import { config } from "../config.js";
+import { DEFAULT_ORG_ID } from "../constants/org.js";
 import { prisma } from "../prisma-client.js";
 import {
   exchangeCodeForTokens,
   fetchGoogleUserInfo,
 } from "../services/google-oauth.service.js";
-import { CommonErrorResponses } from "./_schemas.js";
+import { CommonErrorResponses, ErrorResponse } from "./_schemas.js";
 
 const CallbackBody = Type.Object({
   code: Type.String({ minLength: 1, description: "Authorization code returned by Google." }),
@@ -32,6 +33,15 @@ const RefreshResponse = Type.Object(
   { additionalProperties: true }
 );
 
+const SwitchOrgBody = Type.Object({
+  orgId: Type.String({ format: "uuid" }),
+});
+
+const SwitchOrgResponse = Type.Object(
+  { accessToken: Type.String() },
+  { additionalProperties: true }
+);
+
 export async function authRoutes(fastify: FastifyInstance) {
   fastify.post<{ Body: Static<typeof CallbackBody> }>(
     "/api/v1/auth/callback",
@@ -49,7 +59,7 @@ export async function authRoutes(fastify: FastifyInstance) {
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const { code, redirectUri } = request.body;
       const resolvedRedirectUri = redirectUri || "http://localhost:5173/login";
 
@@ -106,11 +116,26 @@ export async function authRoutes(fastify: FastifyInstance) {
             },
           });
           userId = newUser.id;
+          await prisma.orgMember.upsert({
+            where: { orgId_userId: { orgId: DEFAULT_ORG_ID, userId } },
+            update: {},
+            create: { orgId: DEFAULT_ORG_ID, userId, role: "member" },
+          });
         }
       }
 
+      const membership = await prisma.orgMember.findFirst({
+        where: { userId },
+        orderBy: { createdAt: "asc" },
+      });
+      if (!membership) {
+        return reply.status(403).send({
+          error: { code: "NO_ORG", message: "User is not a member of any organization" },
+        });
+      }
+
       const accessToken = jwt.sign(
-        { sub: userId, type: "access" },
+        { sub: userId, type: "access", orgId: membership.orgId, orgRole: membership.role },
         config.jwtSecret,
         { expiresIn: config.jwtAccessExpiresIn as StringValue }
       );
@@ -151,8 +176,18 @@ export async function authRoutes(fastify: FastifyInstance) {
           });
         }
 
+        const membership = await prisma.orgMember.findFirst({
+          where: { userId: payload.sub as string },
+          orderBy: { createdAt: "asc" },
+        });
+        if (!membership) {
+          return reply.status(403).send({
+            error: { code: "NO_ORG", message: "User is not a member of any organization" },
+          });
+        }
+
         const accessToken = jwt.sign(
-          { sub: payload.sub, type: "access" },
+          { sub: payload.sub, type: "access", orgId: membership.orgId, orgRole: membership.role },
           config.jwtSecret,
           { expiresIn: config.jwtAccessExpiresIn as StringValue }
         );
@@ -163,6 +198,50 @@ export async function authRoutes(fastify: FastifyInstance) {
           error: { code: "UNAUTHORIZED", message: "Invalid or expired refresh token" },
         });
       }
+    }
+  );
+
+  fastify.post<{ Body: Static<typeof SwitchOrgBody> }>(
+    "/api/v1/auth/switch-org",
+    {
+      schema: {
+        summary: "Switch the active organization on an access token",
+        description:
+          "Issues a fresh access token carrying the requested org's `orgId` + `orgRole` claims. Caller must be a member of the target org. The refresh token is unchanged.",
+        tags: ["auth"],
+        body: SwitchOrgBody,
+        response: {
+          200: SwitchOrgResponse,
+          401: ErrorResponse,
+          403: ErrorResponse,
+          429: ErrorResponse,
+          500: ErrorResponse,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { orgId } = request.body;
+      const membership = await prisma.orgMember.findUnique({
+        where: { orgId_userId: { orgId, userId: request.user.id } },
+      });
+      if (!membership) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "Not a member of the requested organization" },
+        });
+      }
+
+      const accessToken = jwt.sign(
+        {
+          sub: request.user.id,
+          type: "access",
+          orgId: membership.orgId,
+          orgRole: membership.role,
+        },
+        config.jwtSecret,
+        { expiresIn: config.jwtAccessExpiresIn as StringValue }
+      );
+
+      return { accessToken };
     }
   );
 }

@@ -17,6 +17,7 @@ import { commentRoutes } from "./routes/comments.js";
 import { teamRoutes } from "./routes/teams.js";
 import { projectRoutes } from "./routes/projects.js";
 import { flowRoutes } from "./routes/flows.js";
+import { organizationRoutes } from "./routes/organizations.js";
 import { config } from "./config.js";
 import "./types/index.js";
 
@@ -65,6 +66,7 @@ export function createApp() {
   app.register(teamRoutes);
   app.register(projectRoutes);
   app.register(flowRoutes);
+  app.register(organizationRoutes);
 
   return app;
 }

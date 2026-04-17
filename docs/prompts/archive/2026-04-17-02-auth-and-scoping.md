@@ -1,5 +1,7 @@
 # Phase 2 — Auth and request scoping
 
+**Completed:** 2026-04-17. Added `orgId`/`orgRole` JWT claims, `request.org` decoration in the auth plugin, `org-scope` helper, and org-scoped reads/writes across all services/routes. Added `org-isolation.test.ts` with per-resource leak tests and cross-org uniqueness tests; 261/261 tests green.
+
 **Prerequisite:** Phase 1 ([`01-schema-and-seeders.md`](./01-schema-and-seeders.md)) is merged to `main`. The schema already carries `orgId` on every top-level entity; this phase makes the runtime actually enforce it.
 
 **Goal:** Every authenticated request is scoped to a single org. A user with data in org A cannot read, update, or delete anything in org B — enforced by red-first integration tests, one per resource.

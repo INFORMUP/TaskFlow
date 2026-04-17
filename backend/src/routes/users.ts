@@ -111,7 +111,9 @@ export async function userRoutes(fastify: FastifyInstance) {
       }
 
       const slugs = teams.map((t) => t.slug);
-      const teamRecords = await prisma.team.findMany({ where: { slug: { in: slugs } } });
+      const teamRecords = await prisma.team.findMany({
+        where: { slug: { in: slugs }, orgId: request.org.id },
+      });
       if (teamRecords.length !== slugs.length) {
         const found = new Set(teamRecords.map((t) => t.slug));
         const missing = slugs.filter((s) => !found.has(s));
@@ -175,7 +177,10 @@ export async function userRoutes(fastify: FastifyInstance) {
       }
 
       const users = await prisma.user.findMany({
-        where: { status: "active" },
+        where: {
+          status: "active",
+          orgMemberships: { some: { orgId: request.org.id } },
+        },
         include: { teams: { include: { team: true } } },
         orderBy: { displayName: "asc" },
       });
