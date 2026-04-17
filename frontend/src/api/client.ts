@@ -1,5 +1,13 @@
 import { config } from "@/config";
 
+function handleAuthExpired(): void {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
+  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+    window.location.href = "/login";
+  }
+}
+
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = localStorage.getItem("refreshToken");
   if (!refreshToken) return null;
@@ -50,6 +58,11 @@ export async function apiFetch<T>(
         headers,
       });
     }
+  }
+
+  if (res.status === 401 && token) {
+    handleAuthExpired();
+    throw { status: 401, error: { message: "Session expired" } };
   }
 
   if (!res.ok) {
