@@ -1,5 +1,7 @@
 # Add Organization as a top-level tenant
 
+**Completed:** 2026-04-17. All four phases shipped (see archived `2026-04-17-01…04-*.md`). Final phase landed in commit `0174ed2`.
+
 **Goal:** Turn TaskFlow from a single-tenant app into a multi-tenant one by introducing an `Organization` that owns Teams, Projects, Flows, ApiTokens, and per-org AppSettings. Users remain global identities and join organizations via membership, matching how agents and integrations will likely need to participate in more than one org.
 
 Today every top-level entity (`Team`, `Project`, `Flow`, `ApiToken`, `AppSetting`) lives in a flat namespace (`backend/prisma/schema.prisma`). There is no tenant boundary, so team/project/flow slugs are globally unique and any authenticated user can in principle be granted access to anything. This work roots the namespace at `Organization` and adds the scoping plumbing.
