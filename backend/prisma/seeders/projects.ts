@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { seedUuid, makeResult, SeederResult } from "./common.js";
+import { DEFAULT_ORG_ID, ensureDefaultOrg } from "./organization.seeder.js";
 
 const USER_ID_MAX = "a4faad20-55aa-46e1-98c2-2bb8bb6647d8";
 const USER_ID_PRIYA = seedUuid("user", "priya");
@@ -27,7 +28,11 @@ const PROJECTS: ProjectDef[] = [
 
 const TEAM_SLUGS = ["engineer", "product", "user", "agent"] as const;
 
-export async function seedProjects(prisma: PrismaClient): Promise<SeederResult[]> {
+export async function seedProjects(
+  prisma: PrismaClient,
+  orgId: string = DEFAULT_ORG_ID,
+): Promise<SeederResult[]> {
+  await ensureDefaultOrg(prisma, orgId);
   const namedResult = makeResult("projects");
   const unsortedResult = makeResult("unsorted_projects");
   const backfillResult = makeResult("task_project_backfill");
@@ -53,6 +58,7 @@ export async function seedProjects(prisma: PrismaClient): Promise<SeederResult[]
       await prisma.project.create({
         data: {
           id,
+          orgId,
           key: def.key,
           name: def.name,
           ownerUserId: def.ownerId,
@@ -93,6 +99,7 @@ export async function seedProjects(prisma: PrismaClient): Promise<SeederResult[]
       await prisma.project.create({
         data: {
           id,
+          orgId,
           key: `UNSORTED-${slug.toUpperCase()}`,
           name: `Unsorted (${slug})`,
           ownerUserId: USER_ID_MAX,
@@ -121,12 +128,12 @@ export async function seedProjects(prisma: PrismaClient): Promise<SeederResult[]
     }
   }
 
-  // AppSetting singleton (default flow = bug)
+  // AppSetting per-org (default flow = bug)
   const bugFlow = await prisma.flow.findFirst({ where: { slug: "bug" } });
   await prisma.appSetting.upsert({
-    where: { id: "singleton" },
+    where: { orgId },
     update: {},
-    create: { id: "singleton", defaultFlowId: bugFlow?.id ?? null },
+    create: { orgId, defaultFlowId: bugFlow?.id ?? null },
   });
   settingResult.created++;
 

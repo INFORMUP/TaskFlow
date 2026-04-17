@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { seedUuid } from "../../../prisma/seeders/common.js";
+import { DEFAULT_ORG_ID } from "../../constants/org.js";
 
 export const TEST_PROJECT_ID = seedUuid("test-project", "default");
 
@@ -19,6 +20,7 @@ export async function seedTestProjects(prisma: PrismaClient) {
     await prisma.project.create({
       data: {
         id: TEST_PROJECT_ID,
+        orgId: DEFAULT_ORG_ID,
         key: "TEST",
         name: "Test project",
         ownerUserId: "00000000-0000-0000-0000-000000000001", // TEST_ENGINEER_ID

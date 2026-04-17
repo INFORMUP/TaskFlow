@@ -3,6 +3,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { generateToken } from "../services/token.service.js";
 import { CommonErrorResponses, ErrorResponse } from "./_schemas.js";
+import { DEFAULT_ORG_ID } from "../constants/org.js";
 
 function rejectIfApiToken(request: FastifyRequest, reply: FastifyReply): boolean {
   if (request.user.apiTokenId !== null) {
@@ -119,6 +120,7 @@ export async function apiTokenRoutes(fastify: FastifyInstance) {
       const { plaintext, hash } = generateToken();
       const created = await prisma.apiToken.create({
         data: {
+          orgId: DEFAULT_ORG_ID,
           userId: request.user.id,
           tokenHash: hash,
           name: name.trim(),

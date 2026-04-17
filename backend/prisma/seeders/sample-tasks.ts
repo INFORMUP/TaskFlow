@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { seedUuid, makeResult, SeederResult } from "./common.js";
+import { DEFAULT_ORG_ID, ensureDefaultOrg } from "./organization.seeder.js";
 
 // Seeded personas — one per team so every team has something to look at when
 // a fresh OAuth user joins that team on staging. Idempotent via deterministic
@@ -63,7 +64,7 @@ const IMPROVEMENTS: TaskDef[] = [
   { key: "imp-5", title: "Add database connection pooling with PgBouncer", priority: "high", status: "validate", description: "Under load, Prisma opens too many connections. PgBouncer in transaction mode would cap connections and improve reliability." },
 ];
 
-async function seedPersonas(prisma: PrismaClient) {
+async function seedPersonas(prisma: PrismaClient, orgId: string) {
   for (const persona of PERSONAS) {
     await prisma.user.upsert({
       where: { id: persona.id },
@@ -81,6 +82,12 @@ async function seedPersonas(prisma: PrismaClient) {
       where: { userId_teamId: { userId: persona.id, teamId } },
       update: {},
       create: { userId: persona.id, teamId, isPrimary: true },
+    });
+    const role = persona.id === USER_ID_MAX ? "owner" : "member";
+    await prisma.orgMember.upsert({
+      where: { orgId_userId: { orgId, userId: persona.id } },
+      update: { role },
+      create: { orgId, userId: persona.id, role },
     });
   }
 }
@@ -172,8 +179,12 @@ async function seedComments(prisma: PrismaClient, result: SeederResult) {
   }
 }
 
-export async function seedSampleTasks(prisma: PrismaClient): Promise<SeederResult[]> {
-  await seedPersonas(prisma);
+export async function seedSampleTasks(
+  prisma: PrismaClient,
+  orgId: string = DEFAULT_ORG_ID,
+): Promise<SeederResult[]> {
+  await ensureDefaultOrg(prisma, orgId);
+  await seedPersonas(prisma, orgId);
 
   const bugResult = makeResult("sample_bugs");
   const featResult = makeResult("sample_features");

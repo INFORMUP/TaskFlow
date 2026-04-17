@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { seedOrganizations, DEFAULT_ORG_ID } from "./seeders/organization.seeder.js";
 import { seedTeams } from "./seeders/teams.js";
 import { seedFlows } from "./seeders/flows.js";
 import { seedFlowStatuses } from "./seeders/flow-statuses.js";
@@ -13,15 +14,18 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding TaskFlow database...\n");
 
+  const orgId = DEFAULT_ORG_ID;
+
   const results = [
-    await seedTeams(prisma),
-    await seedFlows(prisma),
+    await seedOrganizations(prisma),
+    await seedTeams(prisma, orgId),
+    await seedFlows(prisma, orgId),
     await seedFlowStatuses(prisma),
     await seedFlowTransitions(prisma),
     await seedScopes(prisma),
-    await seedAgentUsers(prisma),
-    ...(await seedSampleTasks(prisma)),
-    ...(await seedProjects(prisma)),
+    await seedAgentUsers(prisma, orgId),
+    ...(await seedSampleTasks(prisma, orgId)),
+    ...(await seedProjects(prisma, orgId)),
   ];
 
   for (const r of results) {

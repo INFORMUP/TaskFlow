@@ -8,6 +8,7 @@ import {
 } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
 import { seedUuid } from "../../../prisma/seeders/common.js";
+import { DEFAULT_ORG_ID } from "../../constants/org.js";
 
 const prisma = new PrismaClient();
 
@@ -36,6 +37,7 @@ describe("tasks list filters", () => {
     const productTeamId = seedUuid("team", "product");
     const eng = await prisma.project.create({
       data: {
+        orgId: DEFAULT_ORG_ID,
         key: "FEN",
         name: "EngOwned",
         ownerUserId: TEST_ENGINEER_ID,
@@ -44,6 +46,7 @@ describe("tasks list filters", () => {
     });
     const prod = await prisma.project.create({
       data: {
+        orgId: DEFAULT_ORG_ID,
         key: "FPR",
         name: "ProdOwned",
         ownerUserId: TEST_PRODUCT_ID,

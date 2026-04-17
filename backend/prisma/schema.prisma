@@ -8,16 +8,50 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  members     OrgMember[]
+  teams       Team[]
+  projects    Project[]
+  flows       Flow[]
+  apiTokens   ApiToken[]
+  appSettings AppSetting[]
+
+  @@map("organizations")
+}
+
+model OrgMember {
+  orgId     String   @map("org_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      String // owner, admin, member
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id])
+
+  @@id([orgId, userId])
+  @@index([userId])
+  @@map("org_members")
+}
+
 model Team {
   id          String   @id @default(uuid()) @db.Uuid
-  name        String   @unique
-  slug        String   @unique
+  orgId       String   @map("org_id") @db.Uuid
+  name        String
+  slug        String
   description String?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
+  org      Organization  @relation(fields: [orgId], references: [id])
   members  UserTeam[]
   projects ProjectTeam[]
 
+  @@unique([orgId, slug])
+  @@unique([orgId, name])
   @@map("teams")
 }
 
@@ -41,6 +75,7 @@ model User {
   ownedProjects     Project[]         @relation("ProjectOwner")
   defaultOnProjects Project[]         @relation("ProjectDefaultAssignee")
   apiTokens         ApiToken[]
+  orgMemberships    OrgMember[]
 
   @@map("users")
 }
@@ -78,11 +113,13 @@ model OauthConnection {
 
 model Flow {
   id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
   slug        String
   name        String
   description String?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
+  org               Organization     @relation(fields: [orgId], references: [id])
   statuses          FlowStatus[]
   transitions       FlowTransition[]
   tasks             Task[]
@@ -90,7 +127,7 @@ model Flow {
   appSettings       AppSetting[]
   projectFlows      ProjectFlow[]
 
-  @@index([slug])
+  @@index([orgId, slug])
   @@map("flows")
 }
 
@@ -184,7 +221,8 @@ model TaskTransition {
 
 model Project {
   id                    String    @id @default(uuid()) @db.Uuid
-  key                   String    @unique
+  orgId                 String    @map("org_id") @db.Uuid
+  key                   String
   name                  String
   ownerUserId           String    @map("owner_user_id") @db.Uuid
   defaultAssigneeUserId String?   @map("default_assignee_user_id") @db.Uuid
@@ -192,6 +230,7 @@ model Project {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   archivedAt            DateTime? @map("archived_at") @db.Timestamptz()
 
+  org             Organization  @relation(fields: [orgId], references: [id])
   owner           User          @relation("ProjectOwner", fields: [ownerUserId], references: [id])
   defaultAssignee User?         @relation("ProjectDefaultAssignee", fields: [defaultAssigneeUserId], references: [id])
   defaultFlow     Flow?         @relation(fields: [defaultFlowId], references: [id])
@@ -199,6 +238,7 @@ model Project {
   tasks           TaskProject[]
   flows           ProjectFlow[]
 
+  @@unique([orgId, key])
   @@index([ownerUserId])
   @@index([archivedAt])
   @@map("projects")
@@ -242,17 +282,19 @@ model TaskProject {
 }
 
 model AppSetting {
-  id            String   @id @default("singleton")
+  orgId         String   @id @map("org_id") @db.Uuid
   defaultFlowId String?  @map("default_flow_id") @db.Uuid
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  defaultFlow Flow? @relation(fields: [defaultFlowId], references: [id])
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  defaultFlow Flow?        @relation(fields: [defaultFlowId], references: [id])
 
   @@map("app_settings")
 }
 
 model ApiToken {
   id          String    @id @default(uuid()) @db.Uuid
+  orgId       String    @map("org_id") @db.Uuid
   userId      String    @map("user_id") @db.Uuid
   tokenHash   String    @unique @map("token_hash")
   name        String
@@ -262,9 +304,11 @@ model ApiToken {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz()
 
+  org    Organization    @relation(fields: [orgId], references: [id])
   user   User            @relation(fields: [userId], references: [id])
   scopes ApiTokenScope[]
 
+  @@index([orgId])
   @@index([userId])
   @@map("api_tokens")
 }

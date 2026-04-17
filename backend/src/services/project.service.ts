@@ -1,4 +1,5 @@
 import { prisma } from "../prisma-client.js";
+import { DEFAULT_ORG_ID } from "../constants/org.js";
 
 export interface CreateProjectInput {
   key: string;
@@ -89,7 +90,9 @@ export async function createProject(input: CreateProjectInput) {
     throw new ProjectServiceError("BAD_REQUEST", "Name is required", 400);
   }
 
-  const existing = await prisma.project.findUnique({ where: { key: input.key } });
+  const existing = await prisma.project.findUnique({
+    where: { orgId_key: { orgId: DEFAULT_ORG_ID, key: input.key } },
+  });
   if (existing) {
     throw new ProjectServiceError("KEY_TAKEN", `Project key ${input.key} already exists`, 409);
   }
@@ -107,6 +110,7 @@ export async function createProject(input: CreateProjectInput) {
 
   const project = await prisma.project.create({
     data: {
+      orgId: DEFAULT_ORG_ID,
       key: input.key,
       name: input.name.trim(),
       ownerUserId: input.ownerUserId,
@@ -229,7 +233,7 @@ export async function resolveDefaultFlow(projectIds: string[]): Promise<string |
     });
     if (project?.defaultFlowId) return project.defaultFlowId;
   }
-  const setting = await prisma.appSetting.findUnique({ where: { id: "singleton" } });
+  const setting = await prisma.appSetting.findUnique({ where: { orgId: DEFAULT_ORG_ID } });
   return setting?.defaultFlowId ?? null;
 }
 

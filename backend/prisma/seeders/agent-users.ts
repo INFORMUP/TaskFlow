@@ -1,12 +1,17 @@
 import { PrismaClient } from "@prisma/client";
 import { seedUuid, makeResult, SeederResult } from "./common.js";
+import { DEFAULT_ORG_ID, ensureDefaultOrg } from "./organization.seeder.js";
 
 const AGENTS = [
   { slug: "triage-bot", displayName: "Triage Bot" },
   { slug: "investigator-bot", displayName: "Investigator Bot" },
 ] as const;
 
-export async function seedAgentUsers(prisma: PrismaClient): Promise<SeederResult> {
+export async function seedAgentUsers(
+  prisma: PrismaClient,
+  orgId: string = DEFAULT_ORG_ID,
+): Promise<SeederResult> {
+  await ensureDefaultOrg(prisma, orgId);
   const result = makeResult("agent users");
   const agentTeamId = seedUuid("team", "agent");
 
@@ -32,6 +37,12 @@ export async function seedAgentUsers(prisma: PrismaClient): Promise<SeederResult
       where: { userId_teamId: { userId: id, teamId: agentTeamId } },
       update: {},
       create: { userId: id, teamId: agentTeamId, isPrimary: true },
+    });
+
+    await prisma.orgMember.upsert({
+      where: { orgId_userId: { orgId, userId: id } },
+      update: {},
+      create: { orgId, userId: id, role: "member" },
     });
   }
 

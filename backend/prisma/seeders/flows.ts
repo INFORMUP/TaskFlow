@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { seedUuid, makeResult, SeederResult } from "./common.js";
+import { DEFAULT_ORG_ID, ensureDefaultOrg } from "./organization.seeder.js";
 
 const FLOWS = [
   { slug: "bug", name: "Bug", description: "Defect resolution" },
@@ -10,7 +11,11 @@ const FLOWS = [
   { slug: "event", name: "Event", description: "Fundraising events" },
 ] as const;
 
-export async function seedFlows(prisma: PrismaClient): Promise<SeederResult> {
+export async function seedFlows(
+  prisma: PrismaClient,
+  orgId: string = DEFAULT_ORG_ID,
+): Promise<SeederResult> {
+  await ensureDefaultOrg(prisma, orgId);
   const result = makeResult("flows");
 
   for (const flow of FLOWS) {
@@ -21,7 +26,7 @@ export async function seedFlows(prisma: PrismaClient): Promise<SeederResult> {
       continue;
     }
     await prisma.flow.create({
-      data: { id, slug: flow.slug, name: flow.name, description: flow.description },
+      data: { id, orgId, slug: flow.slug, name: flow.name, description: flow.description },
     });
     result.created++;
   }

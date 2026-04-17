@@ -41,6 +41,11 @@ external/      # Reference projects (git submodules)
 - Prisma schema: `backend/prisma/schema.prisma`
 - Seed data: `backend/prisma/seeders/` (deterministic UUIDs via uuid5)
 
+## Commit Workflow
+- Run `npm test` in the affected package(s) (backend, frontend, or both) before committing.
+- A pre-commit hook runs `tsc --noEmit` (backend) and `vue-tsc --noEmit` (frontend) automatically. If it fails, fix type errors before committing.
+- Git hooks live in `.githooks/`. After cloning, run `git config core.hooksPath .githooks` to activate them.
+
 ## Mistakes
 - **[tooling]**: Fastify plugins are encapsulated by default — use `fastify-plugin` (fp) wrapper for plugins that need to affect the global scope (error handler, auth decorator).
 - **[testing]**: Integration tests sharing PostgreSQL must run sequentially — set `fileParallelism: false` in vitest.config.ts to avoid FK constraint violations.

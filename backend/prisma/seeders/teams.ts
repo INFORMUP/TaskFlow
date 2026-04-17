@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { seedUuid, makeResult, SeederResult } from "./common.js";
+import { DEFAULT_ORG_ID, ensureDefaultOrg } from "./organization.seeder.js";
 
 const TEAMS = [
   { slug: "engineer", name: "Engineer", description: "Develops solutions alongside agents" },
@@ -8,7 +9,11 @@ const TEAMS = [
   { slug: "agent", name: "Agent", description: "AI agents that participate in workflows" },
 ] as const;
 
-export async function seedTeams(prisma: PrismaClient): Promise<SeederResult> {
+export async function seedTeams(
+  prisma: PrismaClient,
+  orgId: string = DEFAULT_ORG_ID,
+): Promise<SeederResult> {
+  await ensureDefaultOrg(prisma, orgId);
   const result = makeResult("teams");
 
   for (const team of TEAMS) {
@@ -19,7 +24,7 @@ export async function seedTeams(prisma: PrismaClient): Promise<SeederResult> {
       continue;
     }
     await prisma.team.create({
-      data: { id, slug: team.slug, name: team.name, description: team.description },
+      data: { id, orgId, slug: team.slug, name: team.name, description: team.description },
     });
     result.created++;
   }

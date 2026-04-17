@@ -9,6 +9,7 @@ import {
 } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
 import { seedUuid } from "../../../prisma/seeders/common.js";
+import { DEFAULT_ORG_ID } from "../../constants/org.js";
 
 const prisma = new PrismaClient();
 
@@ -45,6 +46,7 @@ describe("project ↔ flow attachments", () => {
     const engineerTeamId = seedUuid("team", "engineer");
     const p = await prisma.project.create({
       data: {
+        orgId: DEFAULT_ORG_ID,
         key: "PF",
         name: "ProjectFlows",
         ownerUserId: TEST_ENGINEER_ID,
@@ -188,6 +190,7 @@ describe("project ↔ flow attachments", () => {
       const engineerTeamId = seedUuid("team", "engineer");
       const p2 = await prisma.project.create({
         data: {
+          orgId: DEFAULT_ORG_ID,
           key: "PF2",
           name: "Second",
           ownerUserId: TEST_ENGINEER_ID,
@@ -254,6 +257,7 @@ describe("project ↔ flow attachments", () => {
       const engineerTeamId = seedUuid("team", "engineer");
       const p2 = await prisma.project.create({
         data: {
+          orgId: DEFAULT_ORG_ID,
           key: "PF3",
           name: "Second",
           ownerUserId: TEST_ENGINEER_ID,

@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+echo "==> Running backend type-check..."
+(cd "$ROOT/backend" && npx tsc --noEmit)
+
+echo "==> Running frontend type-check..."
+(cd "$ROOT/frontend" && npx vue-tsc --noEmit)
+
+echo "==> Pre-commit checks passed."
