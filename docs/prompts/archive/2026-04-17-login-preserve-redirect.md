@@ -1,5 +1,7 @@
 # Preserve the originally requested route through login
 
+**Completed:** 2026-04-17. Router guard now passes `redirect` query param to `/login`; LoginView encodes it in OAuth `state` (base64), validates it's a safe internal path, and redirects after login. Tests added for both guard and LoginView.
+
 **Goal:** Deep links currently lose their destination when the user isn't authenticated. The router guard (`frontend/src/router/index.ts:56-63`) sends the user to `/login` with no record of where they were headed, and `LoginView.vue` unconditionally pushes them to `/tasks/bug` after a successful Google sign-in (`frontend/src/features/auth/views/LoginView.vue:43`). A user who pastes a link to `/tasks/bug/abc123` or `/projects/42` should land back on that page, not the default board.
 
 ## What to do

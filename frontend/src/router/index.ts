@@ -52,6 +52,18 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: "app" },
   },
   {
+    path: "/organization",
+    name: "organization",
+    component: () => import("@/features/organization/views/OrganizationView.vue"),
+    meta: { layout: "app" },
+  },
+  {
+    path: "/organization/new",
+    name: "organization-new",
+    component: () => import("@/features/organization/views/CreateOrgView.vue"),
+    meta: { layout: "app" },
+  },
+  {
     path: "/settings",
     name: "settings",
     component: () => import("@/features/settings/views/SettingsView.vue"),
@@ -70,7 +82,10 @@ router.beforeEach((to) => {
   const token = localStorage.getItem("accessToken");
 
   if (!isPublic && !token) {
-    return { name: "login" };
+    if (to.fullPath === "/" || to.fullPath === "/flows" || to.fullPath === "/login") {
+      return { name: "login" };
+    }
+    return { name: "login", query: { redirect: to.fullPath } };
   }
 });
 

@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useAuth } from "@/composables/useAuth";
-import { useRouter } from "vue-router";
+import { useOrg } from "@/composables/useOrg";
+import { useRoute, useRouter } from "vue-router";
 import { config } from "@/config";
+import { switchOrganization } from "@/api/organizations.api";
+
+function isSafeRedirect(path: string): boolean {
+  return path.startsWith("/") && !path.startsWith("//") && !path.includes("://");
+}
+
 
 const { login } = useAuth();
+const org = useOrg();
+const route = useRoute();
 const router = useRouter();
 const errorMessage = ref<string | null>(null);
 
@@ -20,6 +29,20 @@ onMounted(async () => {
 
   const code = params.get("code");
   if (!code) return;
+
+  // Decode redirect target from OAuth state param
+  let redirectTarget = "/";
+  const stateParam = params.get("state");
+  if (stateParam) {
+    try {
+      const decoded = atob(stateParam);
+      if (isSafeRedirect(decoded)) {
+        redirectTarget = decoded;
+      }
+    } catch {
+      // invalid base64 — ignore, use default
+    }
+  }
 
   try {
     const redirectUri = `${window.location.origin}/login`;
@@ -40,7 +63,26 @@ onMounted(async () => {
     }
 
     login(data.accessToken, data.refreshToken);
-    router.push("/tasks/bug");
+    await org.hydrate();
+
+    const memberships = org.memberships.value;
+    if (memberships.length === 0) {
+      router.push("/organization/new");
+      return;
+    }
+    if (memberships.length === 1) {
+      router.push(redirectTarget);
+      return;
+    }
+    const stored = localStorage.getItem("activeOrgId");
+    const target =
+      (stored && memberships.find((m) => m.id === stored)?.id) ||
+      memberships[0].id;
+    if (target !== org.activeOrgId.value) {
+      await switchOrganization(target);
+    }
+    localStorage.setItem("activeOrgId", target);
+    router.push(redirectTarget);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "network error";
     errorMessage.value = `Sign-in failed: ${message}`;
@@ -51,8 +93,18 @@ function handleGoogleLogin() {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const redirectUri = `${window.location.origin}/login`;
   const scope = "openid email profile";
-  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
-  window.location.href = url;
+  const redirect = route.query.redirect as string | undefined;
+  const stateValue = redirect && isSafeRedirect(redirect) ? btoa(redirect) : "";
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope,
+  });
+  if (stateValue) {
+    params.set("state", stateValue);
+  }
+  window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 </script>
 
