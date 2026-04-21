@@ -153,7 +153,7 @@ export async function createTask(input: CreateTaskInput) {
   }
 
   let assigneeId = input.assigneeUserId ?? null;
-  const hasExplicitAssignee = input.assigneeUserId !== undefined && input.assigneeUserId !== null;
+  const hasExplicitAssignee = input.assigneeUserId !== undefined;
   if (!hasExplicitAssignee && projectIds.length > 0) {
     assigneeId = await resolveDefaultAssignee({
       projectId: projectIds[0],

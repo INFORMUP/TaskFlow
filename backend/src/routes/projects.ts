@@ -400,6 +400,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
     {
       schema: {
         summary: "List per-status default assignees for a project",
+        description: "Project owner or admins only.",
         tags: ["projects"],
         params: IdParams,
         response: {
@@ -413,6 +414,12 @@ export async function projectRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       const { id } = request.params;
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "Only the project owner or admins can view status defaults" },
+        });
+      }
       try {
         return { data: await listStatusDefaults(request.org.id, id) };
       } catch (err) {

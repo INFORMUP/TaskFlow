@@ -103,6 +103,32 @@ describe("per-status default assignee — entry rules", () => {
     expect(res.json().assignee.id).toBe(TEST_PRODUCT_ID);
   });
 
+  it("on create, explicit null assigneeUserId keeps the task unassigned", async () => {
+    await prisma.projectStatusDefaultAssignee.create({
+      data: {
+        projectId,
+        flowStatusId: bugTriageStatusId,
+        userId: TEST_PRODUCT_ID,
+      },
+    });
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/tasks",
+      headers: { authorization: `Bearer ${engineerToken}` },
+      payload: {
+        flow: "bug",
+        title: "Explicit unassigned",
+        priority: "medium",
+        projectIds: [projectId],
+        assigneeUserId: null,
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().assignee).toBeNull();
+  });
+
   it("on create, explicit assigneeUserId wins over per-status default", async () => {
     await prisma.projectStatusDefaultAssignee.create({
       data: {
