@@ -15,8 +15,13 @@ const priorityColors: Record<string, string> = {
 </script>
 
 <template>
-  <div class="card" @click="$emit('click')">
-    <div class="card__header">
+  <button
+    type="button"
+    class="card"
+    :aria-label="`${task.displayId} — ${task.title}, priority ${task.priority}`"
+    @click="$emit('click')"
+  >
+    <span class="card__header">
       <span class="card__id">{{ task.displayId }}</span>
       <span
         class="card__priority"
@@ -24,18 +29,23 @@ const priorityColors: Record<string, string> = {
       >
         {{ task.priority }}
       </span>
-    </div>
-    <div class="card__title">{{ task.title }}</div>
-    <div class="card__footer" v-if="task.assignee">
+    </span>
+    <span class="card__title">{{ task.title }}</span>
+    <span class="card__footer" v-if="task.assignee">
       <span class="card__assignee">
         <ActorLabel :actor="task.assignee" />
       </span>
-    </div>
-  </div>
+    </span>
+  </button>
 </template>
 
 <style scoped>
 .card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
   background: var(--bg-primary);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
@@ -54,6 +64,14 @@ const priorityColors: Record<string, string> = {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.375rem;
+}
+
+.card__title {
+  display: block;
+}
+
+.card__footer {
+  display: block;
 }
 
 .card__id {

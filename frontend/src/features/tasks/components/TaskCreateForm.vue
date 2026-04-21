@@ -206,8 +206,9 @@ async function handleSubmit() {
     <input v-model="dueDate" type="date" class="create-form__input" />
 
     <div class="create-form__actions">
-      <button class="create-form__cancel" @click="emit('cancel')">Cancel</button>
+      <button type="button" class="create-form__cancel" @click="emit('cancel')">Cancel</button>
       <button
+        type="button"
         class="create-form__submit"
         :disabled="submitting || !canSubmit"
         @click="handleSubmit"

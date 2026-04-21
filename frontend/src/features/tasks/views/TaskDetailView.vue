@@ -106,7 +106,7 @@ onMounted(async () => {
 <template>
   <div v-if="loading" class="detail__loading">Loading...</div>
   <div v-else-if="task" class="detail">
-    <button class="detail__back" @click="goBack">&larr; Back</button>
+    <button type="button" class="detail__back" @click="goBack">&larr; Back</button>
 
     <div class="detail__header">
       <span class="detail__id">{{ task.displayId }}</span>
@@ -146,9 +146,19 @@ onMounted(async () => {
 
     <!-- Transition form -->
     <div class="detail__section" v-if="task.currentStatus.slug !== 'closed'">
-      <h3>Transition</h3>
-      <div v-if="transitionError" class="detail__error">{{ transitionError }}</div>
-      <select v-model="transitionStatus" class="detail__select">
+      <h3 id="transition-heading">Transition</h3>
+      <div
+        v-if="transitionError"
+        class="detail__error"
+        role="alert"
+      >
+        {{ transitionError }}
+      </div>
+      <select
+        v-model="transitionStatus"
+        class="detail__select"
+        aria-label="New status"
+      >
         <option value="">Select status...</option>
         <option value="closed">Closed</option>
       </select>
@@ -157,11 +167,13 @@ onMounted(async () => {
         placeholder="Transition note (required)"
         class="detail__textarea"
         rows="2"
+        aria-label="Transition note"
       />
       <select
         v-if="transitionStatus === 'closed'"
         v-model="transitionResolution"
         class="detail__select"
+        aria-label="Resolution"
       >
         <option value="">Select resolution...</option>
         <option
@@ -172,13 +184,18 @@ onMounted(async () => {
           {{ r }}
         </option>
       </select>
-      <select v-model="transitionReassignee" class="detail__select">
+      <select
+        v-model="transitionReassignee"
+        class="detail__select"
+        aria-label="Reassign to"
+      >
         <option value="">Reassign to... (optional)</option>
         <option v-for="u in users" :key="u.id" :value="u.id">
           {{ u.displayName }}
         </option>
       </select>
       <button
+        type="button"
         class="detail__btn"
         :disabled="!transitionStatus || !transitionNote.trim()"
         @click="handleTransition"
@@ -221,7 +238,12 @@ onMounted(async () => {
               <ActorLabel :actor="c.author" />
             </span>
             <span class="comment__date">{{ new Date(c.createdAt).toLocaleString() }}</span>
-            <button class="comment__delete" @click="handleDeleteComment(c.id)">Delete</button>
+            <button
+              type="button"
+              class="comment__delete"
+              :aria-label="`Delete comment by ${c.author.displayName}`"
+              @click="handleDeleteComment(c.id)"
+            >Delete</button>
           </div>
           <div class="comment__body">{{ c.body }}</div>
         </div>
@@ -232,8 +254,10 @@ onMounted(async () => {
           placeholder="Add a comment..."
           class="detail__textarea"
           rows="2"
+          aria-label="Add a comment"
         />
         <button
+          type="button"
           class="detail__btn"
           :disabled="!newComment.trim()"
           @click="handleAddComment"

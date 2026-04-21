@@ -116,7 +116,7 @@ onMounted(() => {
       <h2>{{ flowSlug.charAt(0).toUpperCase() + flowSlug.slice(1) }} Tasks</h2>
       <div class="board__toolbar">
         <ViewToggle />
-        <button class="board__create-btn" @click="showCreateForm = true">+ New Task</button>
+        <button type="button" class="board__create-btn" @click="showCreateForm = true">+ New Task</button>
       </div>
     </div>
 
