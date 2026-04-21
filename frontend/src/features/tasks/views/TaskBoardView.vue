@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from "vue";
+import { ref, watch, onMounted, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getTasks, type Task } from "@/api/tasks.api";
 import { apiFetch } from "@/api/client";
@@ -9,6 +9,12 @@ import FilterBar from "../components/FilterBar.vue";
 import ViewToggle from "../components/ViewToggle.vue";
 import TaskListView from "./TaskListView.vue";
 import { useTaskFilters, toApiParams } from "../composables/useTaskFilters";
+import { useOnboardingTour } from "@/composables/useOnboardingTour";
+import { useCurrentUser } from "@/composables/useCurrentUser";
+import { defaultTourSteps } from "@/data/tourSteps";
+
+const tour = useOnboardingTour();
+const currentUser = useCurrentUser();
 
 const route = useRoute();
 const router = useRouter();
@@ -104,9 +110,12 @@ watch(
   () => loadTasks(),
 );
 
-onMounted(() => {
-  loadStatuses();
-  loadTasks();
+onMounted(async () => {
+  await Promise.all([loadStatuses(), loadTasks()]);
+  if (!tour.hasCompletedTour.value && !currentUser.needsTeamSelection.value) {
+    await nextTick();
+    tour.startTour(defaultTourSteps);
+  }
 });
 </script>
 
