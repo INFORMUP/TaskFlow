@@ -5,14 +5,17 @@ import {
   archiveProject,
   attachProjectFlow,
   canManageProject,
+  clearStatusDefault,
   createProject,
   detachProjectFlow,
   getProject,
   isAdmin,
   listProjectFlows,
   listProjects,
+  listStatusDefaults,
   ProjectServiceError,
   removeProjectTeam,
+  setStatusDefault,
   updateProject,
 } from "../services/project.service.js";
 import { CommonErrorResponses, IdParams } from "./_schemas.js";
@@ -88,6 +91,21 @@ const UpdateProjectBody = Type.Object({
 
 const TeamIdBody = Type.Object({ teamId: Type.String({ format: "uuid" }) });
 const FlowIdBody = Type.Object({ flowId: Type.String({ format: "uuid" }) });
+
+const StatusDefaultRecord = Type.Object(
+  {
+    flowStatusId: Type.String({ format: "uuid" }),
+    userId: Type.String({ format: "uuid" }),
+  },
+  { additionalProperties: true }
+);
+
+const StatusDefaultBody = Type.Object({ userId: Type.String({ format: "uuid" }) });
+
+const StatusDefaultParams = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  flowStatusId: Type.String({ format: "uuid" }),
+});
 
 const ListProjectsQuery = Type.Object({
   archived: Type.Optional(Type.String({ description: "Set to 'true' to include archived projects." })),
@@ -371,6 +389,89 @@ export async function projectRoutes(fastify: FastifyInstance) {
       const { flowId } = request.body;
       try {
         return { data: await attachProjectFlow(request.org.id, id, flowId) };
+      } catch (err) {
+        return handleError(reply, err);
+      }
+    }
+  );
+
+  fastify.get<{ Params: { id: string } }>(
+    "/api/v1/projects/:id/status-defaults",
+    {
+      schema: {
+        summary: "List per-status default assignees for a project",
+        tags: ["projects"],
+        params: IdParams,
+        response: {
+          200: Type.Object(
+            { data: Type.Array(StatusDefaultRecord) },
+            { additionalProperties: true }
+          ),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      try {
+        return { data: await listStatusDefaults(request.org.id, id) };
+      } catch (err) {
+        return handleError(reply, err);
+      }
+    }
+  );
+
+  fastify.put<{ Params: Static<typeof StatusDefaultParams>; Body: Static<typeof StatusDefaultBody> }>(
+    "/api/v1/projects/:id/status-defaults/:flowStatusId",
+    {
+      schema: {
+        summary: "Set or update a project's default assignee for a flow status",
+        description: "Project owner or admins only.",
+        tags: ["projects"],
+        params: StatusDefaultParams,
+        body: StatusDefaultBody,
+        response: { 200: StatusDefaultRecord, ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      const { id, flowStatusId } = request.params;
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "Only the project owner or admins can edit status defaults" },
+        });
+      }
+      const { userId } = request.body;
+      try {
+        return await setStatusDefault(request.org.id, id, flowStatusId, userId);
+      } catch (err) {
+        return handleError(reply, err);
+      }
+    }
+  );
+
+  fastify.delete<{ Params: Static<typeof StatusDefaultParams> }>(
+    "/api/v1/projects/:id/status-defaults/:flowStatusId",
+    {
+      schema: {
+        summary: "Clear a project's default assignee for a flow status",
+        description: "Project owner or admins only.",
+        tags: ["projects"],
+        params: StatusDefaultParams,
+        response: { 204: Type.Null(), ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      const { id, flowStatusId } = request.params;
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "Only the project owner or admins can edit status defaults" },
+        });
+      }
+      try {
+        await clearStatusDefault(request.org.id, id, flowStatusId);
+        return reply.status(204).send();
       } catch (err) {
         return handleError(reply, err);
       }

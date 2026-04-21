@@ -38,6 +38,43 @@ export async function getInitialStatus(flowId: string) {
   });
 }
 
+interface ResolveDefaultAssigneeInput {
+  flowStatusId: string;
+  projectId?: string | null;
+  taskId?: string | null;
+}
+
+export async function resolveDefaultAssignee(
+  input: ResolveDefaultAssigneeInput,
+): Promise<string | null> {
+  let projectId = input.projectId ?? null;
+
+  if (!projectId && input.taskId) {
+    const first = await prisma.taskProject.findFirst({
+      where: { taskId: input.taskId },
+      orderBy: [{ createdAt: "asc" }, { projectId: "asc" }],
+      select: { projectId: true },
+    });
+    projectId = first?.projectId ?? null;
+  }
+
+  if (!projectId) return null;
+
+  const statusDefault = await prisma.projectStatusDefaultAssignee.findUnique({
+    where: {
+      projectId_flowStatusId: { projectId, flowStatusId: input.flowStatusId },
+    },
+    select: { userId: true },
+  });
+  if (statusDefault) return statusDefault.userId;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { defaultAssigneeUserId: true },
+  });
+  return project?.defaultAssigneeUserId ?? null;
+}
+
 interface CreateTaskInput {
   orgId: string;
   flowSlug: string;
@@ -89,12 +126,12 @@ export async function createTask(input: CreateTaskInput) {
   }
 
   let assigneeId = input.assigneeUserId ?? null;
-  if (!assigneeId && projectIds.length > 0) {
-    const firstProject = await prisma.project.findFirst({
-      where: { id: projectIds[0], orgId: input.orgId },
-      select: { defaultAssigneeUserId: true },
+  const hasExplicitAssignee = input.assigneeUserId !== undefined && input.assigneeUserId !== null;
+  if (!hasExplicitAssignee && projectIds.length > 0) {
+    assigneeId = await resolveDefaultAssignee({
+      projectId: projectIds[0],
+      flowStatusId: initialStatus.id,
     });
-    assigneeId = firstProject?.defaultAssigneeUserId ?? null;
   }
 
   const displayId = await generateDisplayId(input.flowSlug);
