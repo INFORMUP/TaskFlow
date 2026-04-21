@@ -95,7 +95,11 @@ export async function resolveDefaultAssignee(
     where: { id: projectId },
     select: { defaultAssigneeUserId: true },
   });
-  return project?.defaultAssigneeUserId ?? null;
+  const projectDefault = project?.defaultAssigneeUserId ?? null;
+  if (projectDefault && (await isValidProjectAssignee(client, projectId, projectDefault))) {
+    return projectDefault;
+  }
+  return null;
 }
 
 interface CreateTaskInput {

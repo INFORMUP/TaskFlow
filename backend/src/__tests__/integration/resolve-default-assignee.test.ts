@@ -115,6 +115,60 @@ describe("resolveDefaultAssignee", () => {
     expect(userId).toBe(TEST_ENGINEER_ID);
   });
 
+  it("returns null when project default assignee is not on any project team", async () => {
+    const stale = await prisma.project.create({
+      data: {
+        orgId: DEFAULT_ORG_ID,
+        key: "RD",
+        name: "Resolve D",
+        ownerUserId: TEST_ENGINEER_ID,
+        defaultAssigneeUserId: TEST_PRODUCT_ID,
+        teams: { create: [{ teamId: seedUuid("team", "engineer") }] },
+      },
+    });
+    const userId = await resolveDefaultAssignee({
+      projectId: stale.id,
+      flowStatusId: bugTriageStatusId,
+    });
+    expect(userId).toBeNull();
+  });
+
+  it("returns null when project default assignee is inactive", async () => {
+    const inactiveUserId = seedUuid("user", "inactive-default");
+    await prisma.user.upsert({
+      where: { id: inactiveUserId },
+      update: { status: "inactive" },
+      create: {
+        id: inactiveUserId,
+        email: "inactive@test.com",
+        displayName: "Inactive",
+        actorType: "human",
+        status: "inactive",
+      },
+    });
+    await prisma.userTeam.upsert({
+      where: { userId_teamId: { userId: inactiveUserId, teamId: seedUuid("team", "engineer") } },
+      update: {},
+      create: { userId: inactiveUserId, teamId: seedUuid("team", "engineer"), isPrimary: true },
+    });
+
+    const proj = await prisma.project.create({
+      data: {
+        orgId: DEFAULT_ORG_ID,
+        key: "RE",
+        name: "Resolve E",
+        ownerUserId: TEST_ENGINEER_ID,
+        defaultAssigneeUserId: inactiveUserId,
+        teams: { create: [{ teamId: seedUuid("team", "engineer") }] },
+      },
+    });
+    const userId = await resolveDefaultAssignee({
+      projectId: proj.id,
+      flowStatusId: bugTriageStatusId,
+    });
+    expect(userId).toBeNull();
+  });
+
   it("returns null when project has no defaults of any kind", async () => {
     const noDefault = await prisma.project.create({
       data: {
