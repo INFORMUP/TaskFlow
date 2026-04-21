@@ -73,7 +73,6 @@ export async function transitionRoutes(fastify: FastifyInstance) {
         },
       });
 
-
       if (!task) {
         return reply.status(404).send({
           error: { code: "NOT_FOUND", message: "Task not found" },
@@ -143,15 +142,21 @@ export async function transitionRoutes(fastify: FastifyInstance) {
         }
       }
 
-      let resolvedAssigneeId: string | null | undefined = undefined;
-      if (newAssigneeUserId === undefined && task.assigneeId === null) {
-        resolvedAssigneeId = await resolveDefaultAssignee({
-          taskId: task.id,
-          flowStatusId: targetStatus.id,
-        });
-      }
-
       await prisma.$transaction(async (tx) => {
+        let resolvedAssigneeId: string | null = null;
+        if (newAssigneeUserId === undefined) {
+          const current = await tx.task.findUnique({
+            where: { id: task.id },
+            select: { assigneeId: true },
+          });
+          if (current?.assigneeId == null) {
+            resolvedAssigneeId = await resolveDefaultAssignee(
+              { taskId: task.id, flowStatusId: targetStatus.id },
+              tx,
+            );
+          }
+        }
+
         await tx.taskTransition.create({
           data: {
             taskId: task.id,
@@ -171,7 +176,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
             ...(targetStatus.slug === "closed" && { resolution }),
             ...(newAssigneeUserId !== undefined
               ? { assigneeId: newAssigneeUserId ?? null }
-              : resolvedAssigneeId
+              : resolvedAssigneeId != null
                 ? { assigneeId: resolvedAssigneeId }
                 : {}),
           },

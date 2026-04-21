@@ -1,4 +1,7 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma-client.js";
+
+type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
 
 const FLOW_PREFIXES: Record<string, string> = {
   bug: "BUG",
@@ -44,13 +47,31 @@ interface ResolveDefaultAssigneeInput {
   taskId?: string | null;
 }
 
+async function isValidProjectAssignee(
+  client: PrismaClientLike,
+  projectId: string,
+  userId: string,
+): Promise<boolean> {
+  const user = await client.user.findUnique({
+    where: { id: userId },
+    select: { status: true },
+  });
+  if (!user || user.status !== "active") return false;
+  const membership = await client.projectTeam.findFirst({
+    where: { projectId, team: { members: { some: { userId } } } },
+    select: { teamId: true },
+  });
+  return !!membership;
+}
+
 export async function resolveDefaultAssignee(
   input: ResolveDefaultAssigneeInput,
+  client: PrismaClientLike = prisma,
 ): Promise<string | null> {
   let projectId = input.projectId ?? null;
 
   if (!projectId && input.taskId) {
-    const first = await prisma.taskProject.findFirst({
+    const first = await client.taskProject.findFirst({
       where: { taskId: input.taskId },
       orderBy: [{ createdAt: "asc" }, { projectId: "asc" }],
       select: { projectId: true },
@@ -60,15 +81,17 @@ export async function resolveDefaultAssignee(
 
   if (!projectId) return null;
 
-  const statusDefault = await prisma.projectStatusDefaultAssignee.findUnique({
+  const statusDefault = await client.projectStatusDefaultAssignee.findUnique({
     where: {
       projectId_flowStatusId: { projectId, flowStatusId: input.flowStatusId },
     },
     select: { userId: true },
   });
-  if (statusDefault) return statusDefault.userId;
+  if (statusDefault && (await isValidProjectAssignee(client, projectId, statusDefault.userId))) {
+    return statusDefault.userId;
+  }
 
-  const project = await prisma.project.findUnique({
+  const project = await client.project.findUnique({
     where: { id: projectId },
     select: { defaultAssigneeUserId: true },
   });

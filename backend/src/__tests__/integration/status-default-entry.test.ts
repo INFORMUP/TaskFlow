@@ -44,6 +44,7 @@ describe("per-status default assignee — entry rules", () => {
     await prisma.project.deleteMany();
 
     const engineerTeamId = seedUuid("team", "engineer");
+    const productTeamId = seedUuid("team", "product");
     const bug = await prisma.flow.findFirst({ where: { slug: "bug" } });
     const project = await prisma.project.create({
       data: {
@@ -53,7 +54,12 @@ describe("per-status default assignee — entry rules", () => {
         ownerUserId: TEST_ENGINEER_ID,
         defaultFlowId: bug!.id,
         defaultAssigneeUserId: TEST_ENGINEER_ID,
-        teams: { create: [{ teamId: engineerTeamId }] },
+        teams: {
+          create: [
+            { teamId: engineerTeamId },
+            { teamId: productTeamId },
+          ],
+        },
       },
     });
     projectId = project.id;
