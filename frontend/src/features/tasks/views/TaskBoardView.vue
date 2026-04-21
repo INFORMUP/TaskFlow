@@ -141,6 +141,7 @@ onMounted(() => {
         :key="status.slug"
         :status="status"
         :tasks="tasksForStatus(status.slug)"
+        :flow-slug="flowSlug"
         @task-click="handleTaskClick"
       />
     </div>
