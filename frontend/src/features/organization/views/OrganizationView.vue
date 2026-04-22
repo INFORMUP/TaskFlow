@@ -4,12 +4,16 @@ import { useRouter } from "vue-router";
 import { useOrg } from "@/composables/useOrg";
 import {
   getOrganization,
-  addMember,
   updateMemberRole,
   removeMember,
+  listInvitations,
+  createInvitation,
+  resendInvitation,
+  revokeInvitation,
   type OrgDetail,
   type OrgMember,
   type OrgRole,
+  type Invitation,
 } from "@/api/organizations.api";
 
 const org = useOrg();
@@ -19,15 +23,24 @@ const detail = ref<OrgDetail | null>(null);
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 
-// Add-member form
+// Invite form
 const newEmail = ref("");
 const newRole = ref<OrgRole>("member");
 const addingMember = ref(false);
 const addError = ref<string | null>(null);
 
+// Invitations list + last-issued link (shown once so admin can share it)
+const invitations = ref<Invitation[]>([]);
+const lastInviteLink = ref<string | null>(null);
+const lastInviteEmail = ref<string | null>(null);
+
 // Remove confirmation
 const removeTarget = ref<OrgMember | null>(null);
 const removing = ref(false);
+
+function inviteLinkFor(token: string): string {
+  return `${window.location.origin}/accept-invite?token=${encodeURIComponent(token)}`;
+}
 
 const canManage = computed(
   () => detail.value?.role === "owner" || detail.value?.role === "admin"
@@ -49,7 +62,13 @@ async function load() {
   loading.value = true;
   loadError.value = null;
   try {
-    detail.value = await getOrganization(org.activeOrgId.value);
+    const orgId = org.activeOrgId.value;
+    detail.value = await getOrganization(orgId);
+    try {
+      invitations.value = (await listInvitations(orgId)).data;
+    } catch {
+      invitations.value = [];
+    }
   } catch (e: any) {
     loadError.value = e?.error?.message || "Failed to load organization";
   } finally {
@@ -75,18 +94,65 @@ async function handleAddMember() {
   addError.value = null;
   addingMember.value = true;
   try {
-    const created = await addMember(detail.value.id, {
-      email: newEmail.value.trim(),
+    const email = newEmail.value.trim();
+    const invite = await createInvitation(detail.value.id, {
+      email,
       role: newRole.value,
     });
-    detail.value.members.push(created);
+    invitations.value = [invite, ...invitations.value];
+    lastInviteLink.value = inviteLinkFor(invite.token);
+    lastInviteEmail.value = email;
     newEmail.value = "";
     newRole.value = "member";
   } catch (e: any) {
-    addError.value = e?.error?.message || "Failed to add member";
+    addError.value = e?.error?.message || "Failed to send invitation";
   } finally {
     addingMember.value = false;
   }
+}
+
+async function handleResend(invite: Invitation) {
+  if (!detail.value) return;
+  try {
+    const updated = await resendInvitation(detail.value.id, invite.id);
+    const idx = invitations.value.findIndex((i) => i.id === invite.id);
+    if (idx >= 0) invitations.value[idx] = updated;
+    lastInviteLink.value = inviteLinkFor(updated.token);
+    lastInviteEmail.value = updated.email;
+  } catch (e: any) {
+    loadError.value = e?.error?.message || "Failed to resend invitation";
+  }
+}
+
+async function handleRevoke(invite: Invitation) {
+  if (!detail.value) return;
+  try {
+    await revokeInvitation(detail.value.id, invite.id);
+    const idx = invitations.value.findIndex((i) => i.id === invite.id);
+    if (idx >= 0) {
+      invitations.value[idx] = {
+        ...invite,
+        status: "revoked",
+        revokedAt: new Date().toISOString(),
+      };
+    }
+  } catch (e: any) {
+    loadError.value = e?.error?.message || "Failed to revoke invitation";
+  }
+}
+
+async function copyInviteLink() {
+  if (!lastInviteLink.value) return;
+  try {
+    await navigator.clipboard.writeText(lastInviteLink.value);
+  } catch {
+    // Clipboard API can fail in insecure contexts; user can copy manually.
+  }
+}
+
+function dismissInviteLink() {
+  lastInviteLink.value = null;
+  lastInviteEmail.value = null;
 }
 
 async function handleRoleChange(member: OrgMember, role: OrgRole) {
@@ -182,9 +248,104 @@ function cancelRemove() {
           :disabled="addingMember || !newEmail"
           data-testid="org-invite-submit"
         >
-          {{ addingMember ? "Adding..." : "Add member" }}
+          {{ addingMember ? "Sending..." : "Send invitation" }}
         </button>
       </form>
+
+      <div
+        v-if="lastInviteLink"
+        class="organization__invite-link"
+        data-testid="org-invite-link"
+      >
+        <p class="organization__invite-link-intro">
+          Invitation created for <strong>{{ lastInviteEmail }}</strong>. Share
+          this link — it's shown only once.
+        </p>
+        <div class="organization__invite-link-row">
+          <input
+            class="organization__input"
+            readonly
+            :value="lastInviteLink"
+            data-testid="org-invite-link-value"
+          />
+          <button
+            type="button"
+            class="organization__btn organization__btn--outline"
+            data-testid="org-invite-link-copy"
+            @click="copyInviteLink"
+          >
+            Copy
+          </button>
+          <button
+            type="button"
+            class="organization__btn organization__btn--outline"
+            data-testid="org-invite-link-dismiss"
+            @click="dismissInviteLink"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+
+      <h3 class="organization__subheading-bold">Pending invitations</h3>
+      <table
+        v-if="invitations.length"
+        class="organization__table"
+        data-testid="org-invitations-list"
+      >
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Sent</th>
+            <th>Expires</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="inv in invitations"
+            :key="inv.id"
+            :data-testid="`org-invitation-row-${inv.id}`"
+          >
+            <td>{{ inv.email }}</td>
+            <td>{{ inv.role }}</td>
+            <td>
+              <span
+                class="organization__badge"
+                :class="`organization__badge--${inv.status}`"
+                :data-testid="`org-invitation-status-${inv.id}`"
+              >
+                {{ inv.status }}
+              </span>
+            </td>
+            <td>{{ new Date(inv.createdAt).toLocaleDateString() }}</td>
+            <td>{{ new Date(inv.expiresAt).toLocaleDateString() }}</td>
+            <td>
+              <button
+                v-if="inv.status === 'pending' || inv.status === 'expired'"
+                type="button"
+                class="organization__link-btn organization__link-btn--neutral"
+                :data-testid="`org-invitation-resend-${inv.id}`"
+                @click="handleResend(inv)"
+              >
+                Resend
+              </button>
+              <button
+                v-if="inv.status === 'pending' || inv.status === 'expired'"
+                type="button"
+                class="organization__link-btn"
+                :data-testid="`org-invitation-revoke-${inv.id}`"
+                @click="handleRevoke(inv)"
+              >
+                Revoke
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="organization__subheading">No invitations yet.</p>
 
       <h3 class="organization__subheading-bold">Members</h3>
       <table class="organization__table" data-testid="org-member-list">
@@ -378,6 +539,55 @@ function cancelRemove() {
 }
 .organization__link-btn:hover {
   text-decoration: underline;
+}
+.organization__link-btn--neutral {
+  color: var(--text-primary);
+  margin-right: 0.75rem;
+}
+.organization__invite-link {
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+}
+.organization__invite-link-intro {
+  font-size: 0.8125rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-secondary);
+}
+.organization__invite-link-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.organization__invite-link-row .organization__input {
+  flex: 1;
+}
+.organization__badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  text-transform: capitalize;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-soft);
+}
+.organization__badge--pending {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+.organization__badge--accepted {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+.organization__badge--revoked,
+.organization__badge--expired {
+  background: #f3f4f6;
+  color: #6b7280;
+  border-color: #e5e7eb;
 }
 .modal-backdrop {
   position: fixed;
