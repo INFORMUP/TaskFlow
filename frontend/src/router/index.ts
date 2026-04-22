@@ -64,6 +64,12 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: "app" },
   },
   {
+    path: "/accept-invite",
+    name: "accept-invite",
+    component: () => import("@/features/organization/views/AcceptInviteView.vue"),
+    meta: { layout: "auth", public: true },
+  },
+  {
     path: "/settings",
     name: "settings",
     component: () => import("@/features/settings/views/SettingsView.vue"),

@@ -195,7 +195,7 @@ describe("organizations API", () => {
       expect(member!.role).toBe("member");
     });
 
-    it("creates an invited user when email is unknown", async () => {
+    it("rejects unknown-email adds with 404 (callers should invite instead)", async () => {
       const app = await buildApp();
       const token = mintTestToken(TEST_ENGINEER_ID, { orgId: ORG_X_ID });
       const res = await app.inject({
@@ -204,14 +204,9 @@ describe("organizations API", () => {
         headers: { authorization: `Bearer ${token}` },
         payload: { email: NON_ENGINEER_EMAIL, role: "member" },
       });
-      expect(res.statusCode).toBe(201);
+      expect(res.statusCode).toBe(404);
       const u = await prisma.user.findUnique({ where: { email: NON_ENGINEER_EMAIL } });
-      expect(u).not.toBeNull();
-      expect(u!.status).toBe("invited");
-      const member = await prisma.orgMember.findUnique({
-        where: { orgId_userId: { orgId: ORG_X_ID, userId: u!.id } },
-      });
-      expect(member).not.toBeNull();
+      expect(u).toBeNull();
     });
 
     it("rejects non-member caller with 404", async () => {
