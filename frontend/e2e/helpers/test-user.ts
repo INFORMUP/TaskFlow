@@ -68,7 +68,7 @@ async function createUser(opts: CreateUserOpts = {}): Promise<TestUser> {
 }
 
 export function createNoTeamUser(): Promise<TestUser> {
-  return createUser();
+  return createUser({ withOrg: true });
 }
 
 export function createUserWithOrg(role: OrgRole = "member"): Promise<TestUser> {

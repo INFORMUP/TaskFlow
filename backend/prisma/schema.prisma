@@ -20,8 +20,33 @@ model Organization {
   flows       Flow[]
   apiTokens   ApiToken[]
   appSettings AppSetting[]
+  invitations Invitation[]
 
   @@map("organizations")
+}
+
+model Invitation {
+  id                String    @id @default(uuid()) @db.Uuid
+  orgId             String    @map("org_id") @db.Uuid
+  email             String
+  role              String // owner, admin, member
+  tokenHash         String?   @unique @map("token_hash")
+  invitedById       String?   @map("invited_by_id") @db.Uuid
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz()
+  acceptedAt        DateTime? @map("accepted_at") @db.Timestamptz()
+  acceptedByUserId  String?   @map("accepted_by_user_id") @db.Uuid
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz()
+  revokedById       String?   @map("revoked_by_id") @db.Uuid
+
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy      User?        @relation("InvitationInvitedBy", fields: [invitedById], references: [id])
+  acceptedByUser User?        @relation("InvitationAcceptedBy", fields: [acceptedByUserId], references: [id])
+  revokedBy      User?        @relation("InvitationRevokedBy", fields: [revokedById], references: [id])
+
+  @@index([orgId, email])
+  @@index([email])
+  @@map("invitations")
 }
 
 model OrgMember {
@@ -60,7 +85,7 @@ model User {
   email       String?  @unique
   displayName String   @map("display_name")
   actorType   String   @map("actor_type") // human, agent, system
-  status      String   @default("active") // invited, active, deactivated
+  status      String   @default("active") // active, deactivated
   timezone    String?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
@@ -77,6 +102,9 @@ model User {
   defaultOnStatuses ProjectStatusDefaultAssignee[]
   apiTokens         ApiToken[]
   orgMemberships    OrgMember[]
+  invitationsSent   Invitation[]      @relation("InvitationInvitedBy")
+  invitationsAccepted Invitation[]    @relation("InvitationAcceptedBy")
+  invitationsRevoked  Invitation[]    @relation("InvitationRevokedBy")
 
   @@map("users")
 }
@@ -240,11 +268,33 @@ model Project {
   tasks           TaskProject[]
   flows           ProjectFlow[]
   statusDefaults  ProjectStatusDefaultAssignee[]
+  repositories    ProjectRepository[]
 
   @@unique([orgId, key])
   @@index([ownerUserId])
   @@index([archivedAt])
   @@map("projects")
+}
+
+enum RepoProvider {
+  GITHUB
+
+  @@map("repo_provider")
+}
+
+model ProjectRepository {
+  id        String       @id @default(uuid()) @db.Uuid
+  projectId String       @map("project_id") @db.Uuid
+  provider  RepoProvider
+  owner     String
+  name      String
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz()
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, provider, owner, name])
+  @@index([projectId])
+  @@map("project_repositories")
 }
 
 model ProjectFlow {

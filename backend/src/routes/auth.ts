@@ -9,6 +9,7 @@ import {
   exchangeCodeForTokens,
   fetchGoogleUserInfo,
 } from "../services/google-oauth.service.js";
+import { claimPendingInvitationsForUser } from "./invitations.js";
 import { CommonErrorResponses, ErrorResponse } from "./_schemas.js";
 
 const CallbackBody = Type.Object({
@@ -99,6 +100,15 @@ export async function authRoutes(fastify: FastifyInstance) {
               lastUsedAt: new Date(),
             },
           });
+          // An existing user record may have been left at status='deactivated'
+          // by the invitations migration (they were a stale 'invited'
+          // placeholder). Signing in with Google reactivates them.
+          if (existingUser.status !== "active") {
+            await prisma.user.update({
+              where: { id: existingUser.id },
+              data: { status: "active" },
+            });
+          }
         } else {
           const newUser = await prisma.user.create({
             data: {
@@ -123,6 +133,8 @@ export async function authRoutes(fastify: FastifyInstance) {
           });
         }
       }
+
+      await claimPendingInvitationsForUser(userId, googleUser.email ?? null);
 
       const membership = await prisma.orgMember.findFirst({
         where: { userId },

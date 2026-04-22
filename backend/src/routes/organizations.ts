@@ -212,9 +212,9 @@ export async function organizationRoutes(fastify: FastifyInstance) {
     "/api/v1/organizations/:id/members",
     {
       schema: {
-        summary: "Add or invite a member to an organization",
+        summary: "Add an existing user to an organization",
         description:
-          "Requires caller to be owner or admin. Creates an `invited` user if no account matches the email. Promoting to `owner` is owner-only.",
+          "Requires caller to be owner or admin. The target user must already have an account — to onboard a new user, create an invitation instead. Promoting to `owner` is owner-only.",
         tags: ["organizations"],
         params: IdParams,
         body: AddMemberBody,
@@ -238,14 +238,12 @@ export async function organizationRoutes(fastify: FastifyInstance) {
         return sendForbidden(reply, "Only owners can add another owner");
       }
 
-      let user = await prisma.user.findUnique({ where: { email } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            email,
-            displayName: email,
-            actorType: "human",
-            status: "invited",
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user || user.status !== "active") {
+        return reply.status(404).send({
+          error: {
+            code: "NOT_FOUND",
+            message: "No active user with that email — create an invitation instead",
           },
         });
       }

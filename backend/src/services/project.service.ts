@@ -1,3 +1,4 @@
+import { Prisma, RepoProvider } from "@prisma/client";
 import { prisma } from "../prisma-client.js";
 import { orgScopedWhere } from "./org-scope.js";
 
@@ -383,6 +384,82 @@ export async function clearStatusDefault(
   await prisma.projectStatusDefaultAssignee.deleteMany({
     where: { projectId, flowStatusId },
   });
+}
+
+function formatRepository(repo: {
+  id: string;
+  projectId: string;
+  provider: RepoProvider;
+  owner: string;
+  name: string;
+  createdAt: Date;
+}) {
+  return {
+    id: repo.id,
+    projectId: repo.projectId,
+    provider: repo.provider,
+    owner: repo.owner,
+    name: repo.name,
+    createdAt: repo.createdAt,
+  };
+}
+
+export async function listProjectRepositories(orgId: string, projectId: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
+  if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
+
+  const rows = await prisma.projectRepository.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map(formatRepository);
+}
+
+export async function addProjectRepository(
+  orgId: string,
+  projectId: string,
+  input: { provider: RepoProvider; owner: string; name: string },
+) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
+  if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
+
+  const owner = input.owner.trim();
+  const name = input.name.trim();
+  if (!owner || !name) {
+    throw new ProjectServiceError("BAD_REQUEST", "Repository owner and name are required", 400);
+  }
+
+  try {
+    const created = await prisma.projectRepository.create({
+      data: { projectId, provider: input.provider, owner, name },
+    });
+    return formatRepository(created);
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new ProjectServiceError(
+        "REPO_EXISTS",
+        "A repository with the same provider, owner, and name is already attached to this project",
+        409,
+      );
+    }
+    throw err;
+  }
+}
+
+export async function removeProjectRepository(
+  orgId: string,
+  projectId: string,
+  repositoryId: string,
+) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
+  if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
+
+  const repo = await prisma.projectRepository.findFirst({
+    where: { id: repositoryId, projectId },
+  });
+  if (!repo) throw new ProjectServiceError("NOT_FOUND", "Repository not found", 404);
+
+  await prisma.projectRepository.delete({ where: { id: repositoryId } });
 }
 
 export async function detachProjectFlow(orgId: string, projectId: string, flowId: string) {
