@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "prisma db seed",
-    "seed:check": "tsc --noEmit -p prisma/tsconfig.seed.json"
+    "seed:check": "tsc --noEmit -p prisma/tsconfig.seed.json",
+    "bootstrap": "npx tsx prisma/bootstrap.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
