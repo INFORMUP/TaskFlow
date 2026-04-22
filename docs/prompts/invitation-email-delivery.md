@@ -18,22 +18,34 @@ Adding email makes "invitation sent" mean what the UI already claims.
 
 ## Provider choice
 
-Two options worth considering; pick one before starting work.
+**Decision: Nodemailer + SMTP via Mailgun**, mirroring Reportal's setup.
 
-- **Resend** (recommended). Simple HTTP API, native React/Vue template support isn't needed (we're sending plaintext + a simple HTML), cheap for the volume TaskFlow will see, has a free tier sufficient for dev/staging. One API key.
-- **Nodemailer + SMTP**. Vendor-neutral; works with any SMTP provider (including Gmail, SES, Postmark). More config knobs (host, port, auth, TLS). Good if the org already has an SMTP relay.
+Why:
 
-**AWS SES** is also on the table since TaskFlow is an AWS shop. If the IAM footprint already exists, SES becomes the natural choice: ~$0.10/1k, IAM-based auth (no new secret to manage), CloudWatch logs/metrics alongside everything else, and bounce/complaint events via SNS when we want them. The mailer service shape stays identical — just a different client (`@aws-sdk/client-sesv2`, or Nodemailer over SES SMTP if we want to keep things vendor-neutral).
+- Reportal (`reportal/backend/src/services/emailService.js`) already uses Nodemailer over Mailgun SMTP. The sending subdomain `mg.informup.org` is verified in Route53 (DKIM/SPF/DMARC live), and the Mailgun account is paid for and warmed up. TaskFlow gets to ride on that with zero DNS or provider-account work.
+- AWS SES was considered and rejected for the first cut: the InformUp AWS account has never touched SES (no IAM permissions, no verified identities), so going SES-native means a sandbox-exit support ticket + fresh domain verification. That's the setup cost the repo avoids by reusing Mailgun.
+- Resend was considered and rejected for consistency: two email providers across Reportal and TaskFlow is operational overhead for no real benefit at this volume.
 
-The SES cost the doc originally flagged (sandbox lift, DKIM/SPF, domain verification) is only real in a greenfield AWS account. If those are already done for TaskFlow, it's the cleanest path.
+The mailer abstraction below is small enough that swapping to SES later is a one-file change if volume ever justifies it.
 
-**Questions to answer before picking a provider:**
+## AWS / Mailgun setup
 
-1. Is there an existing AWS account for TaskFlow, and is SES already out of sandbox there?
-2. Is the sending domain (e.g., `taskflow.<something>`) already verified in SES, or would we need to set up DKIM/SPF records?
-3. How's the backend deployed — EC2/ECS/Lambda with an IAM role, or somewhere that'd need static AWS credentials?
+Before writing code:
 
-If #1 and #2 are yes, use **SES**. Otherwise, **Resend** is a faster first cut and the abstraction boundary below is small enough that swapping to SES later is one file.
+1. In the Mailgun dashboard, mint a **new SMTP credential** scoped to TaskFlow — e.g. user `taskflow@mg.informup.org` with its own password. Keep it separate from Reportal's so either can be rotated without affecting the other.
+2. Store the creds in SSM Parameter Store, mirroring Reportal's layout (`scripts/taskflow/put-ssm-secret.sh` handles this):
+
+   ```
+   /taskflow/staging/SMTP_HOST   = smtp.mailgun.org
+   /taskflow/staging/SMTP_PORT   = 587
+   /taskflow/staging/SMTP_USER   = taskflow@mg.informup.org
+   /taskflow/staging/SMTP_PASS   = (SecureString)
+   /taskflow/staging/SMTP_FROM   = TaskFlow <taskflow@informup.org>
+   /taskflow/staging/INVITE_ACCEPT_BASE_URL = https://taskflow.staging.informup.org/accept-invite
+   ```
+
+   Same for `/taskflow/production/*` with the prod `INVITE_ACCEPT_BASE_URL`.
+3. Wire the five SMTP keys + `INVITE_ACCEPT_BASE_URL` into each EB environment's env vars. No IAM changes needed — the EB instance profile doesn't need SES permissions; Nodemailer authenticates to Mailgun with username+password over TLS on 587.
 
 ## What to build
 
@@ -42,14 +54,17 @@ If #1 and #2 are yes, use **SES**. Otherwise, **Resend** is a faster first cut a
 Add to `backend/src/config.ts`:
 
 ```ts
-resendApiKey: process.env.RESEND_API_KEY ?? "",
-inviteEmailFrom: process.env.INVITE_EMAIL_FROM ?? "TaskFlow <no-reply@taskflow.local>",
+smtpHost: process.env.SMTP_HOST ?? "",
+smtpPort: parseInt(process.env.SMTP_PORT ?? "587", 10),
+smtpUser: process.env.SMTP_USER ?? "",
+smtpPass: process.env.SMTP_PASS ?? "",
+smtpFrom: process.env.SMTP_FROM ?? "TaskFlow <no-reply@taskflow.local>",
 inviteAcceptBaseUrl: process.env.INVITE_ACCEPT_BASE_URL ?? "http://localhost:5173/accept-invite",
 ```
 
 Update `.env.example` (if present) with the same keys.
 
-Do **not** make the server fail to boot when `RESEND_API_KEY` is empty — the mailer should no-op and log instead (see §3). Dev and CI must keep working without an API key.
+Do **not** make the server fail to boot when `SMTP_HOST` (or any SMTP key) is empty — the mailer should no-op and log instead (see §3). Dev and CI must keep working without SMTP creds.
 
 ### 2. `backend/src/services/mailer.service.ts`
 
@@ -68,11 +83,12 @@ export interface InviteEmailInput {
 export async function sendInviteEmail(input: InviteEmailInput): Promise<void>;
 ```
 
-Behavior:
+Behavior (modeled on Reportal's `emailService.js`):
 
-- If `config.resendApiKey` is empty: `console.log` the rendered email (subject + body + link) and return. This keeps dev + tests silent-but-useful.
-- If set: POST to Resend (or construct via `resend` SDK if we take the dep). Catch network errors and log — do **not** let a mail failure fail the HTTP request that triggered it. The invitation row is the source of truth; a mail failure should be visible (via logs / a future "resend" button) but not break invite creation.
-- Template is plaintext + a minimal HTML. Include org name, inviter name, role, accept URL, expiry. Short, transactional, no marketing.
+- Lazy-init a Nodemailer transporter from `config.smtpHost`/`smtpPort`/`smtpUser`/`smtpPass`. Use `secure: true` when port is 465, else STARTTLS on 587.
+- If any of host/user/pass is empty: `console.log` the rendered email (subject + body + link) and return. This keeps dev + tests silent-but-useful.
+- If configured: `transporter.sendMail({ from: config.smtpFrom, to, subject, html })`. Catch errors and log — do **not** let a mail failure fail the HTTP request that triggered it. The invitation row is the source of truth; a mail failure should be visible (via logs / a future "resend" button) but not break invite creation.
+- Template is a minimal HTML (plaintext fallback optional). Include org name, inviter name, role, accept URL, expiry. Short, transactional, no marketing. Reportal's `wrapHtml` is a reasonable reference for styling, but don't share code across repos — copy the shape, not the module.
 
 ### 3. Hook points in `routes/invitations.ts`
 
@@ -89,8 +105,8 @@ Keep the response shape the same (`token` still included). The frontend can drop
 
 ### 4. Tests
 
-- Unit test `sendInviteEmail` with `RESEND_API_KEY` unset — assert it logs and resolves.
-- Unit test with the key set — mock `fetch` (or the SDK) and assert the payload shape.
+- Unit test `sendInviteEmail` with SMTP config unset — assert it logs and resolves.
+- Unit test with SMTP config set — mock the Nodemailer transporter and assert the `sendMail` payload shape (to / from / subject / html).
 - Integration test that `POST /invitations` still returns 201 when the mailer throws (hook the mailer to throw, assert no regression).
 
 No need to integration-test actual delivery. That's a manual smoke check on staging.
@@ -106,17 +122,18 @@ Not needed before email lands, but part of the same "invitee experience" arc.
 
 ## Out of scope
 
-- Bounce / complaint handling — Resend webhooks, suppression lists, etc. Defer until we see real bounces.
-- Per-org "from" addresses — every email comes from the single configured `INVITE_EMAIL_FROM`.
+- Bounce / complaint handling — Mailgun webhooks, suppression lists, etc. Defer until we see real bounces.
+- Per-org "from" addresses — every email comes from the single configured `SMTP_FROM`.
 - Localization — English only.
 - Rate-limiting mail sends. The invitation endpoints are already behind the org's rate limit and only owners/admins can hit them, so spam risk is bounded.
 
 ## Sequencing
 
-1. Config + mailer service (no-op mode).
-2. Wire into create + resend routes.
-3. Add Resend (or SMTP) credentials to staging; manually confirm an invite email lands.
-4. Frontend AcceptInviteView + toggle the link display.
-5. Production rollout.
+1. Mint the TaskFlow Mailgun SMTP credential; write the SSM params (staging + prod).
+2. Config + mailer service (no-op mode).
+3. Wire into create + resend routes.
+4. Push the SMTP env vars onto staging EB; manually confirm an invite email lands.
+5. Frontend AcceptInviteView + toggle the link display.
+6. Production rollout (SSM + EB env on prod).
 
 Each step is independently shippable.
