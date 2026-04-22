@@ -98,6 +98,7 @@ jobs:
       GOOGLE_CLIENT_ID: ci-google-client-id
       GOOGLE_CLIENT_SECRET: ci-google-client-secret
       PORT: "3001"
+      CORS_ALLOW_ORIGINS: http://localhost:5173,http://localhost:5174,http://localhost:5176
     steps:
       - uses: actions/checkout@v4
 
