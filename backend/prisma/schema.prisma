@@ -67,13 +67,14 @@ model User {
 
   teams             UserTeam[]
   oauthConnections  OauthConnection[]
-  createdTasks      Task[]            @relation("TaskCreatedBy")
-  assignedTasks     Task[]            @relation("TaskAssignee")
+  createdTasks      Task[]                         @relation("TaskCreatedBy")
+  assignedTasks     Task[]                         @relation("TaskAssignee")
   taskTransitions   TaskTransition[]
-  reassignedBy      TaskTransition[]  @relation("TaskTransitionNewAssignee")
+  reassignedBy      TaskTransition[]               @relation("TaskTransitionNewAssignee")
   comments          Comment[]
-  ownedProjects     Project[]         @relation("ProjectOwner")
-  defaultOnProjects Project[]         @relation("ProjectDefaultAssignee")
+  ownedProjects     Project[]                      @relation("ProjectOwner")
+  defaultOnProjects Project[]                      @relation("ProjectDefaultAssignee")
+  defaultOnStatuses ProjectStatusDefaultAssignee[]
   apiTokens         ApiToken[]
   orgMemberships    OrgMember[]
 
@@ -140,12 +141,13 @@ model FlowStatus {
   sortOrder   Int      @map("sort_order")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
-  flow            Flow             @relation(fields: [flowId], references: [id])
-  transitionsFrom FlowTransition[] @relation("TransitionFrom")
-  transitionsTo   FlowTransition[] @relation("TransitionTo")
+  flow            Flow                           @relation(fields: [flowId], references: [id])
+  transitionsFrom FlowTransition[]               @relation("TransitionFrom")
+  transitionsTo   FlowTransition[]               @relation("TransitionTo")
   tasksAtStatus   Task[]
-  transitionFrom  TaskTransition[] @relation("TaskTransitionFrom")
-  transitionTo    TaskTransition[] @relation("TaskTransitionTo")
+  transitionFrom  TaskTransition[]               @relation("TaskTransitionFrom")
+  transitionTo    TaskTransition[]               @relation("TaskTransitionTo")
+  projectDefaults ProjectStatusDefaultAssignee[]
 
   @@unique([flowId, slug])
   @@index([flowId, sortOrder])
@@ -230,13 +232,14 @@ model Project {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   archivedAt            DateTime? @map("archived_at") @db.Timestamptz()
 
-  org             Organization  @relation(fields: [orgId], references: [id])
-  owner           User          @relation("ProjectOwner", fields: [ownerUserId], references: [id])
-  defaultAssignee User?         @relation("ProjectDefaultAssignee", fields: [defaultAssigneeUserId], references: [id])
-  defaultFlow     Flow?         @relation(fields: [defaultFlowId], references: [id])
+  org             Organization                   @relation(fields: [orgId], references: [id])
+  owner           User                           @relation("ProjectOwner", fields: [ownerUserId], references: [id])
+  defaultAssignee User?                          @relation("ProjectDefaultAssignee", fields: [defaultAssigneeUserId], references: [id])
+  defaultFlow     Flow?                          @relation(fields: [defaultFlowId], references: [id])
   teams           ProjectTeam[]
   tasks           TaskProject[]
   flows           ProjectFlow[]
+  statusDefaults  ProjectStatusDefaultAssignee[]
 
   @@unique([orgId, key])
   @@index([ownerUserId])
@@ -270,8 +273,9 @@ model ProjectTeam {
 }
 
 model TaskProject {
-  taskId    String @map("task_id") @db.Uuid
-  projectId String @map("project_id") @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  projectId String   @map("project_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   task    Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -279,6 +283,21 @@ model TaskProject {
   @@id([taskId, projectId])
   @@index([projectId])
   @@map("task_projects")
+}
+
+model ProjectStatusDefaultAssignee {
+  projectId    String @map("project_id") @db.Uuid
+  flowStatusId String @map("flow_status_id") @db.Uuid
+  userId       String @map("user_id") @db.Uuid
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  flowStatus FlowStatus @relation(fields: [flowStatusId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@id([projectId, flowStatusId])
+  @@index([flowStatusId])
+  @@index([userId])
+  @@map("project_status_default_assignees")
 }
 
 model AppSetting {

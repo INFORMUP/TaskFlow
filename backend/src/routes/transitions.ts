@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { canTransitionToStatus, enforceScope } from "../services/permission.service.js";
+import { resolveDefaultAssignee } from "../services/task.service.js";
 import { validateTransition, validateNote, validateResolution } from "../services/transition.service.js";
 import { CommonErrorResponses, IdParams, UserSummary } from "./_schemas.js";
 
@@ -142,6 +143,20 @@ export async function transitionRoutes(fastify: FastifyInstance) {
       }
 
       await prisma.$transaction(async (tx) => {
+        let resolvedAssigneeId: string | null = null;
+        if (newAssigneeUserId === undefined) {
+          const current = await tx.task.findUnique({
+            where: { id: task.id },
+            select: { assigneeId: true },
+          });
+          if (current?.assigneeId == null) {
+            resolvedAssigneeId = await resolveDefaultAssignee(
+              { taskId: task.id, flowStatusId: targetStatus.id },
+              tx,
+            );
+          }
+        }
+
         await tx.taskTransition.create({
           data: {
             taskId: task.id,
@@ -150,7 +165,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
             actorId: request.user.id,
             note: note!,
             actorType: request.user.actorType,
-            newAssigneeId: newAssigneeUserId ?? null,
+            newAssigneeId: newAssigneeUserId ?? resolvedAssigneeId ?? null,
           },
         });
 
@@ -159,7 +174,11 @@ export async function transitionRoutes(fastify: FastifyInstance) {
           data: {
             currentStatusId: targetStatus.id,
             ...(targetStatus.slug === "closed" && { resolution }),
-            ...(newAssigneeUserId !== undefined && { assigneeId: newAssigneeUserId ?? null }),
+            ...(newAssigneeUserId !== undefined
+              ? { assigneeId: newAssigneeUserId ?? null }
+              : resolvedAssigneeId != null
+                ? { assigneeId: resolvedAssigneeId }
+                : {}),
           },
         });
       });
