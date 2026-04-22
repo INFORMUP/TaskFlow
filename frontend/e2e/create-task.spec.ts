@@ -58,6 +58,12 @@ test.describe("Task creation", () => {
     // Form unmounts via the `created` emit once the POST resolves.
     await expect(page.getByPlaceholder("Title")).toBeHidden({ timeout: 5_000 });
 
+    // The board view reloads tasks on `created` — the new task should appear
+    // as a card with its title.
+    await expect(
+      page.locator(".card__title", { hasText: title }),
+    ).toBeVisible({ timeout: 5_000 });
+
     const verify = new Client({ connectionString: process.env.DATABASE_URL });
     await verify.connect();
     try {
