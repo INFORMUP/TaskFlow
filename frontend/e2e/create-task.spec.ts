@@ -25,6 +25,7 @@ test.describe("Task creation", () => {
       ({ accessToken, refreshToken }) => {
         localStorage.setItem("accessToken", accessToken);
         localStorage.setItem("refreshToken", refreshToken);
+        localStorage.setItem("taskflow_tour_completed", "true");
       },
       { accessToken: user.accessToken, refreshToken: user.refreshToken },
     );
