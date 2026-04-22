@@ -20,6 +20,7 @@ model Organization {
   flows       Flow[]
   apiTokens   ApiToken[]
   appSettings AppSetting[]
+  feedback    Feedback[]
   invitations Invitation[]
 
   @@map("organizations")
@@ -102,9 +103,10 @@ model User {
   defaultOnStatuses ProjectStatusDefaultAssignee[]
   apiTokens         ApiToken[]
   orgMemberships    OrgMember[]
-  invitationsSent   Invitation[]      @relation("InvitationInvitedBy")
-  invitationsAccepted Invitation[]    @relation("InvitationAcceptedBy")
-  invitationsRevoked  Invitation[]    @relation("InvitationRevokedBy")
+  feedback            Feedback[]
+  invitationsSent     Invitation[]      @relation("InvitationInvitedBy")
+  invitationsAccepted Invitation[]      @relation("InvitationAcceptedBy")
+  invitationsRevoked  Invitation[]      @relation("InvitationRevokedBy")
 
   @@map("users")
 }
@@ -403,6 +405,24 @@ model ApiTokenScope {
   @@id([tokenId, scopeId])
   @@index([scopeId])
   @@map("api_token_scopes")
+}
+
+model Feedback {
+  id         String    @id @default(uuid()) @db.Uuid
+  orgId      String    @map("org_id") @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  type       String // BUG, ENHANCEMENT
+  message    String    @db.Text
+  page       String?
+  adminNotes String?   @map("admin_notes") @db.Text
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz()
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+  @@map("feedback")
 }
 
 model Comment {
