@@ -10,15 +10,21 @@ import type {
 } from "@/api/organizations.api";
 
 const getOrganization = vi.fn();
-const addMember = vi.fn();
 const updateMemberRole = vi.fn();
 const removeMember = vi.fn();
+const listInvitations = vi.fn();
+const createInvitation = vi.fn();
+const resendInvitation = vi.fn();
+const revokeInvitation = vi.fn();
 
 vi.mock("@/api/organizations.api", () => ({
   getOrganization: (...a: unknown[]) => getOrganization(...a),
-  addMember: (...a: unknown[]) => addMember(...a),
   updateMemberRole: (...a: unknown[]) => updateMemberRole(...a),
   removeMember: (...a: unknown[]) => removeMember(...a),
+  listInvitations: (...a: unknown[]) => listInvitations(...a),
+  createInvitation: (...a: unknown[]) => createInvitation(...a),
+  resendInvitation: (...a: unknown[]) => resendInvitation(...a),
+  revokeInvitation: (...a: unknown[]) => revokeInvitation(...a),
 }));
 
 const routerReplace = vi.fn();
@@ -73,6 +79,7 @@ function detailFixture(role: OrgRole): OrgDetail {
 
 async function mountAs(role: OrgRole) {
   getOrganization.mockResolvedValue(detailFixture(role));
+  listInvitations.mockResolvedValue({ data: [] });
   const wrapper = mount(OrganizationView, {
     global: {
       provide: { [ORG_INJECTION_KEY as symbol]: makeStore(role) },
@@ -84,9 +91,12 @@ async function mountAs(role: OrgRole) {
 
 beforeEach(() => {
   getOrganization.mockReset();
-  addMember.mockReset();
   updateMemberRole.mockReset();
   removeMember.mockReset();
+  listInvitations.mockReset();
+  createInvitation.mockReset();
+  resendInvitation.mockReset();
+  revokeInvitation.mockReset();
   routerReplace.mockReset();
 });
 
@@ -107,13 +117,22 @@ describe("OrganizationView", () => {
     ).toBe(true);
   });
 
-  it("lets an owner add a member", async () => {
+  it("lets an owner send an invitation and shows the one-time link", async () => {
     const wrapper = await mountAs("owner");
-    addMember.mockResolvedValue({
-      userId: "u-new",
-      displayName: "new@example.com",
+    createInvitation.mockResolvedValue({
+      id: "inv-1",
+      orgId: "org-1",
       email: "new@example.com",
       role: "member",
+      status: "pending",
+      invitedById: "u-owner",
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+      acceptedAt: null,
+      acceptedByUserId: null,
+      revokedAt: null,
+      revokedById: null,
+      token: "tfinv_fake_token",
     });
 
     await wrapper.get("[data-testid='org-invite-email']").setValue(
@@ -122,13 +141,18 @@ describe("OrganizationView", () => {
     await wrapper.get("[data-testid='org-invite-submit']").trigger("submit");
     await flushPromises();
 
-    expect(addMember).toHaveBeenCalledWith("org-1", {
+    expect(createInvitation).toHaveBeenCalledWith("org-1", {
       email: "new@example.com",
       role: "member",
     });
     expect(
-      wrapper.find("[data-testid='org-member-row-u-new']").exists()
+      wrapper.find("[data-testid='org-invitation-row-inv-1']").exists()
     ).toBe(true);
+    expect(wrapper.find("[data-testid='org-invite-link']").exists()).toBe(true);
+    const linkValue = wrapper
+      .get("[data-testid='org-invite-link-value']")
+      .attributes("value");
+    expect(linkValue).toContain("tfinv_fake_token");
   });
 
   it("removes a member after confirmation", async () => {
