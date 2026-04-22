@@ -1,4 +1,7 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma-client.js";
+
+type PrismaClientLike = Prisma.TransactionClient | typeof prisma;
 
 const FLOW_PREFIXES: Record<string, string> = {
   bug: "BUG",
@@ -36,6 +39,67 @@ export async function getInitialStatus(flowId: string) {
     where: { flowId },
     orderBy: { sortOrder: "asc" },
   });
+}
+
+interface ResolveDefaultAssigneeInput {
+  flowStatusId: string;
+  projectId?: string | null;
+  taskId?: string | null;
+}
+
+async function isValidProjectAssignee(
+  client: PrismaClientLike,
+  projectId: string,
+  userId: string,
+): Promise<boolean> {
+  const user = await client.user.findUnique({
+    where: { id: userId },
+    select: { status: true },
+  });
+  if (!user || user.status !== "active") return false;
+  const membership = await client.projectTeam.findFirst({
+    where: { projectId, team: { members: { some: { userId } } } },
+    select: { teamId: true },
+  });
+  return !!membership;
+}
+
+export async function resolveDefaultAssignee(
+  input: ResolveDefaultAssigneeInput,
+  client: PrismaClientLike = prisma,
+): Promise<string | null> {
+  let projectId = input.projectId ?? null;
+
+  if (!projectId && input.taskId) {
+    const first = await client.taskProject.findFirst({
+      where: { taskId: input.taskId },
+      orderBy: [{ createdAt: "asc" }, { projectId: "asc" }],
+      select: { projectId: true },
+    });
+    projectId = first?.projectId ?? null;
+  }
+
+  if (!projectId) return null;
+
+  const statusDefault = await client.projectStatusDefaultAssignee.findUnique({
+    where: {
+      projectId_flowStatusId: { projectId, flowStatusId: input.flowStatusId },
+    },
+    select: { userId: true },
+  });
+  if (statusDefault && (await isValidProjectAssignee(client, projectId, statusDefault.userId))) {
+    return statusDefault.userId;
+  }
+
+  const project = await client.project.findUnique({
+    where: { id: projectId },
+    select: { defaultAssigneeUserId: true },
+  });
+  const projectDefault = project?.defaultAssigneeUserId ?? null;
+  if (projectDefault && (await isValidProjectAssignee(client, projectId, projectDefault))) {
+    return projectDefault;
+  }
+  return null;
 }
 
 interface CreateTaskInput {
@@ -89,12 +153,12 @@ export async function createTask(input: CreateTaskInput) {
   }
 
   let assigneeId = input.assigneeUserId ?? null;
-  if (!assigneeId && projectIds.length > 0) {
-    const firstProject = await prisma.project.findFirst({
-      where: { id: projectIds[0], orgId: input.orgId },
-      select: { defaultAssigneeUserId: true },
+  const hasExplicitAssignee = input.assigneeUserId !== undefined;
+  if (!hasExplicitAssignee && projectIds.length > 0) {
+    assigneeId = await resolveDefaultAssignee({
+      projectId: projectIds[0],
+      flowStatusId: initialStatus.id,
     });
-    assigneeId = firstProject?.defaultAssigneeUserId ?? null;
   }
 
   const displayId = await generateDisplayId(input.flowSlug);

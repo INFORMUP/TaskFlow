@@ -32,6 +32,7 @@ describe("tasks ↔ projects", () => {
     await prisma.project.deleteMany();
 
     const engineerTeamId = seedUuid("team", "engineer");
+    const productTeamId = seedUuid("team", "product");
     const a = await prisma.project.create({
       data: {
         orgId: DEFAULT_ORG_ID,
@@ -39,7 +40,7 @@ describe("tasks ↔ projects", () => {
         name: "Test A",
         ownerUserId: TEST_ENGINEER_ID,
         defaultAssigneeUserId: TEST_PRODUCT_ID,
-        teams: { create: [{ teamId: engineerTeamId }] },
+        teams: { create: [{ teamId: engineerTeamId }, { teamId: productTeamId }] },
       },
     });
     const b = await prisma.project.create({

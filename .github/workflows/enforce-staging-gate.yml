@@ -1,0 +1,52 @@
+name: Enforce staging gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+
+jobs:
+  staging-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hotfix label bypass
+        id: bypass
+        env:
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          echo "Labels: $LABELS"
+          if echo "$LABELS" | grep -q '"hotfix"'; then
+            echo "bypass=true" >> "$GITHUB_OUTPUT"
+            echo "OK: PR carries the hotfix label; skipping ancestry check."
+          else
+            echo "bypass=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout (full history)
+        if: steps.bypass.outputs.bypass != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require every PR commit to be reachable from `staging`
+        if: steps.bypass.outputs.bypass != 'true'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --prune origin +refs/heads/staging:refs/remotes/origin/staging
+          STAGING_SHA="$(git rev-parse origin/staging)"
+          echo "staging tip: $STAGING_SHA"
+          echo "PR head:     $HEAD_SHA"
+          echo "PR base:     $BASE_SHA"
+
+          # Commits introduced by this PR = head..base excluded from staging reachability.
+          # If any such commit is NOT an ancestor of staging, fail.
+          MISSING="$(git rev-list "$HEAD_SHA" --not "$STAGING_SHA" "$BASE_SHA")"
+          if [ -n "$MISSING" ]; then
+            echo "::error::The following commits are in this PR but have not landed on staging:"
+            echo "$MISSING"
+            echo "::error::Merge this branch into staging first, or apply the 'hotfix' label to bypass."
+            exit 1
+          fi
+          echo "OK: all PR commits are reachable from staging."

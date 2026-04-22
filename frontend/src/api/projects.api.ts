@@ -110,3 +110,35 @@ export async function detachProjectFlow(projectId: string, flowId: string): Prom
   });
   return res.data;
 }
+
+export interface StatusDefault {
+  flowStatusId: string;
+  userId: string;
+}
+
+export async function listStatusDefaults(projectId: string): Promise<StatusDefault[]> {
+  const res = await apiFetch<{ data: StatusDefault[] }>(
+    `/api/v1/projects/${projectId}/status-defaults`,
+  );
+  return res.data;
+}
+
+export async function setStatusDefault(
+  projectId: string,
+  flowStatusId: string,
+  userId: string,
+): Promise<StatusDefault> {
+  return apiFetch(`/api/v1/projects/${projectId}/status-defaults/${flowStatusId}`, {
+    method: "PUT",
+    body: JSON.stringify({ userId }),
+  });
+}
+
+export async function clearStatusDefault(
+  projectId: string,
+  flowStatusId: string,
+): Promise<void> {
+  await apiFetch(`/api/v1/projects/${projectId}/status-defaults/${flowStatusId}`, {
+    method: "DELETE",
+  });
+}

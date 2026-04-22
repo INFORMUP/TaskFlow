@@ -287,6 +287,104 @@ export async function attachProjectFlow(orgId: string, projectId: string, flowId
   return listProjectFlows(orgId, projectId);
 }
 
+export async function listStatusDefaults(orgId: string, projectId: string) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
+  if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
+
+  const rows = await prisma.projectStatusDefaultAssignee.findMany({
+    where: { projectId },
+    select: { flowStatusId: true, userId: true },
+  });
+  return rows;
+}
+
+async function projectFlowIds(projectId: string, defaultFlowId: string | null) {
+  const attached = await prisma.projectFlow.findMany({
+    where: { projectId },
+    select: { flowId: true },
+  });
+  const ids = new Set(attached.map((row) => row.flowId));
+  if (defaultFlowId) ids.add(defaultFlowId);
+  return ids;
+}
+
+async function assertFlowStatusInProject(
+  projectId: string,
+  defaultFlowId: string | null,
+  flowStatusId: string,
+) {
+  const status = await prisma.flowStatus.findUnique({
+    where: { id: flowStatusId },
+    select: { flowId: true },
+  });
+  if (!status) {
+    throw new ProjectServiceError("INVALID_STATUS", "Flow status not found", 422);
+  }
+  const flowIds = await projectFlowIds(projectId, defaultFlowId);
+  if (!flowIds.has(status.flowId)) {
+    throw new ProjectServiceError(
+      "INVALID_STATUS",
+      "Flow status does not belong to any flow on this project",
+      422,
+    );
+  }
+}
+
+async function assertUserOnProjectTeam(projectId: string, userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.status !== "active") {
+    throw new ProjectServiceError("INVALID_USER", "Default assignee must be an active user", 422);
+  }
+  const membership = await prisma.projectTeam.findFirst({
+    where: {
+      projectId,
+      team: { members: { some: { userId } } },
+    },
+    select: { teamId: true },
+  });
+  if (!membership) {
+    throw new ProjectServiceError(
+      "INVALID_USER",
+      "Default assignee must be a member of a project team",
+      422,
+    );
+  }
+}
+
+export async function setStatusDefault(
+  orgId: string,
+  projectId: string,
+  flowStatusId: string,
+  userId: string,
+) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
+  if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
+
+  await assertFlowStatusInProject(projectId, project.defaultFlowId, flowStatusId);
+  await assertUserOnProjectTeam(projectId, userId);
+
+  await prisma.projectStatusDefaultAssignee.upsert({
+    where: { projectId_flowStatusId: { projectId, flowStatusId } },
+    update: { userId },
+    create: { projectId, flowStatusId, userId },
+  });
+
+  return { flowStatusId, userId };
+}
+
+export async function clearStatusDefault(
+  orgId: string,
+  projectId: string,
+  flowStatusId: string,
+) {
+  const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
+  if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);
+
+  await prisma.projectStatusDefaultAssignee.deleteMany({
+    where: { projectId, flowStatusId },
+  });
+}
+
 export async function detachProjectFlow(orgId: string, projectId: string, flowId: string) {
   const project = await prisma.project.findFirst({ where: { id: projectId, orgId } });
   if (!project) throw new ProjectServiceError("NOT_FOUND", "Project not found", 404);

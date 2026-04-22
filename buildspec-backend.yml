@@ -1,0 +1,34 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo "Preparing deploy bundle from backend/ subdirectory"
+      - mkdir -p /tmp/eb-bundle
+      - cp backend/Dockerfile /tmp/eb-bundle/
+      - cp backend/package.json /tmp/eb-bundle/
+      - cp backend/package-lock.json /tmp/eb-bundle/
+      - cp backend/tsconfig.json /tmp/eb-bundle/
+      - cp -r backend/prisma /tmp/eb-bundle/
+      - cp -r backend/src /tmp/eb-bundle/
+      - |
+        cat > /tmp/eb-bundle/entrypoint.sh <<'ENTRY'
+        #!/bin/sh
+        set -e
+        echo "Running database migrations..."
+        npx prisma migrate deploy
+        echo "Starting server..."
+        exec node dist/server.js
+        ENTRY
+      - chmod +x /tmp/eb-bundle/entrypoint.sh
+      - sed -i 's|^EXPOSE 3000|COPY entrypoint.sh ./\nRUN chmod +x entrypoint.sh\n\nEXPOSE 3000|' /tmp/eb-bundle/Dockerfile
+      - sed -i 's|^CMD \["node", "dist/server.js"\]|CMD ["./entrypoint.sh"]|' /tmp/eb-bundle/Dockerfile
+  build:
+    commands:
+      - echo "Deploy bundle ready at /tmp/eb-bundle"
+
+artifacts:
+  files:
+    - "**/*"
+  base-directory: /tmp/eb-bundle
+  discard-paths: no
