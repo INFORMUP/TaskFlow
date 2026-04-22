@@ -23,9 +23,17 @@ Two options worth considering; pick one before starting work.
 - **Resend** (recommended). Simple HTTP API, native React/Vue template support isn't needed (we're sending plaintext + a simple HTML), cheap for the volume TaskFlow will see, has a free tier sufficient for dev/staging. One API key.
 - **Nodemailer + SMTP**. Vendor-neutral; works with any SMTP provider (including Gmail, SES, Postmark). More config knobs (host, port, auth, TLS). Good if the org already has an SMTP relay.
 
-Avoid AWS SES unless there's an existing IAM footprint — sandbox lift, domain verification, and bounce handling aren't worth it for a first cut.
+**AWS SES** is also on the table since TaskFlow is an AWS shop. If the IAM footprint already exists, SES becomes the natural choice: ~$0.10/1k, IAM-based auth (no new secret to manage), CloudWatch logs/metrics alongside everything else, and bounce/complaint events via SNS when we want them. The mailer service shape stays identical — just a different client (`@aws-sdk/client-sesv2`, or Nodemailer over SES SMTP if we want to keep things vendor-neutral).
 
-**Recommendation:** Resend. It's the cleanest path and the abstraction boundary below is small enough that swapping to SMTP later is one file.
+The SES cost the doc originally flagged (sandbox lift, DKIM/SPF, domain verification) is only real in a greenfield AWS account. If those are already done for TaskFlow, it's the cleanest path.
+
+**Questions to answer before picking a provider:**
+
+1. Is there an existing AWS account for TaskFlow, and is SES already out of sandbox there?
+2. Is the sending domain (e.g., `taskflow.<something>`) already verified in SES, or would we need to set up DKIM/SPF records?
+3. How's the backend deployed — EC2/ECS/Lambda with an IAM role, or somewhere that'd need static AWS credentials?
+
+If #1 and #2 are yes, use **SES**. Otherwise, **Resend** is a faster first cut and the abstraction boundary below is small enough that swapping to SES later is one file.
 
 ## What to build
 

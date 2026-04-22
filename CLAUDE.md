@@ -41,6 +41,11 @@ external/      # Reference projects (git submodules)
 - Prisma schema: `backend/prisma/schema.prisma`
 - Seed data: `backend/prisma/seeders/` (deterministic UUIDs via uuid5)
 
+## Branching Workflow
+- Two long-lived branches: `main` (production) and `staging`.
+- All changes must be made on feature branches and PR'd into `staging` first — never PR directly into `main`.
+- Promotion to `main` happens from `staging` after validation.
+
 ## Commit Workflow
 - Run `npm test` in the affected package(s) (backend, frontend, or both) before committing.
 - A pre-commit hook runs `tsc --noEmit` (backend) and `vue-tsc --noEmit` (frontend) automatically. If it fails, fix type errors before committing.
