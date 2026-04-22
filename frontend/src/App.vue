@@ -4,15 +4,18 @@ import { useRoute } from "vue-router";
 import { provideAuth } from "@/composables/useAuth";
 import { provideCurrentUser, type TeamSelection } from "@/composables/useCurrentUser";
 import { provideOrg } from "@/composables/useOrg";
+import { provideOnboardingTour } from "@/composables/useOnboardingTour";
 import AppLayout from "@/layouts/AppLayout.vue";
 import AuthLayout from "@/layouts/AuthLayout.vue";
 import TeamPickerModal from "@/features/auth/components/TeamPickerModal.vue";
+import TourOverlay from "@/components/TourOverlay.vue";
 
 const route = useRoute();
 
 const auth = provideAuth();
 const currentUser = provideCurrentUser();
 const org = provideOrg();
+provideOnboardingTour();
 
 // Load whenever the authentication state flips to true, and clear on logout.
 watch(
@@ -47,5 +50,6 @@ async function handleTeamSelection(teams: TeamSelection[]) {
       submit-label="Join"
       @submit="handleTeamSelection"
     />
+    <TourOverlay />
   </AppLayout>
 </template>

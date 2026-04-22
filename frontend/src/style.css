@@ -13,6 +13,11 @@
   --priority-low: #65a30d;
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08);
   --radius: 6px;
+  --tour-backdrop: rgba(0, 0, 0, 0.5);
+  --tour-tooltip-bg: var(--bg-primary);
+  --tour-tooltip-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  --tour-spotlight-padding: 8px;
+  --tour-spotlight-radius: 8px;
 }
 
 * {
