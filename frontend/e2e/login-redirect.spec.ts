@@ -27,9 +27,7 @@ test.describe("Login redirect preservation", () => {
     // 1. Unauthenticated deep link → router guard bounces to /login with the
     //    original path preserved in ?redirect=.
     await page.goto(deepLink);
-    await expect(page).toHaveURL(
-      `/login?redirect=${encodeURIComponent(deepLink)}`
-    );
+    await expect(page).toHaveURL(`/login?redirect=${deepLink}`);
     await expect(
       page.getByRole("button", { name: "Sign in with Google" })
     ).toBeVisible();
