@@ -1,6 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import {
+  addProjectRepository,
   addProjectTeam,
   archiveProject,
   attachProjectFlow,
@@ -11,9 +12,11 @@ import {
   getProject,
   isAdmin,
   listProjectFlows,
+  listProjectRepositories,
   listProjects,
   listStatusDefaults,
   ProjectServiceError,
+  removeProjectRepository,
   removeProjectTeam,
   setStatusDefault,
   updateProject,
@@ -101,6 +104,31 @@ const StatusDefaultRecord = Type.Object(
 );
 
 const StatusDefaultBody = Type.Object({ userId: Type.String({ format: "uuid" }) });
+
+const RepoProviderEnum = Type.Union([Type.Literal("GITHUB")]);
+
+const RepositoryRecord = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    projectId: Type.String({ format: "uuid" }),
+    provider: RepoProviderEnum,
+    owner: Type.String(),
+    name: Type.String(),
+    createdAt: Type.String({ format: "date-time" }),
+  },
+  { additionalProperties: true }
+);
+
+const CreateRepositoryBody = Type.Object({
+  provider: RepoProviderEnum,
+  owner: Type.String({ minLength: 1 }),
+  name: Type.String({ minLength: 1 }),
+});
+
+const RepositoryParams = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  repositoryId: Type.String({ format: "uuid" }),
+});
 
 const StatusDefaultParams = Type.Object({
   id: Type.String({ format: "uuid" }),
@@ -514,6 +542,89 @@ export async function projectRoutes(fastify: FastifyInstance) {
       }
       try {
         return { data: await detachProjectFlow(request.org.id, id, flowId) };
+      } catch (err) {
+        return handleError(reply, err);
+      }
+    }
+  );
+
+  fastify.get<{ Params: { id: string } }>(
+    "/api/v1/projects/:id/repositories",
+    {
+      schema: {
+        summary: "List repositories attached to a project",
+        tags: ["projects"],
+        params: IdParams,
+        response: {
+          200: Type.Object(
+            { data: Type.Array(RepositoryRecord) },
+            { additionalProperties: true }
+          ),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      try {
+        return { data: await listProjectRepositories(request.org.id, id) };
+      } catch (err) {
+        return handleError(reply, err);
+      }
+    }
+  );
+
+  fastify.post<{ Params: { id: string }; Body: Static<typeof CreateRepositoryBody> }>(
+    "/api/v1/projects/:id/repositories",
+    {
+      schema: {
+        summary: "Attach a repository to a project",
+        description: "Project owner or admins only.",
+        tags: ["projects"],
+        params: IdParams,
+        body: CreateRepositoryBody,
+        response: { 201: RepositoryRecord, ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "Only the project owner or admins can modify repositories" },
+        });
+      }
+      try {
+        const repo = await addProjectRepository(request.org.id, id, request.body);
+        return reply.status(201).send(repo);
+      } catch (err) {
+        return handleError(reply, err);
+      }
+    }
+  );
+
+  fastify.delete<{ Params: Static<typeof RepositoryParams> }>(
+    "/api/v1/projects/:id/repositories/:repositoryId",
+    {
+      schema: {
+        summary: "Detach a repository from a project",
+        description: "Project owner or admins only.",
+        tags: ["projects"],
+        params: RepositoryParams,
+        response: { 204: Type.Null(), ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      const { id, repositoryId } = request.params;
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      if (!(await canManageProject(request.org.id, id, request.user.id, teamSlugs, request.org.role))) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "Only the project owner or admins can modify repositories" },
+        });
+      }
+      try {
+        await removeProjectRepository(request.org.id, id, repositoryId);
+        return reply.status(204).send();
       } catch (err) {
         return handleError(reply, err);
       }
