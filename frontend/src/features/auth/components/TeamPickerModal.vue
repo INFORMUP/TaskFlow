@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { fetchTeams, type Team } from "@/api/teams.api";
 
 interface Selection {
@@ -26,7 +26,18 @@ const loadError = ref<string | null>(null);
 const selected = ref<Record<string, boolean>>({});
 const primarySlug = ref<string | null>(null);
 
+const previouslyFocused = ref<HTMLElement | null>(null);
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && props.dismissible) {
+    e.stopPropagation();
+    emit("cancel");
+  }
+}
+
 onMounted(async () => {
+  previouslyFocused.value = (document.activeElement as HTMLElement) ?? null;
+  document.addEventListener("keydown", handleKeydown);
   try {
     teams.value = await fetchTeams();
   } catch (e: any) {
@@ -34,6 +45,11 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", handleKeydown);
+  previouslyFocused.value?.focus?.();
 });
 
 watch(
@@ -86,9 +102,14 @@ function handleSubmit() {
 </script>
 
 <template>
-  <div class="team-picker__backdrop" role="dialog" aria-modal="true">
+  <div
+    class="team-picker__backdrop"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="team-picker-title"
+  >
     <div class="team-picker">
-      <h2 class="team-picker__title">{{ title || "Pick your team" }}</h2>
+      <h2 id="team-picker-title" class="team-picker__title">{{ title || "Pick your team" }}</h2>
       <p class="team-picker__subtitle">
         Your permissions are the union across every team you join. To see how the
         app looks from a single team's perspective, join only that team.
