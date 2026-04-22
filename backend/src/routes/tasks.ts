@@ -145,7 +145,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
           priority: priority || "medium",
           createdBy: request.user.id,
           actorType: request.user.actorType,
-          assigneeUserId: assigneeUserId ?? null,
+          assigneeUserId,
           projectIds: projectIds ?? [],
           dueDate: dueDate ?? null,
         });
