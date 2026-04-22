@@ -149,6 +149,11 @@ describe("OrganizationView", () => {
       wrapper.find("[data-testid='org-invitation-row-inv-1']").exists()
     ).toBe(true);
     expect(wrapper.find("[data-testid='org-invite-link']").exists()).toBe(true);
+    // Link is hidden by default now that email is the primary channel.
+    expect(wrapper.find("[data-testid='org-invite-link-value']").exists()).toBe(
+      false,
+    );
+    await wrapper.get("[data-testid='org-invite-link-show']").trigger("click");
     const linkValue = wrapper
       .get("[data-testid='org-invite-link-value']")
       .attributes("value");

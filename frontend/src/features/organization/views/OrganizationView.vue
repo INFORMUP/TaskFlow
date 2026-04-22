@@ -29,10 +29,13 @@ const newRole = ref<OrgRole>("member");
 const addingMember = ref(false);
 const addError = ref<string | null>(null);
 
-// Invitations list + last-issued link (shown once so admin can share it)
+// Invitations list + last-issued link (hidden by default; admins can reveal
+// it as a fallback when they need to share manually — email is the default
+// delivery channel now).
 const invitations = ref<Invitation[]>([]);
 const lastInviteLink = ref<string | null>(null);
 const lastInviteEmail = ref<string | null>(null);
+const showInviteLink = ref(false);
 
 // Remove confirmation
 const removeTarget = ref<OrgMember | null>(null);
@@ -153,6 +156,7 @@ async function copyInviteLink() {
 function dismissInviteLink() {
   lastInviteLink.value = null;
   lastInviteEmail.value = null;
+  showInviteLink.value = false;
 }
 
 async function handleRoleChange(member: OrgMember, role: OrgRole) {
@@ -258,10 +262,27 @@ function cancelRemove() {
         data-testid="org-invite-link"
       >
         <p class="organization__invite-link-intro">
-          Invitation created for <strong>{{ lastInviteEmail }}</strong>. Share
-          this link — it's shown only once.
+          Invitation emailed to <strong>{{ lastInviteEmail }}</strong>.
+          <button
+            v-if="!showInviteLink"
+            type="button"
+            class="organization__link-btn organization__link-btn--neutral"
+            data-testid="org-invite-link-show"
+            @click="showInviteLink = true"
+          >
+            Show link
+          </button>
+          <button
+            v-else
+            type="button"
+            class="organization__link-btn organization__link-btn--neutral"
+            data-testid="org-invite-link-hide"
+            @click="showInviteLink = false"
+          >
+            Hide link
+          </button>
         </p>
-        <div class="organization__invite-link-row">
+        <div v-if="showInviteLink" class="organization__invite-link-row">
           <input
             class="organization__input"
             readonly

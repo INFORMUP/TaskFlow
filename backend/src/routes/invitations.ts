@@ -4,6 +4,8 @@ import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { prisma } from "../prisma-client.js";
 import { hashToken } from "../services/token.service.js";
+import { sendInviteEmail } from "../services/mailer.service.js";
+import { config } from "../config.js";
 import type { OrgRole } from "../types/index.js";
 import { CommonErrorResponses, ErrorResponse, IdParams } from "./_schemas.js";
 
@@ -114,6 +116,31 @@ function sendForbidden(reply: FastifyReply, message: string) {
   return reply.status(403).send({ error: { code: "FORBIDDEN", message } });
 }
 
+async function dispatchInviteEmail(
+  inv: InviteRow,
+  plaintextToken: string,
+): Promise<void> {
+  try {
+    const [org, inviter] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: inv.orgId } }),
+      inv.invitedById
+        ? prisma.user.findUnique({ where: { id: inv.invitedById } })
+        : Promise.resolve(null),
+    ]);
+    const acceptUrl = `${config.inviteAcceptBaseUrl}?token=${encodeURIComponent(plaintextToken)}`;
+    await sendInviteEmail({
+      to: inv.email,
+      orgName: org?.name ?? "an organization",
+      inviterName: inviter?.displayName ?? null,
+      role: inv.role,
+      acceptUrl,
+      expiresAt: inv.expiresAt,
+    });
+  } catch (err) {
+    console.error("[invitations] failed to dispatch invite email:", err);
+  }
+}
+
 /**
  * Consume every pending invitation whose email matches this user's email and
  * create OrgMember rows as needed. Called both from the explicit accept
@@ -218,6 +245,7 @@ export async function invitationRoutes(fastify: FastifyInstance) {
             expiresAt,
           },
         });
+        await dispatchInviteEmail(inv, plaintext);
         return reply.status(201).send({ ...serialize(inv), token: plaintext });
       } catch (err) {
         if (
@@ -310,6 +338,7 @@ export async function invitationRoutes(fastify: FastifyInstance) {
         where: { id: inviteId },
         data: { tokenHash: hash, expiresAt },
       });
+      await dispatchInviteEmail(updated, plaintext);
       return reply.send({ ...serialize(updated), token: plaintext });
     },
   );
