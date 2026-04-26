@@ -125,18 +125,31 @@ interface TryCreateProductTaskInput {
   log: FastifyRequest["log"];
 }
 
-async function ensureFeedbackBotUser(): Promise<void> {
-  await prisma.user.upsert({
-    where: { id: FEEDBACK_BOT_USER_ID },
-    update: {},
-    create: {
-      id: FEEDBACK_BOT_USER_ID,
-      email: null,
-      displayName: FEEDBACK_BOT_DISPLAY_NAME,
-      actorType: "agent",
-      status: "active",
-    },
-  });
+// Cache the upsert per process so we don't write on every feedback POST.
+// The seeder also creates this user; the upsert is defense-in-depth for
+// environments where the seed hasn't been re-run after this change shipped.
+let feedbackBotEnsured: Promise<void> | null = null;
+function ensureFeedbackBotUser(): Promise<void> {
+  if (!feedbackBotEnsured) {
+    feedbackBotEnsured = prisma.user
+      .upsert({
+        where: { id: FEEDBACK_BOT_USER_ID },
+        update: {},
+        create: {
+          id: FEEDBACK_BOT_USER_ID,
+          email: null,
+          displayName: FEEDBACK_BOT_DISPLAY_NAME,
+          actorType: "agent",
+          status: "active",
+        },
+      })
+      .then(() => undefined)
+      .catch((err) => {
+        feedbackBotEnsured = null;
+        throw err;
+      });
+  }
+  return feedbackBotEnsured;
 }
 
 async function tryCreateProductTask(
@@ -180,7 +193,14 @@ async function tryCreateProductTask(
       assigneeUserId: null,
       projectIds: [project.id],
     });
-    return task?.id ?? null;
+    if (!task) {
+      input.log.warn(
+        { productProjectOrgId, productProjectKey, flowSlug, projectId: project.id },
+        "feedback: flow not found in product org; skipping task creation",
+      );
+      return null;
+    }
+    return task.id;
   } catch (err) {
     input.log.error(
       { err, flowSlug, projectId: project.id },
@@ -216,12 +236,9 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           },
         });
       }
-      const taskId = await tryCreateProductTask({
-        feedbackType: type,
-        message: trimmed,
-        page: page ?? null,
-        log: request.log,
-      });
+      // Insert the feedback row first so a task-creation failure can't
+      // produce an orphan task with no feedback link. Then create the task,
+      // then update the row with the resulting taskId.
       const created = await prisma.feedback.create({
         data: {
           orgId: request.org.id,
@@ -229,9 +246,28 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           type,
           message: trimmed,
           page: page ?? null,
-          taskId,
         },
       });
+      const taskId = await tryCreateProductTask({
+        feedbackType: type,
+        message: trimmed,
+        page: page ?? null,
+        log: request.log,
+      });
+      if (taskId) {
+        try {
+          const updated = await prisma.feedback.update({
+            where: { id: created.id },
+            data: { taskId },
+          });
+          return reply.status(201).send(updated);
+        } catch (err) {
+          request.log.error(
+            { err, feedbackId: created.id, taskId },
+            "feedback: created task but failed to link it to feedback row (orphan task)",
+          );
+        }
+      }
       return reply.status(201).send(created);
     },
   );
