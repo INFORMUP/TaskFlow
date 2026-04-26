@@ -7,10 +7,17 @@ import TaskCard from "../components/TaskCard.vue";
 
 type GroupKey = "in_progress" | "todo" | "done";
 
+interface FlowRef {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 interface Group {
   key: GroupKey;
   label: string;
   tasks: Task[];
+  flows?: FlowRef[];
 }
 
 const router = useRouter();
@@ -47,7 +54,18 @@ const groups = computed<Group[]>(() => {
   const out: Group[] = [];
   if (inProgress.length) out.push({ key: "in_progress", label: "In progress", tasks: inProgress });
   if (todo.length) out.push({ key: "todo", label: "To do", tasks: todo });
-  if (done.length) out.push({ key: "done", label: `Done (last ${DONE_WINDOW_DAYS} days)`, tasks: done.slice(0, DONE_CAP) });
+  if (done.length) {
+    const seen = new Map<string, FlowRef>();
+    for (const t of done) {
+      if (!seen.has(t.flow.id)) seen.set(t.flow.id, { id: t.flow.id, slug: t.flow.slug, name: t.flow.name });
+    }
+    out.push({
+      key: "done",
+      label: `Done (last ${DONE_WINDOW_DAYS} days)`,
+      tasks: done.slice(0, DONE_CAP),
+      flows: [...seen.values()],
+    });
+  }
   return out;
 });
 
@@ -125,8 +143,8 @@ onMounted(load);
     >
       <p>You have no assigned tasks right now.</p>
       <p>
-        Browse <a href="/flows">all flows</a> or check your
-        <a href="/projects">projects</a>.
+        Browse <router-link to="/flows" data-testid="my-work-empty-flows-link">all flows</router-link> or check your
+        <router-link to="/projects" data-testid="my-work-empty-projects-link">projects</router-link>.
       </p>
     </div>
 
@@ -140,6 +158,17 @@ onMounted(load);
         <h2 :data-testid="`my-work-group-heading-${g.key}`" class="my-work__group-heading">
           {{ g.label }}
           <span class="my-work__count">{{ g.tasks.length }}</span>
+          <span v-if="g.flows && g.flows.length" class="my-work__view-all">
+            <router-link
+              v-for="f in g.flows"
+              :key="f.id"
+              :to="`/tasks/${f.slug}`"
+              :data-testid="`my-work-view-all-${f.slug}`"
+              class="my-work__view-all-link"
+            >
+              View all in {{ f.name }}
+            </router-link>
+          </span>
         </h2>
         <ul class="my-work__list">
           <li
@@ -149,7 +178,7 @@ onMounted(load);
             :data-testid="`my-work-card-${t.displayId}`"
             @click="onCardClick(t)"
           >
-            <TaskCard :task="t" @click="onCardClick(t)" />
+            <TaskCard :task="t" />
             <div class="my-work__meta">
               <span class="my-work__chip">{{ t.flow.name }}</span>
               <span class="my-work__chip">{{ t.currentStatus.name }}</span>
@@ -226,6 +255,20 @@ onMounted(load);
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.my-work__view-all {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 0.5rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.my-work__view-all-link {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent);
 }
 
 .my-work__count {

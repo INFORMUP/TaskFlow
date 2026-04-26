@@ -147,14 +147,69 @@ describe("MyWorkView", () => {
     expect(wrapper.text()).toContain("boom");
   });
 
-  it("renders an empty state with links to /flows and /projects when there are no tasks", async () => {
+  it("renders an empty state with router-link links to /flows and /projects when there are no tasks", async () => {
     getTasks.mockResolvedValue({ data: [], pagination: { cursor: null, hasMore: false } });
 
     const { wrapper } = await mountView();
 
     const empty = wrapper.find("[data-testid='my-work-empty']");
     expect(empty.exists()).toBe(true);
-    expect(empty.html()).toContain('href="/flows"');
-    expect(empty.html()).toContain('href="/projects"');
+    const flowsLink = empty.find("[data-testid='my-work-empty-flows-link']");
+    const projectsLink = empty.find("[data-testid='my-work-empty-projects-link']");
+    expect(flowsLink.exists()).toBe(true);
+    expect(projectsLink.exists()).toBe(true);
+    // router-link renders as <a> with the resolved href; SPA navigation is handled internally.
+    expect(flowsLink.attributes("href")).toBe("/flows");
+    expect(projectsLink.attributes("href")).toBe("/projects");
+  });
+
+  it("clicking a card fires router.push exactly once (no double-firing)", async () => {
+    getTasks.mockResolvedValue({
+      data: [
+        task({ id: "t-prog", displayId: "FEAT-3", title: "Progress task", currentStatus: { id: "s-design", slug: "design", name: "Design" } }),
+      ],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper, router } = await mountView();
+    const push = vi.spyOn(router, "push");
+
+    await wrapper.find("[data-testid='my-work-card-FEAT-3']").trigger("click");
+    await flushPromises();
+
+    expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a 'View all' link in the Done section for each unique flow", async () => {
+    const featureDone = task({
+      id: "t-done-1",
+      displayId: "FEAT-9",
+      title: "Done feature",
+      resolution: "completed",
+      currentStatus: { id: "s-closed", slug: "closed", name: "Closed" },
+      updatedAt: new Date().toISOString(),
+    });
+    const bugDone = task({
+      id: "t-done-2",
+      displayId: "BUG-3",
+      title: "Done bug",
+      resolution: "completed",
+      currentStatus: { id: "s-closed", slug: "closed", name: "Closed" },
+      flow: { id: "f-bug", slug: "bug", name: "Bug" },
+      updatedAt: new Date().toISOString(),
+    });
+    getTasks.mockResolvedValue({
+      data: [featureDone, bugDone],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper } = await mountView();
+
+    const featureLink = wrapper.find("[data-testid='my-work-view-all-feature']");
+    const bugLink = wrapper.find("[data-testid='my-work-view-all-bug']");
+    expect(featureLink.exists()).toBe(true);
+    expect(bugLink.exists()).toBe(true);
+    expect(featureLink.attributes("href")).toBe("/tasks/feature");
+    expect(bugLink.attributes("href")).toBe("/tasks/bug");
   });
 });
