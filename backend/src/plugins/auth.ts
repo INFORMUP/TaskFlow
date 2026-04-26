@@ -137,7 +137,12 @@ export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance)
     request.user = result.user;
 
     if (skipMembership) {
-      request.org = { id: result.orgId, role: "member" };
+      // No-membership routes operate org-less: the caller's JWT orgId has
+      // nothing to do with the resource being acted on (e.g. an invitation
+      // belongs to its own org). Exposing it as `request.org.id` would
+      // silently mislead any future middleware/handler that scopes queries
+      // by it. Leave `id` empty so accidental use fails loudly instead.
+      request.org = { id: "", role: "member" };
       return;
     }
 
