@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { buildApp } from "../helpers/app.js";
+import { createApp } from "../../app.js";
 import { mintTestToken, TEST_ENGINEER_ID, TEST_USER_ID } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
 import { hashToken } from "../../services/token.service.js";
@@ -350,6 +351,43 @@ describe("invitations API", () => {
         payload: { token: plaintext },
       });
       expect(accept.statusCode).toBe(410);
+    });
+
+    it("does not expose the caller's JWT orgId on request.org for the no-membership accept route", async () => {
+      // Regression for #37: previously the auth plugin set
+      // request.org.id = caller's JWT orgId on /invitations/accept, which
+      // would silently leak into any future handler that scoped queries by
+      // request.org.id. The invariant: on no-membership routes,
+      // request.org.id must not be a caller-derived org.
+      await makeInvitee(INVITEE_EMAIL);
+      let observedOrgId: string | undefined;
+      const app = createApp();
+      app.addHook("preHandler", async (request) => {
+        if (request.url.startsWith("/api/v1/invitations/accept")) {
+          observedOrgId = request.org?.id;
+        }
+      });
+      await app.ready();
+
+      const ownerToken = mintTestToken(TEST_ENGINEER_ID, { orgId: ORG_ID });
+      const created = await app.inject({
+        method: "POST",
+        url: `/api/v1/organizations/${ORG_ID}/invitations`,
+        headers: { authorization: `Bearer ${ownerToken}` },
+        payload: { email: INVITEE_EMAIL, role: "member" },
+      });
+      const { token: inviteToken } = created.json();
+
+      const inviteeToken = mintTestToken(INVITEE_USER_ID, { orgId: ORG_ID });
+      const accept = await app.inject({
+        method: "POST",
+        url: `/api/v1/invitations/accept`,
+        headers: { authorization: `Bearer ${inviteeToken}` },
+        payload: { token: inviteToken },
+      });
+      expect(accept.statusCode).toBe(200);
+      expect(observedOrgId).toBe("");
+      expect(observedOrgId).not.toBe(ORG_ID);
     });
   });
 });
