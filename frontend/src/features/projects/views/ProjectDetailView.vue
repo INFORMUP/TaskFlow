@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ProjectForm from "@/features/projects/components/ProjectForm.vue";
 import ProjectFlowsSection from "@/features/projects/components/ProjectFlowsSection.vue";
+import ProjectRepositoriesSection from "@/features/projects/components/ProjectRepositoriesSection.vue";
 import ProjectStatusDefaultsSection from "@/features/projects/components/ProjectStatusDefaultsSection.vue";
 import {
   archiveProject,
@@ -112,6 +113,8 @@ async function toggleArchive() {
       :default-flow-id="project.defaultFlow?.id ?? null"
       :users="users"
     />
+
+    <ProjectRepositoriesSection :project-id="project.id" />
   </section>
   <p v-else>Loading…</p>
 </template>

@@ -16,7 +16,7 @@ Today TaskFlow has no channel for users to surface issues or ideas from inside t
 
 Work the phases in order. Each phase must land green on `main` before the next begins — do not stack branches. Each file is self-contained; open it and follow its instructions.
 
-1. [`01-schema-and-api.md`](./01-schema-and-api.md) — Prisma model, migration, `POST /api/feedback` endpoint, admin endpoints, route tests.
+1. ~~`01-schema-and-api.md`~~ — **Shipped 2026-04-22** via PR #25 (merged to `staging`). Archived at [`archive/2026-04-22-feedback-widget-01-schema-and-api.md`](../archive/2026-04-22-feedback-widget-01-schema-and-api.md).
 2. [`02-feedback-bubble.md`](./02-feedback-bubble.md) — `FeedbackBubble.vue` component, API client, mount in `AppLayout.vue`, frontend tests.
 3. [`03-admin-view.md`](./03-admin-view.md) — Admin feedback list view with filtering, admin notes, archive/unarchive, CSV export, frontend tests.
 
