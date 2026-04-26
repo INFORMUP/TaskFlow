@@ -96,9 +96,17 @@ async function loadStatuses() {
 async function loadTasks() {
   loading.value = true;
   try {
-    const params = toApiParams(filters.value, { flow: flowSlug.value });
-    const res = await getTasks(params);
-    tasks.value = res.data;
+    const baseParams = toApiParams(filters.value, { flow: flowSlug.value });
+    const collected: Task[] = [];
+    let cursor: string | null = null;
+    do {
+      const params: Record<string, string> = { ...baseParams, limit: "100" };
+      if (cursor) params.cursor = cursor;
+      const res = await getTasks(params);
+      collected.push(...res.data);
+      cursor = res.pagination.hasMore ? res.pagination.cursor : null;
+    } while (cursor);
+    tasks.value = collected;
   } finally {
     loading.value = false;
   }
@@ -299,6 +307,7 @@ onMounted(async () => {
         :tasks="tasksForStatus(status.slug)"
         :flow-slug="flowSlug"
         :interactive="true"
+        :default-collapsed="status.slug === 'closed'"
         :drag-in-progress="dragSourceStatusSlug !== null"
         :drag-source-status-slug="dragSourceStatusSlug"
         @task-click="handleTaskClick"

@@ -189,3 +189,82 @@ describe("TaskBoardView — inline interactions", () => {
     expect(updateTask).toHaveBeenCalledWith("t-1", { assigneeUserId: "u-2" });
   });
 });
+
+describe("TaskBoardView — pagination", () => {
+  it("passes limit=100 and follows the cursor until hasMore is false", async () => {
+    const page1 = [
+      taskFixture({ id: "t-1", displayId: "FEAT-1", title: "First" }),
+      taskFixture({ id: "t-2", displayId: "FEAT-2", title: "Second" }),
+    ];
+    const page2 = [taskFixture({ id: "t-3", displayId: "FEAT-3", title: "Third" })];
+
+    getTasks.mockImplementation((params: Record<string, string>) => {
+      expect(params.limit).toBe("100");
+      if (!params.cursor) {
+        return Promise.resolve({
+          data: page1,
+          pagination: { cursor: "2026-04-09T00:00:00.000Z", hasMore: true },
+        });
+      }
+      expect(params.cursor).toBe("2026-04-09T00:00:00.000Z");
+      return Promise.resolve({ data: page2, pagination: { cursor: null, hasMore: false } });
+    });
+
+    const { wrapper } = await mountBoard();
+    expect(getTasks).toHaveBeenCalledTimes(2);
+    const text = wrapper.text();
+    expect(text).toContain("First");
+    expect(text).toContain("Second");
+    expect(text).toContain("Third");
+  });
+});
+
+describe("TaskBoardView — closed column collapse", () => {
+  it("renders the closed column collapsed by default so its tasks are not visible", async () => {
+    const closedTask = taskFixture({
+      id: "t-closed",
+      displayId: "FEAT-9",
+      title: "Already shipped",
+      currentStatus: { id: "s-7", slug: "closed", name: "Closed" },
+    });
+    const openTask = taskFixture({
+      id: "t-open",
+      displayId: "FEAT-10",
+      title: "Still going",
+    });
+    getTasks.mockResolvedValue({
+      data: [closedTask, openTask],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper } = await mountBoard();
+
+    const closedColumn = wrapper.findAll(".column").find((c) => c.text().includes("Closed"));
+    expect(closedColumn).toBeTruthy();
+    expect(closedColumn!.classes()).toContain("column--collapsed");
+    expect(closedColumn!.text()).not.toContain("Already shipped");
+    expect(wrapper.text()).toContain("Still going");
+  });
+
+  it("expands the closed column when its header is clicked", async () => {
+    const closedTask = taskFixture({
+      id: "t-closed",
+      displayId: "FEAT-9",
+      title: "Already shipped",
+      currentStatus: { id: "s-7", slug: "closed", name: "Closed" },
+    });
+    getTasks.mockResolvedValue({
+      data: [closedTask],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper } = await mountBoard();
+    const closedColumn = wrapper.findAll(".column").find((c) => c.text().includes("Closed"))!;
+    expect(closedColumn.text()).not.toContain("Already shipped");
+
+    await closedColumn.find(".column__header").trigger("click");
+
+    expect(closedColumn.classes()).not.toContain("column--collapsed");
+    expect(closedColumn.text()).toContain("Already shipped");
+  });
+});
