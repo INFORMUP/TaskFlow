@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 export interface TaskFilters {
   projectId: string;
   projectOwnerUserId: string;
-  status: string;
+  status: string[];
   priority: string;
   assigneeUserId: string; // "" | "me" | <uuid>
   dueAfter: string;
@@ -30,6 +30,14 @@ function asString(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
+function asStringArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string" && x.length > 0);
+  if (typeof v === "string" && v.length > 0) return [v];
+  return [];
+}
+
+type QueryValue = string | string[] | undefined;
+
 export function useTaskFilters() {
   const route = useRoute();
   const router = useRouter();
@@ -37,7 +45,7 @@ export function useTaskFilters() {
   const filters = computed<TaskFilters>(() => ({
     projectId: asString(route.query.projectId),
     projectOwnerUserId: asString(route.query.projectOwnerUserId),
-    status: asString(route.query.status),
+    status: asStringArray(route.query.status),
     priority: asString(route.query.priority),
     assigneeUserId: asString(route.query.assigneeUserId),
     dueAfter: asString(route.query.dueAfter),
@@ -47,18 +55,23 @@ export function useTaskFilters() {
   }));
 
   function setFilters(patch: Partial<TaskFilters>) {
-    const next: Record<string, string | undefined> = { ...route.query };
+    const next: Record<string, QueryValue> = { ...(route.query as Record<string, QueryValue>) };
     for (const key of FILTER_KEYS) {
       if (key in patch) {
         const v = patch[key];
-        next[key] = v ? String(v) : undefined;
+        if (key === "status") {
+          const arr = (v as string[] | undefined) ?? [];
+          next.status = arr.length > 0 ? arr : undefined;
+        } else {
+          next[key] = v ? String(v) : undefined;
+        }
       }
     }
     router.replace({ query: cleanQuery(next) });
   }
 
   function resetFilters() {
-    const next: Record<string, string | undefined> = { ...route.query };
+    const next: Record<string, QueryValue> = { ...(route.query as Record<string, QueryValue>) };
     for (const key of FILTER_KEYS) if (key !== "view") next[key] = undefined;
     router.replace({ query: cleanQuery(next) });
   }
@@ -66,20 +79,28 @@ export function useTaskFilters() {
   return { filters, setFilters, resetFilters };
 }
 
-function cleanQuery(q: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {};
+function cleanQuery(q: Record<string, QueryValue>): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
   for (const [k, v] of Object.entries(q)) {
-    if (v !== undefined && v !== "") out[k] = v;
+    if (v === undefined) continue;
+    if (Array.isArray(v)) {
+      if (v.length > 0) out[k] = v;
+    } else if (v !== "") {
+      out[k] = v;
+    }
   }
   return out;
 }
 
 /** Convert filters into the query params the task list endpoint understands. */
-export function toApiParams(f: TaskFilters, extras: Record<string, string> = {}): Record<string, string> {
-  const params: Record<string, string> = { ...extras };
+export function toApiParams(
+  f: TaskFilters,
+  extras: Record<string, string> = {},
+): Record<string, string | string[]> {
+  const params: Record<string, string | string[]> = { ...extras };
   if (f.projectId) params.projectId = f.projectId;
   if (f.projectOwnerUserId) params.projectOwnerUserId = f.projectOwnerUserId;
-  if (f.status) params.status = f.status;
+  if (f.status.length > 0) params.status = f.status;
   if (f.priority) params.priority = f.priority;
   if (f.assigneeUserId) params.assigneeUserId = f.assigneeUserId;
   if (f.dueAfter) params.dueAfter = f.dueAfter;

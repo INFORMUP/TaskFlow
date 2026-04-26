@@ -88,7 +88,7 @@ const ProjectIdBody = Type.Object({ projectId: Type.String({ format: "uuid" }) }
 
 const ListTasksQuery = Type.Object({
   flow: Type.Optional(Type.String()),
-  status: Type.Optional(Type.String()),
+  status: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
   assignee: Type.Optional(Type.String({ description: "User ID or the literal 'me'." })),
   assigneeUserId: Type.Optional(Type.String()),
   priority: Type.Optional(Type.String()),
@@ -306,8 +306,9 @@ export async function taskRoutes(fastify: FastifyInstance) {
       }
 
       if (query.status) {
+        const slugs = Array.isArray(query.status) ? query.status : [query.status];
         const statuses = await prisma.flowStatus.findMany({
-          where: { slug: query.status, flow: { orgId: request.org.id } },
+          where: { slug: { in: slugs }, flow: { orgId: request.org.id } },
         });
         if (statuses.length > 0) {
           where.currentStatusId = { in: statuses.map((s) => s.id) };

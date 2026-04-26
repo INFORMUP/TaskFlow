@@ -42,8 +42,18 @@ export interface TaskListResponse {
   pagination: { cursor: string | null; hasMore: boolean };
 }
 
-export function getTasks(params: Record<string, string> = {}): Promise<TaskListResponse> {
-  const query = new URLSearchParams(params).toString();
+export function getTasks(
+  params: Record<string, string | string[]> = {},
+): Promise<TaskListResponse> {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) {
+      for (const v of value) search.append(key, v);
+    } else {
+      search.append(key, value);
+    }
+  }
+  const query = search.toString();
   return apiFetch(`/api/v1/tasks${query ? `?${query}` : ""}`);
 }
 
