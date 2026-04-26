@@ -27,6 +27,9 @@ export interface TestUser {
 interface CreateUserOpts {
   withOrg?: boolean;
   orgRole?: OrgRole;
+  // Slug of a seeded team to grant the user, skipping the welcome team-picker
+  // modal so tests can drive other flows without dismissing it first.
+  teamSlug?: string;
 }
 
 async function createUser(opts: CreateUserOpts = {}): Promise<TestUser> {
@@ -49,6 +52,20 @@ async function createUser(opts: CreateUserOpts = {}): Promise<TestUser> {
         [DEFAULT_ORG_ID, id, opts.orgRole ?? "member"]
       );
     }
+    if (opts.teamSlug) {
+      const team = await client.query(
+        `SELECT id FROM teams WHERE slug = $1 AND org_id = $2 LIMIT 1`,
+        [opts.teamSlug, DEFAULT_ORG_ID]
+      );
+      if (team.rowCount === 0) {
+        throw new Error(`Seeded team not found for slug: ${opts.teamSlug}`);
+      }
+      await client.query(
+        `INSERT INTO user_teams (user_id, team_id, is_primary, granted_at)
+         VALUES ($1, $2, true, NOW())`,
+        [id, team.rows[0].id]
+      );
+    }
   } finally {
     await client.end();
   }
@@ -68,9 +85,16 @@ async function createUser(opts: CreateUserOpts = {}): Promise<TestUser> {
 }
 
 export function createNoTeamUser(): Promise<TestUser> {
-  return createUser();
+  return createUser({ withOrg: true });
 }
 
 export function createUserWithOrg(role: OrgRole = "member"): Promise<TestUser> {
   return createUser({ withOrg: true, orgRole: role });
+}
+
+export function createUserWithTeam(
+  teamSlug = "engineer",
+  role: OrgRole = "member"
+): Promise<TestUser> {
+  return createUser({ withOrg: true, orgRole: role, teamSlug });
 }

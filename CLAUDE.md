@@ -21,6 +21,13 @@ external/      # Reference projects (git submodules)
 4. `npx prisma db seed` (seed teams, flows, statuses, transitions)
 5. `npm run dev` (starts on port 3001)
 
+### Optional: route in-app feedback to a TaskFlow project
+Set `TASKFLOW_PRODUCT_PROJECT_ORG_ID` to the org UUID that owns the TaskFlow
+product project, and `TASKFLOW_PRODUCT_PROJECT_KEY` to its key (default `TF`).
+With those set, every `POST /api/v1/feedback` also creates a Task on the
+matching flow (BUG → bug, FEATURE → feature, IMPROVEMENT → improvement).
+With either unset, feedback persists without an associated task.
+
 ## Frontend Startup
 1. `cd frontend && npm install`
 2. `npm run dev` (starts on port 5173)
@@ -28,6 +35,7 @@ external/      # Reference projects (git submodules)
 ## Running Tests
 - Backend: `cd backend && npm test` (Vitest; unit + integration against the real dev DB)
 - Frontend: `cd frontend && npm test` (Vitest with happy-dom; component tests via `@vue/test-utils`). Use `npm run test:watch` for watch mode.
+- Frontend E2E: `cd frontend && npx playwright test` — requires the dev DB to be seeded (`cd backend && npx prisma db seed`). `e2e/login-redirect.spec.ts` and `e2e/welcome-join.spec.ts` are **known-broken** on `main`/`staging` — see issue #20. Don't let these two block unrelated work.
 
 ## Key Architecture Decisions
 - **Fastify plugins** with `fastify-plugin` for encapsulation breaking (auth, error handler)
@@ -40,6 +48,11 @@ external/      # Reference projects (git submodules)
 - PostgreSQL on `localhost:5432`, database `taskflow`, user `reportal`
 - Prisma schema: `backend/prisma/schema.prisma`
 - Seed data: `backend/prisma/seeders/` (deterministic UUIDs via uuid5)
+
+## Branching Workflow
+- Two long-lived branches: `main` (production) and `staging`.
+- All changes must be made on feature branches and PR'd into `staging` first — never PR directly into `main`.
+- Promotion to `main` happens from `staging` after validation.
 
 ## Issue Tracking
 - **New issues go in TaskFlow, not GitHub.** This project tracks work at https://taskflow.informup.org under the Taskflow project. Do not run `gh issue create` for new work — use the `/create-task` slash command (or POST directly to `/api/v1/tasks`). Existing GitHub issues are being migrated; new ones should not be opened.
@@ -79,3 +92,4 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 ## Mistakes
 - **[tooling]**: Fastify plugins are encapsulated by default — use `fastify-plugin` (fp) wrapper for plugins that need to affect the global scope (error handler, auth decorator).
 - **[testing]**: Integration tests sharing PostgreSQL must run sequentially — set `fileParallelism: false` in vitest.config.ts to avoid FK constraint violations.
+- **[testing]**: Playwright E2E tests need `npx prisma db seed` first — otherwise the `projects` table is empty and anything touching project pickers silently renders 0 options.

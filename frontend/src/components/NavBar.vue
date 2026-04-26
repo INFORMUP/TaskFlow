@@ -41,13 +41,14 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
 </script>
 
 <template>
-  <nav class="navbar">
+  <nav class="navbar" aria-label="Primary">
     <div class="navbar__brand">TaskFlow</div>
     <div class="navbar__tabs">
       <router-link
         to="/flows"
         class="navbar__tab"
         :class="{ 'navbar__tab--active': route.path.startsWith('/flows') || route.path.startsWith('/tasks') }"
+        :aria-current="route.path.startsWith('/flows') || route.path.startsWith('/tasks') ? 'page' : undefined"
       >
         Flows
       </router-link>
@@ -55,6 +56,7 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
         to="/projects"
         class="navbar__tab"
         :class="{ 'navbar__tab--active': route.path.startsWith('/projects') }"
+        :aria-current="route.path.startsWith('/projects') ? 'page' : undefined"
       >
         Projects
       </router-link>
@@ -63,6 +65,7 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
         to="/organization"
         class="navbar__tab"
         :class="{ 'navbar__tab--active': route.path.startsWith('/organization') }"
+        :aria-current="route.path.startsWith('/organization') ? 'page' : undefined"
         data-testid="navbar-organization-link"
       >
         Organization
@@ -71,6 +74,7 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
         to="/settings"
         class="navbar__tab"
         :class="{ 'navbar__tab--active': route.path.startsWith('/settings') }"
+        :aria-current="route.path.startsWith('/settings') ? 'page' : undefined"
         data-testid="navbar-settings-link"
       >
         Settings
@@ -80,8 +84,10 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
       <OrgSwitcher />
       <button
         v-if="user && user.teams.length > 0"
+        type="button"
         class="navbar__team"
         title="Manage your team memberships"
+        aria-label="Manage your team memberships"
         data-testid="navbar-team-button"
         @click="showTeamPicker = true"
       >
@@ -91,7 +97,7 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
         </span>
       </button>
       <span v-if="user">{{ user.displayName }}</span>
-      <button class="navbar__logout" @click="handleLogout">Logout</button>
+      <button type="button" class="navbar__logout" @click="handleLogout">Logout</button>
     </div>
   </nav>
 

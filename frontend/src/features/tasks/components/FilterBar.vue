@@ -28,6 +28,7 @@ function toggleAssignedToMe() {
   <div class="filter-bar">
     <select
       :value="filters.projectId"
+      aria-label="Filter by project"
       @change="update('projectId', ($event.target as HTMLSelectElement).value)"
     >
       <option value="">All projects</option>
@@ -38,6 +39,7 @@ function toggleAssignedToMe() {
 
     <select
       :value="filters.status"
+      aria-label="Filter by status"
       @change="update('status', ($event.target as HTMLSelectElement).value)"
     >
       <option value="">Any status</option>
@@ -48,6 +50,7 @@ function toggleAssignedToMe() {
 
     <select
       :value="filters.priority"
+      aria-label="Filter by priority"
       @change="update('priority', ($event.target as HTMLSelectElement).value)"
     >
       <option value="">Any priority</option>
@@ -58,7 +61,9 @@ function toggleAssignedToMe() {
     </select>
 
     <button
+      type="button"
       class="filter-bar__me"
+      :aria-pressed="filters.assigneeUserId === 'me'"
       :class="{ 'filter-bar__me--on': filters.assigneeUserId === 'me' }"
       @click="toggleAssignedToMe"
     >

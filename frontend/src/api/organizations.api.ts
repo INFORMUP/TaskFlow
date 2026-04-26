@@ -65,6 +65,67 @@ export function removeMember(orgId: string, userId: string): Promise<void> {
   });
 }
 
+export type InvitationStatus = "pending" | "accepted" | "revoked" | "expired";
+
+export interface Invitation {
+  id: string;
+  orgId: string;
+  email: string;
+  role: OrgRole;
+  status: InvitationStatus;
+  invitedById: string | null;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  acceptedByUserId: string | null;
+  revokedAt: string | null;
+  revokedById: string | null;
+}
+
+export interface InvitationWithToken extends Invitation {
+  token: string;
+}
+
+export function listInvitations(orgId: string): Promise<{ data: Invitation[] }> {
+  return apiFetch(`/api/v1/organizations/${orgId}/invitations`);
+}
+
+export function createInvitation(
+  orgId: string,
+  body: { email: string; role: OrgRole },
+): Promise<InvitationWithToken> {
+  return apiFetch(`/api/v1/organizations/${orgId}/invitations`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function resendInvitation(
+  orgId: string,
+  inviteId: string,
+): Promise<InvitationWithToken> {
+  return apiFetch(
+    `/api/v1/organizations/${orgId}/invitations/${inviteId}/resend`,
+    { method: "POST" },
+  );
+}
+
+export function revokeInvitation(
+  orgId: string,
+  inviteId: string,
+): Promise<void> {
+  return apiFetch(`/api/v1/organizations/${orgId}/invitations/${inviteId}`, {
+    method: "DELETE",
+  });
+}
+
+export function acceptInvitation(token: string): Promise<Invitation> {
+  return apiFetch(`/api/v1/invitations/accept`, {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
 export async function switchOrganization(orgId: string): Promise<string> {
   const res = await apiFetch<{ accessToken: string }>(
     "/api/v1/auth/switch-org",

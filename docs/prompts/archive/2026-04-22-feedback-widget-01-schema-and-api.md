@@ -1,5 +1,7 @@
 # Phase 1 — Schema and API
 
+**Completed:** 2026-04-22. Shipped via PR #25 (merged to `staging`): `Feedback` model, migration `20260422174556_add_feedback`, and six endpoints under `/api/v1/feedback` with 15 integration tests.
+
 **Prerequisite:** none. This is the first phase of the feedback widget epic (see [`README.md`](./README.md)).
 
 **Goal:** Add a `Feedback` model, run the migration, and implement all backend endpoints — both the user-facing submission route and the admin management routes. After this phase, the full API surface exists and is tested; the frontend will consume it in Phases 2 and 3.

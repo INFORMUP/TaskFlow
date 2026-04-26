@@ -33,9 +33,9 @@ onMounted(load);
     <table v-else class="flows__table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Slug</th>
-          <th>Description</th>
+          <th scope="col">Name</th>
+          <th scope="col">Slug</th>
+          <th scope="col">Description</th>
         </tr>
       </thead>
       <tbody>

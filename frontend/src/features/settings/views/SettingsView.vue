@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import {
   listScopes,
   listTokens,
@@ -133,6 +133,41 @@ function formatDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString();
 }
+
+function handleModalKeydown(e: KeyboardEvent) {
+  if (e.key !== "Escape") return;
+  if (createdToken.value) {
+    // The created-token dialog is not dismissible via Esc — user must confirm
+    // they saved the plaintext token. Swallow the event so it doesn't bubble.
+    e.stopPropagation();
+    return;
+  }
+  if (revokeTarget.value) {
+    e.stopPropagation();
+    cancelRevoke();
+  }
+}
+
+const previouslyFocused = ref<HTMLElement | null>(null);
+
+watch(
+  () => createdToken.value || revokeTarget.value,
+  (open, prev) => {
+    if (open && !prev) {
+      previouslyFocused.value = (document.activeElement as HTMLElement) ?? null;
+    } else if (!open && prev) {
+      previouslyFocused.value?.focus?.();
+    }
+  }
+);
+
+onMounted(() => {
+  document.addEventListener("keydown", handleModalKeydown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", handleModalKeydown);
+});
 </script>
 
 <template>
@@ -146,7 +181,7 @@ function formatDate(iso: string | null): string {
         permissions are the intersection of its scopes and your team permissions.
       </p>
 
-      <div v-if="loadError" class="settings__error">{{ loadError }}</div>
+      <div v-if="loadError" class="settings__error" role="alert">{{ loadError }}</div>
 
       <form v-if="!loading" class="settings__form" @submit.prevent="handleCreate">
         <h3 class="settings__subheading-bold">Create a new token</h3>
@@ -193,7 +228,12 @@ function formatDate(iso: string | null): string {
           />
         </label>
 
-        <div v-if="formError" class="settings__error" data-testid="token-form-error">
+        <div
+          v-if="formError"
+          class="settings__error"
+          role="alert"
+          data-testid="token-form-error"
+        >
           {{ formError }}
         </div>
 
@@ -215,13 +255,13 @@ function formatDate(iso: string | null): string {
         <table v-else class="settings__table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Scopes</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th>Last used</th>
-              <th>Expires</th>
-              <th></th>
+              <th scope="col">Name</th>
+              <th scope="col">Scopes</th>
+              <th scope="col">Status</th>
+              <th scope="col">Created</th>
+              <th scope="col">Last used</th>
+              <th scope="col">Expires</th>
+              <th scope="col"><span class="settings__sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -272,10 +312,13 @@ function formatDate(iso: string | null): string {
     <div
       v-if="createdToken"
       class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="token-created-title"
       data-testid="token-created-modal"
     >
       <div class="modal">
-        <h3 class="modal__title">Token created</h3>
+        <h3 id="token-created-title" class="modal__title">Token created</h3>
         <p class="modal__warning">
           <strong>Copy this token now.</strong> You won't be able to see it
           again — if you lose it, you'll need to create a new one.
@@ -299,7 +342,13 @@ function formatDate(iso: string | null): string {
             I've saved it
           </button>
         </div>
-        <div v-if="copiedMessage" class="modal__copied" data-testid="token-copy-status">
+        <div
+          v-if="copiedMessage"
+          class="modal__copied"
+          role="status"
+          aria-live="polite"
+          data-testid="token-copy-status"
+        >
           {{ copiedMessage }}
         </div>
       </div>
@@ -309,10 +358,13 @@ function formatDate(iso: string | null): string {
     <div
       v-if="revokeTarget"
       class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="token-revoke-title"
       data-testid="token-revoke-modal"
     >
       <div class="modal">
-        <h3 class="modal__title">Revoke token?</h3>
+        <h3 id="token-revoke-title" class="modal__title">Revoke token?</h3>
         <p>
           This will immediately disable
           <strong>{{ revokeTarget.name }}</strong>. Any running agents or
@@ -344,6 +396,18 @@ function formatDate(iso: string | null): string {
 .settings {
   max-width: 960px;
   margin: 0 auto;
+}
+
+.settings__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .settings__title {
