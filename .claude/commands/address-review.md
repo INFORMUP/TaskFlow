@@ -44,6 +44,7 @@ Pick up a PR with requested changes, address each comment with a code fix or a r
      git fetch origin <head-branch>
      git worktree add .claude/worktrees/<task-or-pr-id>-fix origin/<head-branch>
      ```
+   - If the worktree path already exists (e.g. a prior address-review pass), `git worktree list` to inspect it. If it's on the same head branch and clean, reuse it. Otherwise ask the user whether to remove it (`git worktree remove`) or pick a new suffix (`-fix2`, etc.). Never silently overwrite.
 
 6. **Triage each comment**
    For every comment, decide one of:
@@ -68,7 +69,7 @@ Pick up a PR with requested changes, address each comment with a code fix or a r
    - `git push origin <head-branch>`.
 
 10. **Reply to each comment**
-    - **Inline diff comments**: reply via `gh api repos/INFORMUP/TaskFlow/pulls/<number>/comments/<comment-id>/replies -f body="..."`.
+    - **Inline diff comments**: reply via `gh api -X POST repos/INFORMUP/TaskFlow/pulls/<number>/comments -f body="..." -F in_reply_to=<comment-id>`. (There is no `/replies` sub-resource — replies are created by POSTing to the same `/comments` collection with `in_reply_to` pointing at the parent comment id.)
     - **Review summary comments**: there's no per-summary reply API — post a single PR-level conversation comment summarizing what was addressed:
       ```bash
       gh pr comment <number> --body "$(cat <<'EOF'

@@ -35,6 +35,7 @@ Pick up a task in `implement` status, do the work, and open a PR into `staging`.
      git fetch origin staging
      git worktree add -b <branch> .claude/worktrees/<task-id-lower> origin/staging
      ```
+   - If the path already exists (prior abandoned attempt, retry, etc.), `git worktree list` to inspect it. If it's on the intended branch and clean, reuse it and skip the `worktree add`. Otherwise stop and ask the user whether to `git worktree remove` it or pick a new suffix (`-v2`, etc.). Never silently overwrite an existing worktree.
    - `cd` into the new worktree for the rest of the work.
 
 5. **Implement**
