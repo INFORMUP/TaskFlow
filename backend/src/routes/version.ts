@@ -2,24 +2,16 @@ import { FastifyInstance } from "fastify";
 import { Type } from "@sinclair/typebox";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, resolve } from "node:path";
 
-function readNearestPackageJson(start: string): { version: string } {
-  let dir = start;
-  while (true) {
-    try {
-      return JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-    } catch {
-      const parent = dirname(dir);
-      if (parent === dir) {
-        throw new Error("package.json not found from " + start);
-      }
-      dir = parent;
-    }
-  }
-}
+const PACKAGE_JSON_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../package.json"
+);
 
-const pkg = readNearestPackageJson(dirname(fileURLToPath(import.meta.url)));
+const pkg = JSON.parse(readFileSync(PACKAGE_JSON_PATH, "utf8")) as {
+  version: string;
+};
 
 export const APP_VERSION = pkg.version;
 
