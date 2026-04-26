@@ -10,9 +10,27 @@ vi.mock("@/api/flows.api", () => ({
 }));
 
 const FLOWS: Flow[] = [
-  { id: "f-1", slug: "bug", name: "Bug", description: "Defect resolution" },
-  { id: "f-2", slug: "feature", name: "Feature", description: "New functionality" },
-  { id: "f-3", slug: "improvement", name: "Improvement", description: null },
+  {
+    id: "f-1",
+    slug: "bug",
+    name: "Bug",
+    description: "Defect resolution",
+    stats: { openCount: 5, assignedToMeCount: 2 },
+  },
+  {
+    id: "f-2",
+    slug: "feature",
+    name: "Feature",
+    description: "New functionality",
+    stats: { openCount: 0, assignedToMeCount: 0 },
+  },
+  {
+    id: "f-3",
+    slug: "improvement",
+    name: "Improvement",
+    description: null,
+    stats: { openCount: 3, assignedToMeCount: 0 },
+  },
 ];
 
 async function mountView() {
@@ -70,6 +88,20 @@ describe("FlowListView", () => {
     });
     const wrapper = await mountView();
     expect(wrapper.text()).toContain("Server error");
+  });
+
+  it("renders open count and assigned-to-me count per flow", async () => {
+    const wrapper = await mountView();
+    const bugRow = wrapper.get("[data-testid='flow-row-bug']");
+    expect(bugRow.get("[data-testid='flow-open-count-bug']").text()).toBe("5");
+    expect(bugRow.get("[data-testid='flow-mine-count-bug']").text()).toContain("2");
+  });
+
+  it("renders zero counts as 0 (not blank)", async () => {
+    const wrapper = await mountView();
+    const featRow = wrapper.get("[data-testid='flow-row-feature']");
+    expect(featRow.get("[data-testid='flow-open-count-feature']").text()).toBe("0");
+    expect(featRow.get("[data-testid='flow-mine-count-feature']").text()).toContain("0");
   });
 
   it("shows empty state when no flows exist", async () => {

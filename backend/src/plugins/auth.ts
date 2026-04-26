@@ -109,6 +109,7 @@ export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance)
       "/version",
       "/api/v1/auth/callback",
       "/api/v1/auth/refresh",
+      "/api/v1/webhooks/",
       "/docs",
     ];
 

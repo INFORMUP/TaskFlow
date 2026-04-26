@@ -90,7 +90,7 @@ Pick up a PR with requested changes, address each comment with a code fix or a r
 
 12. **Update the task**
     - If task was resolved in step 2: do **not** transition it. The task should already be in `validate` — leave it there for the reviewer to re-validate. Post a brief task comment: `Addressed review on <pr-url> — ready for re-validation.`
-    - If any comments were `Defer`d: open a follow-up task via `/create-task` (or instruct the user to). Link the new task in the PR comment from step 10.
+    - If any comments were `Defer`d: open a follow-up task via `/create-task` (or instruct the user to). **Pass `spawnedFromTaskId` set to the source task's UUID** so the provenance link from the follow-up back to this task is recorded — the follow-up's detail page will then show "Spawned from <DISPLAY-ID>" and this task's detail page will list it under "Follow-ups". Link the new task in the PR comment from step 10.
 
 ## Notes
 

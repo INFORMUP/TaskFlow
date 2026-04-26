@@ -37,7 +37,7 @@ test.describe("Task creation", () => {
     await createBtn.click();
 
     const title = `E2E bug ${Date.now()}`;
-    await page.getByPlaceholder("Title").fill(title);
+    await page.getByPlaceholder("Title", { exact: true }).fill(title);
 
     // Checking the TF project triggers the watcher that loads that project's
     // attached flows and auto-fills the default assignee. The "bug" flow comes
@@ -56,7 +56,7 @@ test.describe("Task creation", () => {
     await submit.click();
 
     // Form unmounts via the `created` emit once the POST resolves.
-    await expect(page.getByPlaceholder("Title")).toBeHidden({ timeout: 5_000 });
+    await expect(page.getByPlaceholder("Title", { exact: true })).toBeHidden({ timeout: 5_000 });
 
     // The board view reloads tasks on `created` — the new task should appear
     // as a card with its title.

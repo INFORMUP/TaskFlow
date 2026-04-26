@@ -29,10 +29,16 @@ Create a new task in TaskFlow at taskflow.informup.org. **Do not** create a GitH
      "flow": "<flow-slug>",
      "title": "<title>",
      "description": "<description-or-omitted>",
-     "projectIds": ["<project-uuid>"]
+     "projectIds": ["<project-uuid>"],
+     "spawnedFromTaskId": "<parent-task-uuid-or-omitted>"
    }
    ```
    Headers: `Authorization: Bearer <token>`, `Content-Type: application/json`.
+
+   `spawnedFromTaskId` is optional. Set it when the new task is a follow-up
+   spawned from existing work (e.g. an `/address-review` Defer triage). The
+   parent must be visible to the caller; otherwise the API returns
+   `404 SPAWNED_FROM_NOT_FOUND`.
 
 7. **Report**: print the new task URL: `https://taskflow.informup.org/tasks/<flow-slug>/<task-id>`.
 

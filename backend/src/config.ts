@@ -43,4 +43,7 @@ export const config = {
   get productProjectOrgId(): string {
     return process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID ?? "";
   },
+  get githubWebhookSecret(): string {
+    return process.env.GITHUB_WEBHOOK_SECRET ?? "";
+  },
 };

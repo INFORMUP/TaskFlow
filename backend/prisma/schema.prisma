@@ -22,6 +22,7 @@ model Organization {
   appSettings AppSetting[]
   feedback    Feedback[]
   invitations Invitation[]
+  savedViews  SavedView[]
 
   @@map("organizations")
 }
@@ -107,6 +108,7 @@ model User {
   invitationsSent     Invitation[]      @relation("InvitationInvitedBy")
   invitationsAccepted Invitation[]      @relation("InvitationAcceptedBy")
   invitationsRevoked  Invitation[]      @relation("InvitationRevokedBy")
+  savedViews          SavedView[]
 
   @@map("users")
 }
@@ -211,6 +213,7 @@ model Task {
   assigneeId      String?   @map("assignee_id") @db.Uuid
   dueDate         DateTime? @map("due_date") @db.Date
   isDeleted       Boolean   @default(false) @map("is_deleted")
+  spawnedFromTaskId String? @map("spawned_from_task_id") @db.Uuid
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -218,6 +221,8 @@ model Task {
   currentStatus FlowStatus       @relation(fields: [currentStatusId], references: [id])
   creator       User             @relation("TaskCreatedBy", fields: [createdBy], references: [id])
   assignee      User?            @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  spawnedFrom   Task?            @relation("TaskSpawnedFrom", fields: [spawnedFromTaskId], references: [id], onDelete: SetNull)
+  spawnedTasks  Task[]           @relation("TaskSpawnedFrom")
   transitions   TaskTransition[]
   comments      Comment[]
   projects      TaskProject[]
@@ -229,6 +234,7 @@ model Task {
   @@index([assigneeId])
   @@index([createdBy])
   @@index([dueDate])
+  @@index([spawnedFromTaskId])
   @@map("tasks")
 }
 
@@ -485,4 +491,21 @@ model Comment {
 
   @@index([taskId, createdAt])
   @@map("comments")
+}
+
+model SavedView {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  filters   Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([orgId, userId])
+  @@map("saved_views")
 }

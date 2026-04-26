@@ -9,6 +9,7 @@ export interface TaskFilters {
   assigneeUserId: string; // "" | "me" | <uuid>
   dueAfter: string;
   dueBefore: string;
+  q: string;
   view: "board" | "list";
 }
 
@@ -20,6 +21,7 @@ const FILTER_KEYS: (keyof TaskFilters)[] = [
   "assigneeUserId",
   "dueAfter",
   "dueBefore",
+  "q",
   "view",
 ];
 
@@ -40,6 +42,7 @@ export function useTaskFilters() {
     assigneeUserId: asString(route.query.assigneeUserId),
     dueAfter: asString(route.query.dueAfter),
     dueBefore: asString(route.query.dueBefore),
+    q: asString(route.query.q),
     view: (asString(route.query.view) === "list" ? "list" : "board"),
   }));
 
@@ -81,5 +84,6 @@ export function toApiParams(f: TaskFilters, extras: Record<string, string> = {})
   if (f.assigneeUserId) params.assigneeUserId = f.assigneeUserId;
   if (f.dueAfter) params.dueAfter = f.dueAfter;
   if (f.dueBefore) params.dueBefore = f.dueBefore;
+  if (f.q) params.q = f.q;
   return params;
 }

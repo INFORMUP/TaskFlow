@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref, watch } from "vue";
 import { listProjects, type Project } from "@/api/projects.api";
 import { useTaskFilters, type TaskFilters } from "../composables/useTaskFilters";
 
@@ -10,6 +10,24 @@ defineProps<{
 const { filters, setFilters, resetFilters } = useTaskFilters();
 
 const projects = ref<Project[]>([]);
+
+// Local mirror of `q` so typing is responsive; debounce-flush to the URL.
+const qLocal = ref(filters.value.q);
+let qTimer: ReturnType<typeof setTimeout> | null = null;
+watch(
+  () => filters.value.q,
+  (next) => {
+    if (next !== qLocal.value) qLocal.value = next;
+  },
+);
+function onQInput(e: Event) {
+  qLocal.value = (e.target as HTMLInputElement).value;
+  if (qTimer) clearTimeout(qTimer);
+  qTimer = setTimeout(() => update("q", qLocal.value), 300);
+}
+onUnmounted(() => {
+  if (qTimer) clearTimeout(qTimer);
+});
 
 onMounted(async () => {
   projects.value = await listProjects();
@@ -26,6 +44,15 @@ function toggleAssignedToMe() {
 
 <template>
   <div class="filter-bar">
+    <input
+      type="search"
+      class="filter-bar__search"
+      :value="qLocal"
+      placeholder="Search title or description"
+      aria-label="Search tasks"
+      @input="onQInput"
+    />
+
     <select
       :value="filters.projectId"
       aria-label="Filter by project"
@@ -104,6 +131,16 @@ function toggleAssignedToMe() {
   border-radius: var(--radius);
   margin-bottom: 0.75rem;
   font-size: 0.8125rem;
+}
+.filter-bar__search {
+  flex: 1;
+  min-width: 12rem;
+  max-width: 22rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  background: var(--bg-primary);
 }
 .filter-bar select,
 .filter-bar input[type="date"] {
