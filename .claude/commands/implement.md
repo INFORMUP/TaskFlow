@@ -53,10 +53,15 @@ Pick up a task in `implement` status, do the work, and open a PR into `staging`.
    - `git push -u origin <branch>`.
 
 8. **Open the PR**
-   - Target `staging`. Title under 70 chars, references the task display ID:
+   - Target `staging`. Title under 70 chars, **must follow Conventional Commits** (the `lint-pr-title` workflow blocks merges otherwise). Format:
      ```
-     <displayId>: <short summary>
+     <type>(<scope>): <short summary> (<displayId>)
      ```
+     - Allowed `<type>`: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`, `style`. Pick `feat` for the `feature` flow, `fix` for `bug`, `chore`/`refactor` for `improvement` (match the change, not just the flow).
+     - `<scope>` is optional but recommended (e.g. `frontend`, `backend`, `api`, `auth`). Lowercase, `[a-z0-9._/-]`.
+     - Append `!` after the scope for breaking changes (`feat(api)!: ...`).
+     - Example: `feat(frontend): replace /flows landing with My Work dashboard (FEAT-1)`.
+   - Do NOT use the legacy `<displayId>: <summary>` form — it fails `lint-pr-title`.
    - Body (HEREDOC):
      ```markdown
      ## Summary
