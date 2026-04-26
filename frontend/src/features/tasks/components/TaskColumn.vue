@@ -1,21 +1,70 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import type { Task } from "@/api/tasks.api";
 import TaskCard from "./TaskCard.vue";
 import TaskColumnEmptyState from "./TaskColumnEmptyState.vue";
 
-defineProps<{
+const props = defineProps<{
   status: { slug: string; name: string };
   tasks: Task[];
   flowSlug: string;
+  interactive?: boolean;
+  dragInProgress?: boolean;
+  dragSourceStatusSlug?: string | null;
 }>();
 
 const emit = defineEmits<{
   taskClick: [task: Task];
+  taskDragStart: [task: Task];
+  taskDropped: [taskId: string, fromStatus: string, toStatus: string];
+  requestTitleUpdate: [task: Task, title: string];
+  requestAssigneePick: [task: Task, anchor: HTMLElement];
 }>();
+
+const isDragOver = ref(false);
+
+const isDropTarget = () =>
+  Boolean(
+    props.interactive &&
+      props.dragInProgress &&
+      props.dragSourceStatusSlug &&
+      props.dragSourceStatusSlug !== props.status.slug
+  );
+
+function handleDragOver(e: DragEvent) {
+  if (!isDropTarget()) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  isDragOver.value = true;
+}
+
+function handleDragLeave() {
+  isDragOver.value = false;
+}
+
+function handleDrop(e: DragEvent) {
+  isDragOver.value = false;
+  if (!isDropTarget()) return;
+  e.preventDefault();
+  const taskId = e.dataTransfer?.getData("text/x-taskflow-task-id");
+  const fromStatus = e.dataTransfer?.getData("text/x-taskflow-from-status");
+  if (!taskId || !fromStatus) return;
+  if (fromStatus === props.status.slug) return;
+  emit("taskDropped", taskId, fromStatus, props.status.slug);
+}
 </script>
 
 <template>
-  <div class="column">
+  <div
+    class="column"
+    :class="{
+      'column--candidate': isDropTarget(),
+      'column--drag-over': isDragOver,
+    }"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
+  >
     <div class="column__header">
       <span class="column__name">{{ status.name }}</span>
       <span class="column__count">{{ tasks.length }}</span>
@@ -25,7 +74,11 @@ const emit = defineEmits<{
         v-for="task in tasks"
         :key="task.id"
         :task="task"
+        :interactive="interactive"
         @click="emit('taskClick', task)"
+        @drag-start="(t) => emit('taskDragStart', t)"
+        @request-title-update="(t, title) => emit('requestTitleUpdate', t, title)"
+        @request-assignee-pick="(t, anchor) => emit('requestAssigneePick', t, anchor)"
       />
       <TaskColumnEmptyState
         v-if="tasks.length === 0"
@@ -43,6 +96,17 @@ const emit = defineEmits<{
   background: var(--bg-secondary);
   border-radius: var(--radius);
   padding: 0.75rem;
+  transition: outline 0.1s, background 0.1s;
+}
+
+.column--candidate {
+  outline: 1px dashed var(--border-primary);
+  outline-offset: -2px;
+}
+
+.column--drag-over {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .column__header {
