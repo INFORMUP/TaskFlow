@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "seed": "prisma db seed",
     "seed:check": "tsc --noEmit -p prisma/tsconfig.seed.json",
-    "bootstrap": "npx tsx prisma/bootstrap.ts"
+    "bootstrap": "npx tsx prisma/bootstrap.ts",
+    "seed:reference": "npx tsx prisma/seed-reference.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"
