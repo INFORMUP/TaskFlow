@@ -3,8 +3,8 @@ import { PrismaClient } from "@prisma/client";
 import { buildApp } from "../helpers/app.js";
 import { mintTestToken, TEST_ENGINEER_ID, TEST_USER_ID } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
-import { config } from "../../config.js";
 import { DEFAULT_ORG_ID } from "../../constants/org.js";
+import { FEEDBACK_BOT_USER_ID } from "../../constants/system-users.js";
 
 const prisma = new PrismaClient();
 
@@ -415,8 +415,8 @@ describe("feedback API: product-task wiring", () => {
   const ORG_C_ID = "d0000000-0000-4000-8000-0000000000c1";
   const PRODUCT_PROJECT_KEY = "TFTEST";
   const PRODUCT_PROJECT_ID = "d0000000-0000-4000-8000-0000000000d1";
-  let savedOrgId: string;
-  let savedKey: string;
+  let savedOrgId: string | undefined;
+  let savedKey: string | undefined;
   let createdTaskIds: string[] = [];
 
   async function clearTaskFixtures() {
@@ -444,8 +444,8 @@ describe("feedback API: product-task wiring", () => {
 
   beforeAll(async () => {
     await seedTestUsers(prisma);
-    savedOrgId = config.productProjectOrgId;
-    savedKey = config.productProjectKey;
+    savedOrgId = process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
+    savedKey = process.env.TASKFLOW_PRODUCT_PROJECT_KEY;
 
     // Create the product project (in DEFAULT_ORG_ID) and attach the three
     // engineering flows so feedback→task wiring can resolve them.
@@ -493,15 +493,17 @@ describe("feedback API: product-task wiring", () => {
     });
 
     // Point the route at the seeded TF project in DEFAULT_ORG_ID.
-    config.productProjectOrgId = DEFAULT_ORG_ID;
-    config.productProjectKey = PRODUCT_PROJECT_KEY;
+    process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID = DEFAULT_ORG_ID;
+    process.env.TASKFLOW_PRODUCT_PROJECT_KEY = PRODUCT_PROJECT_KEY;
   });
 
   afterEach(async () => {
     await clearTaskFixtures();
     await clearOrgCFixtures();
-    config.productProjectOrgId = savedOrgId;
-    config.productProjectKey = savedKey;
+    if (savedOrgId === undefined) delete process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
+    else process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID = savedOrgId;
+    if (savedKey === undefined) delete process.env.TASKFLOW_PRODUCT_PROJECT_KEY;
+    else process.env.TASKFLOW_PRODUCT_PROJECT_KEY = savedKey;
   });
 
   afterAll(async () => {
@@ -542,16 +544,28 @@ describe("feedback API: product-task wiring", () => {
       expect(task!.projects[0].project.id).toBe(PRODUCT_PROJECT_ID);
       expect(task!.projects[0].project.orgId).toBe(DEFAULT_ORG_ID);
       expect(task!.title).toContain(type);
-      expect(task!.description).toContain(`Submitter org_id: ${ORG_C_ID}`);
-      expect(task!.description).toContain(`Submitter user_id: ${TEST_USER_ID}`);
+      // Submitter PII must NOT leak into the cross-org task description.
+      expect(task!.description).not.toContain(TEST_USER_ID);
+      expect(task!.description).not.toContain(ORG_C_ID);
+      expect(task!.description).not.toContain("user@test.com");
+      expect(task!.description).not.toContain("org-c-fb");
+      // createdBy is the synthetic system user, not the submitter.
+      expect(task!.createdBy).toBe(FEEDBACK_BOT_USER_ID);
+      // No auto-assignment.
+      expect(task!.assigneeId).toBeNull();
 
       // Cross-org: feedback row stays under the submitter's org.
       expect(body.orgId).toBe(ORG_C_ID);
+      // Attribution lives structurally on the Feedback row.
+      const fb = await prisma.feedback.findUnique({ where: { id: body.id } });
+      expect(fb!.userId).toBe(TEST_USER_ID);
+      expect(fb!.orgId).toBe(ORG_C_ID);
+      expect(fb!.taskId).toBe(body.taskId);
     },
   );
 
   it("does not create a task when productProjectOrgId is unset", async () => {
-    config.productProjectOrgId = "";
+    delete process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
     const res = await postFeedback("BUG", "no task expected");
     expect(res.statusCode).toBe(201);
     const body = res.json();
@@ -559,7 +573,7 @@ describe("feedback API: product-task wiring", () => {
   });
 
   it("succeeds (without task) when product project is misconfigured", async () => {
-    config.productProjectKey = "DOES-NOT-EXIST";
+    process.env.TASKFLOW_PRODUCT_PROJECT_KEY = "DOES-NOT-EXIST";
     const res = await postFeedback("BUG", "misconfigured");
     expect(res.statusCode).toBe(201);
     const body = res.json();

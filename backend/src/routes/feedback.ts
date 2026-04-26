@@ -4,6 +4,10 @@ import { prisma } from "../prisma-client.js";
 import { CommonErrorResponses, ErrorResponse, IdParams } from "./_schemas.js";
 import { config } from "../config.js";
 import { createTask } from "../services/task.service.js";
+import {
+  FEEDBACK_BOT_DISPLAY_NAME,
+  FEEDBACK_BOT_USER_ID,
+} from "../constants/system-users.js";
 
 const FeedbackType = Type.Union([
   Type.Literal("BUG"),
@@ -118,9 +122,21 @@ interface TryCreateProductTaskInput {
   feedbackType: "BUG" | "FEATURE" | "IMPROVEMENT";
   message: string;
   page: string | null;
-  submitterUserId: string;
-  submitterOrgId: string;
   log: FastifyRequest["log"];
+}
+
+async function ensureFeedbackBotUser(): Promise<void> {
+  await prisma.user.upsert({
+    where: { id: FEEDBACK_BOT_USER_ID },
+    update: {},
+    create: {
+      id: FEEDBACK_BOT_USER_ID,
+      email: null,
+      displayName: FEEDBACK_BOT_DISPLAY_NAME,
+      actorType: "agent",
+      status: "active",
+    },
+  });
 }
 
 async function tryCreateProductTask(
@@ -142,22 +158,26 @@ async function tryCreateProductTask(
   }
 
   const flowSlug = FEEDBACK_TYPE_TO_FLOW_SLUG[input.feedbackType];
+  // Submitter attribution intentionally omitted from the task description —
+  // the Feedback row (orgId, userId, taskId) is the structured admin-only
+  // surface for that. Keeping it out of description avoids leaking submitter
+  // identity to product-org members who can read the task.
   const description =
     `${input.message}\n\n` +
-    `---\nSubmitted via in-app feedback bubble.\n` +
-    (input.page ? `Page: ${input.page}\n` : "") +
-    `Submitter user_id: ${input.submitterUserId}\n` +
-    `Submitter org_id: ${input.submitterOrgId}`;
+    `---\nSubmitted via in-app feedback bubble.` +
+    (input.page ? `\nPage: ${input.page}` : "");
 
   try {
+    await ensureFeedbackBotUser();
     const task = await createTask({
       orgId: productProjectOrgId,
       flowSlug,
       title: truncateTitle(input.message),
       description,
       priority: "medium",
-      createdBy: input.submitterUserId,
-      actorType: "human",
+      createdBy: FEEDBACK_BOT_USER_ID,
+      actorType: "agent",
+      assigneeUserId: null,
       projectIds: [project.id],
     });
     return task?.id ?? null;
@@ -196,6 +216,12 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           },
         });
       }
+      const taskId = await tryCreateProductTask({
+        feedbackType: type,
+        message: trimmed,
+        page: page ?? null,
+        log: request.log,
+      });
       const created = await prisma.feedback.create({
         data: {
           orgId: request.org.id,
@@ -203,24 +229,9 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           type,
           message: trimmed,
           page: page ?? null,
+          taskId,
         },
       });
-
-      const taskId = await tryCreateProductTask({
-        feedbackType: type,
-        message: trimmed,
-        page: page ?? null,
-        submitterUserId: request.user.id,
-        submitterOrgId: request.org.id,
-        log: request.log,
-      });
-      if (taskId) {
-        const linked = await prisma.feedback.update({
-          where: { id: created.id },
-          data: { taskId },
-        });
-        return reply.status(201).send(linked);
-      }
       return reply.status(201).send(created);
     },
   );
