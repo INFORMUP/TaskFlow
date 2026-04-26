@@ -22,6 +22,7 @@ model Organization {
   appSettings AppSetting[]
   feedback    Feedback[]
   invitations Invitation[]
+  savedViews  SavedView[]
 
   @@map("organizations")
 }
@@ -107,6 +108,7 @@ model User {
   invitationsSent     Invitation[]      @relation("InvitationInvitedBy")
   invitationsAccepted Invitation[]      @relation("InvitationAcceptedBy")
   invitationsRevoked  Invitation[]      @relation("InvitationRevokedBy")
+  savedViews          SavedView[]
 
   @@map("users")
 }
@@ -485,4 +487,21 @@ model Comment {
 
   @@index([taskId, createdAt])
   @@map("comments")
+}
+
+model SavedView {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  filters   Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([orgId, userId])
+  @@map("saved_views")
 }

@@ -6,6 +6,7 @@ import { apiFetch } from "@/api/client";
 import TaskColumn from "../components/TaskColumn.vue";
 import TaskCreateForm from "../components/TaskCreateForm.vue";
 import FilterBar from "../components/FilterBar.vue";
+import SavedViewsBar from "../components/SavedViewsBar.vue";
 import ViewToggle from "../components/ViewToggle.vue";
 import TaskListView from "./TaskListView.vue";
 import { useTaskFilters, toApiParams } from "../composables/useTaskFilters";
@@ -106,6 +107,7 @@ watch(
     filters.value.assigneeUserId,
     filters.value.dueAfter,
     filters.value.dueBefore,
+    filters.value.q,
   ],
   () => loadTasks(),
 );
@@ -130,6 +132,7 @@ onMounted(async () => {
     </div>
 
     <FilterBar :statuses="statuses" />
+    <SavedViewsBar />
 
     <TaskCreateForm
       v-if="showCreateForm"
