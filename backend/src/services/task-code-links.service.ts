@@ -1,0 +1,329 @@
+import { Prisma } from "@prisma/client";
+import { prisma } from "../prisma-client.js";
+
+export class CodeLinkServiceError extends Error {
+  constructor(public code: string, message: string, public status = 400) {
+    super(message);
+  }
+}
+
+const SHA_PATTERN = /^[a-f0-9]{7,40}$/i;
+const VALID_PR_STATES = new Set(["open", "closed", "merged"]);
+
+const PR_URL_PATTERN =
+  /^https?:\/\/github\.com\/([^\/\s]+)\/([^\/\s]+)\/pull\/(\d+)\/?$/i;
+
+const COMMIT_URL_PATTERN =
+  /^https?:\/\/github\.com\/([^\/\s]+)\/([^\/\s]+)\/commit\/([a-f0-9]{7,40})\/?$/i;
+
+function commitUrlFor(owner: string, name: string, sha: string) {
+  return `https://github.com/${owner}/${name}/commit/${sha}`;
+}
+
+function prUrlFor(owner: string, name: string, number: number) {
+  return `https://github.com/${owner}/${name}/pull/${number}`;
+}
+
+async function resolveTaskRepository(orgId: string, taskId: string, repositoryId: string) {
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, isDeleted: false, flow: { orgId } },
+    include: { projects: { select: { projectId: true } } },
+  });
+  if (!task) throw new CodeLinkServiceError("NOT_FOUND", "Task not found", 404);
+
+  const repo = await prisma.projectRepository.findFirst({
+    where: {
+      id: repositoryId,
+      project: { orgId, id: { in: task.projects.map((p) => p.projectId) } },
+    },
+  });
+  if (!repo) {
+    throw new CodeLinkServiceError(
+      "REPO_NOT_ON_TASK_PROJECT",
+      "Repository must be attached to one of the task's projects",
+      422,
+    );
+  }
+  return { task, repo };
+}
+
+async function inferTaskRepository(orgId: string, taskId: string) {
+  const repos = await prisma.projectRepository.findMany({
+    where: { project: { orgId, tasks: { some: { taskId } } } },
+  });
+  if (repos.length === 0) {
+    throw new CodeLinkServiceError(
+      "NO_TASK_REPO",
+      "Task's projects have no linked repositories — attach one first",
+      422,
+    );
+  }
+  if (repos.length > 1) {
+    throw new CodeLinkServiceError(
+      "REPO_REQUIRED",
+      "Task has multiple repositories — specify repositoryId or a full URL",
+      400,
+    );
+  }
+  return repos[0];
+}
+
+export async function listTaskCommits(orgId: string, taskId: string) {
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, isDeleted: false, flow: { orgId } },
+  });
+  if (!task) throw new CodeLinkServiceError("NOT_FOUND", "Task not found", 404);
+
+  const rows = await prisma.taskCommit.findMany({
+    where: { taskId },
+    orderBy: { createdAt: "desc" },
+    include: { repository: true },
+  });
+  return rows.map(formatCommit);
+}
+
+export interface CreateCommitInput {
+  repositoryId?: string;
+  sha?: string;
+  message?: string | null;
+  author?: string | null;
+  authoredAt?: string | null;
+  url?: string | null;
+}
+
+export async function createTaskCommit(orgId: string, taskId: string, input: CreateCommitInput) {
+  let { repositoryId, sha } = input;
+
+  if ((!repositoryId || !sha) && input.url) {
+    const m = input.url.trim().match(COMMIT_URL_PATTERN);
+    if (!m) {
+      throw new CodeLinkServiceError("INVALID_URL", "Could not parse commit URL", 400);
+    }
+    const [, owner, name, parsedSha] = m;
+    sha = sha ?? parsedSha;
+    if (!repositoryId) {
+      const repo = await prisma.projectRepository.findFirst({
+        where: {
+          provider: "GITHUB",
+          owner,
+          name,
+          project: { orgId, tasks: { some: { taskId } } },
+        },
+      });
+      if (!repo) {
+        throw new CodeLinkServiceError(
+          "REPO_NOT_ON_TASK_PROJECT",
+          "URL points to a repo not attached to this task's projects",
+          422,
+        );
+      }
+      repositoryId = repo.id;
+    }
+  }
+
+  if (!sha || !SHA_PATTERN.test(sha)) {
+    throw new CodeLinkServiceError("INVALID_SHA", "sha must be 7-40 hex characters", 400);
+  }
+  if (!repositoryId) {
+    const inferred = await inferTaskRepository(orgId, taskId);
+    repositoryId = inferred.id;
+  }
+
+  const { repo } = await resolveTaskRepository(orgId, taskId, repositoryId);
+  const url = input.url?.trim() || commitUrlFor(repo.owner, repo.name, sha);
+
+  try {
+    const created = await prisma.taskCommit.create({
+      data: {
+        taskId,
+        repositoryId,
+        sha,
+        message: input.message ?? null,
+        author: input.author ?? null,
+        authoredAt: input.authoredAt ? new Date(input.authoredAt) : null,
+        url,
+      },
+      include: { repository: true },
+    });
+    return formatCommit(created);
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new CodeLinkServiceError(
+        "COMMIT_EXISTS",
+        "A commit with that SHA is already linked for this repository",
+        409,
+      );
+    }
+    throw err;
+  }
+}
+
+export async function deleteTaskCommit(orgId: string, taskId: string, commitId: string) {
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, isDeleted: false, flow: { orgId } },
+  });
+  if (!task) throw new CodeLinkServiceError("NOT_FOUND", "Task not found", 404);
+
+  const commit = await prisma.taskCommit.findFirst({ where: { id: commitId, taskId } });
+  if (!commit) throw new CodeLinkServiceError("NOT_FOUND", "Commit link not found", 404);
+
+  await prisma.taskCommit.delete({ where: { id: commitId } });
+}
+
+export async function listTaskPullRequests(orgId: string, taskId: string) {
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, isDeleted: false, flow: { orgId } },
+  });
+  if (!task) throw new CodeLinkServiceError("NOT_FOUND", "Task not found", 404);
+
+  const rows = await prisma.taskPullRequest.findMany({
+    where: { taskId },
+    orderBy: { createdAt: "desc" },
+    include: { repository: true },
+  });
+  return rows.map(formatPullRequest);
+}
+
+export interface CreatePullRequestInput {
+  repositoryId?: string;
+  number?: number;
+  title?: string | null;
+  state?: string | null;
+  author?: string | null;
+  mergedAt?: string | null;
+  url?: string | null;
+}
+
+export async function createTaskPullRequest(
+  orgId: string,
+  taskId: string,
+  input: CreatePullRequestInput,
+) {
+  let { repositoryId, number } = input;
+
+  if ((!repositoryId || number == null) && input.url) {
+    const m = input.url.trim().match(PR_URL_PATTERN);
+    if (!m) {
+      throw new CodeLinkServiceError("INVALID_URL", "Could not parse PR URL", 400);
+    }
+    const [, owner, name, parsedNumber] = m;
+    number = number ?? parseInt(parsedNumber, 10);
+    if (!repositoryId) {
+      const repo = await prisma.projectRepository.findFirst({
+        where: {
+          provider: "GITHUB",
+          owner,
+          name,
+          project: { orgId, tasks: { some: { taskId } } },
+        },
+      });
+      if (!repo) {
+        throw new CodeLinkServiceError(
+          "REPO_NOT_ON_TASK_PROJECT",
+          "URL points to a repo not attached to this task's projects",
+          422,
+        );
+      }
+      repositoryId = repo.id;
+    }
+  }
+
+  if (number == null || !Number.isInteger(number) || number < 1) {
+    throw new CodeLinkServiceError("INVALID_NUMBER", "PR number must be a positive integer", 400);
+  }
+  if (!repositoryId) {
+    const inferred = await inferTaskRepository(orgId, taskId);
+    repositoryId = inferred.id;
+  }
+
+  const state = (input.state ?? "open").toLowerCase();
+  if (!VALID_PR_STATES.has(state)) {
+    throw new CodeLinkServiceError("INVALID_STATE", "state must be open, closed, or merged", 400);
+  }
+
+  const { repo } = await resolveTaskRepository(orgId, taskId, repositoryId);
+  const url = input.url?.trim() || prUrlFor(repo.owner, repo.name, number);
+
+  try {
+    const created = await prisma.taskPullRequest.create({
+      data: {
+        taskId,
+        repositoryId,
+        number,
+        title: input.title ?? null,
+        state,
+        author: input.author ?? null,
+        mergedAt: input.mergedAt ? new Date(input.mergedAt) : null,
+        url,
+      },
+      include: { repository: true },
+    });
+    return formatPullRequest(created);
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new CodeLinkServiceError(
+        "PR_EXISTS",
+        "A pull request with that number is already linked for this repository",
+        409,
+      );
+    }
+    throw err;
+  }
+}
+
+export async function deleteTaskPullRequest(orgId: string, taskId: string, prId: string) {
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, isDeleted: false, flow: { orgId } },
+  });
+  if (!task) throw new CodeLinkServiceError("NOT_FOUND", "Task not found", 404);
+
+  const pr = await prisma.taskPullRequest.findFirst({ where: { id: prId, taskId } });
+  if (!pr) throw new CodeLinkServiceError("NOT_FOUND", "PR link not found", 404);
+
+  await prisma.taskPullRequest.delete({ where: { id: prId } });
+}
+
+function formatCommit(row: any) {
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    repositoryId: row.repositoryId,
+    repository: row.repository
+      ? {
+          id: row.repository.id,
+          provider: row.repository.provider,
+          owner: row.repository.owner,
+          name: row.repository.name,
+        }
+      : undefined,
+    sha: row.sha,
+    message: row.message,
+    author: row.author,
+    authoredAt: row.authoredAt ? row.authoredAt.toISOString() : null,
+    url: row.url,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function formatPullRequest(row: any) {
+  return {
+    id: row.id,
+    taskId: row.taskId,
+    repositoryId: row.repositoryId,
+    repository: row.repository
+      ? {
+          id: row.repository.id,
+          provider: row.repository.provider,
+          owner: row.repository.owner,
+          name: row.repository.name,
+        }
+      : undefined,
+    number: row.number,
+    title: row.title,
+    state: row.state,
+    author: row.author,
+    mergedAt: row.mergedAt ? row.mergedAt.toISOString() : null,
+    url: row.url,
+    createdAt: row.createdAt.toISOString(),
+  };
+}

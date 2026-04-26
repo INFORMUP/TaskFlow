@@ -6,6 +6,7 @@ import { getTransitions, createTransition, type Transition } from "@/api/transit
 import { getComments, createComment, deleteComment, type Comment } from "@/api/comments.api";
 import { apiFetch } from "@/api/client";
 import MarkdownView from "@/features/tasks/components/MarkdownView.vue";
+import TaskCodeLinksSection from "@/features/tasks/components/TaskCodeLinksSection.vue";
 import ActorLabel from "@/components/ActorLabel.vue";
 
 const route = useRoute();
@@ -202,6 +203,11 @@ onMounted(async () => {
       >
         Transition
       </button>
+    </div>
+
+    <!-- Linked commits and pull requests -->
+    <div class="detail__section">
+      <TaskCodeLinksSection :task-id="task.id" />
     </div>
 
     <!-- Transition history -->

@@ -221,6 +221,8 @@ model Task {
   transitions   TaskTransition[]
   comments      Comment[]
   projects      TaskProject[]
+  commits       TaskCommit[]
+  pullRequests  TaskPullRequest[]
 
   @@index([flowId, currentStatusId])
   @@index([assigneeId])
@@ -292,11 +294,52 @@ model ProjectRepository {
   name      String
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz()
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  commits      TaskCommit[]
+  pullRequests TaskPullRequest[]
 
   @@unique([projectId, provider, owner, name])
   @@index([projectId])
   @@map("project_repositories")
+}
+
+model TaskCommit {
+  id           String    @id @default(uuid()) @db.Uuid
+  taskId       String    @map("task_id") @db.Uuid
+  repositoryId String    @map("repository_id") @db.Uuid
+  sha          String
+  message      String?   @db.Text
+  author       String?
+  authoredAt   DateTime? @map("authored_at") @db.Timestamptz()
+  url          String
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  task       Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  repository ProjectRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, sha])
+  @@index([taskId])
+  @@map("task_commits")
+}
+
+model TaskPullRequest {
+  id           String    @id @default(uuid()) @db.Uuid
+  taskId       String    @map("task_id") @db.Uuid
+  repositoryId String    @map("repository_id") @db.Uuid
+  number       Int
+  title        String?
+  state        String // open, closed, merged
+  author       String?
+  mergedAt     DateTime? @map("merged_at") @db.Timestamptz()
+  url          String
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz()
+
+  task       Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  repository ProjectRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, number])
+  @@index([taskId])
+  @@map("task_pull_requests")
 }
 
 model ProjectFlow {
