@@ -7,6 +7,7 @@ import { errorHandler } from "./plugins/error-handler.js";
 import { authPlugin } from "./plugins/auth.js";
 import { rateLimitPlugin } from "./plugins/rate-limit.js";
 import { healthRoutes } from "./routes/health.js";
+import { versionRoutes, APP_VERSION } from "./routes/version.js";
 import { authRoutes } from "./routes/auth.js";
 import { apiTokenRoutes } from "./routes/api-tokens.js";
 import { userRoutes } from "./routes/users.js";
@@ -37,7 +38,7 @@ export function createApp() {
         title: "TaskFlow API",
         description:
           "Agent-integrated task management API. Authenticate with a bearer token — either a user JWT or an API token (prefix `tf_`).",
-        version: "0.1.0",
+        version: APP_VERSION,
       },
       components: {
         securitySchemes: {
@@ -56,6 +57,7 @@ export function createApp() {
     uiConfig: { docExpansion: "list", deepLinking: true },
   });
   app.register(healthRoutes);
+  app.register(versionRoutes);
   app.register(authRoutes);
   app.register(apiTokenRoutes);
   app.register(userRoutes);

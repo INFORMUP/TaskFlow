@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "separate-pull-requests": false,
+  "packages": {
+    "backend": {
+      "package-name": "taskflow-backend"
+    },
+    "frontend": {
+      "package-name": "taskflow-frontend"
+    }
+  },
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "taskflow",
+      "components": ["taskflow-backend", "taskflow-frontend"],
+      "merge": true
+    }
+  ]
+}
