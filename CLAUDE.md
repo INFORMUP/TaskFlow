@@ -41,6 +41,36 @@ external/      # Reference projects (git submodules)
 - Prisma schema: `backend/prisma/schema.prisma`
 - Seed data: `backend/prisma/seeders/` (deterministic UUIDs via uuid5)
 
+## Issue Tracking
+- **New issues go in TaskFlow, not GitHub.** This project tracks work at https://taskflow.informup.org under the Taskflow project. Do not run `gh issue create` for new work — use the `/create-task` slash command (or POST directly to `/api/v1/tasks`). Existing GitHub issues are being migrated; new ones should not be opened.
+
+## TaskFlow Workflow Skills
+
+The `feature` flow runs `discuss → design → prototype → implement → validate → review → closed`. Each stage has a slash command that wraps the API and enforces the right guardrails. Skills live in `.claude/commands/` and are scoped to this repo.
+
+| Skill | Stage | What it does |
+|---|---|---|
+| `/create-task <title>` | — | Creates a task in the Taskflow project. Defaults flow=`feature`, project=Taskflow. |
+| `/design <task>` | `design` | Reads task + comments + relevant code, posts a structured spec (goal, user stories, acceptance criteria, technical approach, out-of-scope, open questions) as a comment. Offers transition to `prototype`. |
+| `/transition <task> <status> [note]` | any | Escape hatch — moves a task to any status. Use for backward bounces (`design → discuss`), closing transitions (asks for resolution), and one-offs the workflow skills don't cover. |
+| `/implement <task>` | `implement` | Creates a worktree at `.claude/worktrees/<task-id>/` on `feat/<task-id>-<slug>` off `origin/staging`. TDD-implements, opens PR targeting `staging`, links the PR via `POST /api/v1/tasks/{id}/pull-requests`. Offers transition to `validate`. |
+| `/validate <task>` | `validate` | Reviews the linked PR against the design spec's acceptance criteria. Posts an APPROVE / REQUEST_CHANGES / COMMENT review on GitHub with a criterion-by-criterion checklist. If approved, offers transition to `review`. |
+| `/address-review <task-or-PR>` | `validate` | Inverse of `/validate`. Pulls every reviewer comment (review summaries + inline + conversation), triages each as Fix/Reply/Defer, makes the fixes, replies to every comment, re-requests review. Does not transition — re-validation is `/validate` again. |
+
+### Workflow guardrails encoded by these skills
+- **No skill auto-advances tasks it doesn't own.** `/design` won't push to prototype without asking; `/implement` refuses to start unless the task is already in `implement`. The human review points stay intact.
+- **No merging from skills.** PRs are opened, reviewed, and addressed — never merged. Merge is a human decision.
+- **No `--no-verify` and no force-push.** Pre-commit hooks must pass; force-push detaches inline review comments.
+- **Permission matrix matters.** Skills surface 403s without retrying. Examples encoded in `backend/src/services/permission.service.ts`:
+  - `feature.design` requires `product` team
+  - `feature.prototype` / `feature.implement` / `feature.validate` requires `engineer` or `agent`
+  - `feature.review` requires `engineer` or `product`
+- **Transitions always need a note.** The server rejects empty notes (validated in `transition.service.ts`).
+- **`closed` is terminal.** There is intentionally no `verify`/`monitor` stage between `review` and `closed`. Prod regressions are tracked as fresh `BUG` tasks, not as a per-task verification gate. Revisit only when a real prod miss creates the need.
+
+## API Tokens (local scripts)
+- Personal API tokens for taskflow.informup.org used by local scripts (e.g. issue importers) live at `~/.taskflow-import-token` (chmod 600). Read via `process.env` after sourcing, or `fs.readFileSync` directly. Do not commit tokens to the repo or place them in `backend/.env`.
+
 ## Commit Workflow
 - Run `npm test` in the affected package(s) (backend, frontend, or both) before committing.
 - A pre-commit hook runs `tsc --noEmit` (backend) and `vue-tsc --noEmit` (frontend) automatically. If it fails, fix type errors before committing.
