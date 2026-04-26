@@ -113,6 +113,7 @@ interface CreateTaskInput {
   assigneeUserId?: string | null;
   projectIds?: string[];
   dueDate?: string | Date | null;
+  spawnedFromTaskId?: string | null;
 }
 
 export class TaskServiceError extends Error {
@@ -180,6 +181,7 @@ export async function createTask(input: CreateTaskInput) {
         createdBy: input.createdBy,
         assigneeId,
         dueDate,
+        spawnedFromTaskId: input.spawnedFromTaskId ?? null,
       },
       include: taskInclude,
     });
@@ -223,6 +225,28 @@ export const taskInclude = {
         },
       },
     },
+  },
+} as const;
+
+export const taskDetailInclude = {
+  ...taskInclude,
+  spawnedFrom: {
+    select: {
+      id: true,
+      displayId: true,
+      title: true,
+      flow: { select: { slug: true } },
+    },
+  },
+  spawnedTasks: {
+    select: {
+      id: true,
+      displayId: true,
+      title: true,
+      flow: { select: { slug: true } },
+      currentStatus: { select: { slug: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" },
   },
 } as const;
 

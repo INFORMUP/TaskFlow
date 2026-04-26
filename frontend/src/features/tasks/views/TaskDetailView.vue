@@ -130,6 +130,15 @@ onMounted(async () => {
       </span>
     </div>
 
+    <div v-if="task.spawnedFromTask" class="detail__spawned-from">
+      Spawned from
+      <router-link
+        :to="`/tasks/${task.spawnedFromTask.flow.slug}/${task.spawnedFromTask.id}`"
+      >
+        {{ task.spawnedFromTask.displayId }} — {{ task.spawnedFromTask.title }}
+      </router-link>
+    </div>
+
     <MarkdownView
       v-if="task.description"
       :source="task.description"
@@ -232,6 +241,19 @@ onMounted(async () => {
           <div class="timeline__note">{{ t.note }}</div>
         </div>
       </div>
+    </div>
+
+    <!-- Follow-ups (tasks spawned from this one) -->
+    <div v-if="task.spawnedTasks && task.spawnedTasks.length" class="detail__section">
+      <h3>Follow-ups</h3>
+      <ul class="detail__followups">
+        <li v-for="f in task.spawnedTasks" :key="f.id">
+          <router-link :to="`/tasks/${f.flow.slug}/${f.id}`">
+            {{ f.displayId }} — {{ f.title }}
+          </router-link>
+          <span class="detail__followup-status">{{ f.currentStatus.name }}</span>
+        </li>
+      </ul>
     </div>
 
     <!-- Comments -->
@@ -350,6 +372,33 @@ onMounted(async () => {
 .detail__project-chip strong {
   color: var(--accent);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.detail__spawned-from {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.detail__followups {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.detail__followups li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.detail__followup-status {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }
 
 .timeline__reassign {
