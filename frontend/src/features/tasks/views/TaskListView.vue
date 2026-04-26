@@ -47,6 +47,11 @@ function sortIndicator(key: SortKey) {
   return sortDir.value === "asc" ? " ▲" : " ▼";
 }
 
+function ariaSort(key: SortKey): "ascending" | "descending" | "none" {
+  if (sortKey.value !== key) return "none";
+  return sortDir.value === "asc" ? "ascending" : "descending";
+}
+
 function openTask(task: Task) {
   router.push(`/tasks/${props.flow}/${task.id}`);
 }
@@ -56,25 +61,37 @@ function openTask(task: Task) {
   <table class="task-list">
     <thead>
       <tr>
-        <th>ID</th>
-        <th class="task-list__sortable" @click="toggleSort('title')">
-          Title{{ sortIndicator("title") }}
+        <th scope="col">ID</th>
+        <th scope="col" :aria-sort="ariaSort('title')">
+          <button type="button" class="task-list__sort-btn" @click="toggleSort('title')">
+            Title{{ sortIndicator("title") }}
+          </button>
         </th>
-        <th>Projects</th>
-        <th class="task-list__sortable" @click="toggleSort('assignee')">
-          Assignee{{ sortIndicator("assignee") }}
+        <th scope="col">Projects</th>
+        <th scope="col" :aria-sort="ariaSort('assignee')">
+          <button type="button" class="task-list__sort-btn" @click="toggleSort('assignee')">
+            Assignee{{ sortIndicator("assignee") }}
+          </button>
         </th>
-        <th class="task-list__sortable" @click="toggleSort('status')">
-          Status{{ sortIndicator("status") }}
+        <th scope="col" :aria-sort="ariaSort('status')">
+          <button type="button" class="task-list__sort-btn" @click="toggleSort('status')">
+            Status{{ sortIndicator("status") }}
+          </button>
         </th>
-        <th class="task-list__sortable" @click="toggleSort('priority')">
-          Priority{{ sortIndicator("priority") }}
+        <th scope="col" :aria-sort="ariaSort('priority')">
+          <button type="button" class="task-list__sort-btn" @click="toggleSort('priority')">
+            Priority{{ sortIndicator("priority") }}
+          </button>
         </th>
-        <th class="task-list__sortable" @click="toggleSort('dueDate')">
-          Due{{ sortIndicator("dueDate") }}
+        <th scope="col" :aria-sort="ariaSort('dueDate')">
+          <button type="button" class="task-list__sort-btn" @click="toggleSort('dueDate')">
+            Due{{ sortIndicator("dueDate") }}
+          </button>
         </th>
-        <th class="task-list__sortable" @click="toggleSort('updatedAt')">
-          Updated{{ sortIndicator("updatedAt") }}
+        <th scope="col" :aria-sort="ariaSort('updatedAt')">
+          <button type="button" class="task-list__sort-btn" @click="toggleSort('updatedAt')">
+            Updated{{ sortIndicator("updatedAt") }}
+          </button>
         </th>
       </tr>
     </thead>
@@ -83,9 +100,17 @@ function openTask(task: Task) {
         v-for="t in sorted"
         :key="t.id"
         class="task-list__row"
-        @click="openTask(t)"
       >
-        <td class="task-list__id">{{ t.displayId }}</td>
+        <td class="task-list__id">
+          <button
+            type="button"
+            class="task-list__row-btn"
+            :aria-label="`Open task ${t.displayId} — ${t.title}`"
+            @click="openTask(t)"
+          >
+            {{ t.displayId }}
+          </button>
+        </td>
         <td>{{ t.title }}</td>
         <td>
           <span
@@ -127,15 +152,28 @@ function openTask(task: Task) {
   font-weight: 600;
   color: var(--text-secondary);
 }
-.task-list__sortable {
+.task-list__sort-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
   cursor: pointer;
+  font: inherit;
+  color: inherit;
+  font-weight: inherit;
+  text-transform: inherit;
   user-select: none;
-}
-.task-list__row {
-  cursor: pointer;
 }
 .task-list__row:hover {
   background: var(--bg-secondary, rgba(0, 0, 0, 0.03));
+}
+.task-list__row-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
 }
 .task-list__id {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

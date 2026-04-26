@@ -120,7 +120,7 @@ function handleGoogleLogin() {
     >
       {{ errorMessage }}
     </div>
-    <button class="login__button" @click="handleGoogleLogin">
+    <button type="button" class="login__button" @click="handleGoogleLogin">
       Sign in with Google
     </button>
   </div>

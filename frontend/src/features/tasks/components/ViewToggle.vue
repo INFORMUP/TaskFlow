@@ -5,14 +5,18 @@ const { filters, setFilters } = useTaskFilters();
 </script>
 
 <template>
-  <div class="view-toggle">
+  <div class="view-toggle" role="group" aria-label="View mode">
     <button
+      type="button"
+      :aria-pressed="filters.view === 'board'"
       :class="{ 'view-toggle__btn--active': filters.view === 'board' }"
       @click="setFilters({ view: 'board' })"
     >
       Board
     </button>
     <button
+      type="button"
+      :aria-pressed="filters.view === 'list'"
       :class="{ 'view-toggle__btn--active': filters.view === 'list' }"
       @click="setFilters({ view: 'list' })"
     >

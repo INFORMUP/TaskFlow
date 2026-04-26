@@ -35,13 +35,9 @@ export async function apiFetch<T>(
   let token = localStorage.getItem("accessToken");
 
   const headers: Record<string, string> = {
+    ...(options.body != null ? { "Content-Type": "application/json" } : {}),
     ...(options.headers as Record<string, string>),
   };
-  // Fastify rejects requests with `Content-Type: application/json` and an
-  // empty body, so only set the header when we're actually sending one.
-  if (options.body !== undefined && options.body !== null) {
-    headers["Content-Type"] ??= "application/json";
-  }
 
   if (token) {
     headers.Authorization = `Bearer ${token}`;

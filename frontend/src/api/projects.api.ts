@@ -142,3 +142,42 @@ export async function clearStatusDefault(
     method: "DELETE",
   });
 }
+
+export type RepoProvider = "GITHUB";
+
+export interface ProjectRepository {
+  id: string;
+  projectId: string;
+  provider: RepoProvider;
+  owner: string;
+  name: string;
+  createdAt: string;
+}
+
+export async function listProjectRepositories(
+  projectId: string,
+): Promise<ProjectRepository[]> {
+  const res = await apiFetch<{ data: ProjectRepository[] }>(
+    `/api/v1/projects/${projectId}/repositories`,
+  );
+  return res.data;
+}
+
+export function addProjectRepository(
+  projectId: string,
+  payload: { provider: RepoProvider; owner: string; name: string },
+): Promise<ProjectRepository> {
+  return apiFetch(`/api/v1/projects/${projectId}/repositories`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function removeProjectRepository(
+  projectId: string,
+  repositoryId: string,
+): Promise<void> {
+  await apiFetch(`/api/v1/projects/${projectId}/repositories/${repositoryId}`, {
+    method: "DELETE",
+  });
+}
