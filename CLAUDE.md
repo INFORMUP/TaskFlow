@@ -21,6 +21,13 @@ external/      # Reference projects (git submodules)
 4. `npx prisma db seed` (seed teams, flows, statuses, transitions)
 5. `npm run dev` (starts on port 3001)
 
+### Optional: route in-app feedback to a TaskFlow project
+Set `TASKFLOW_PRODUCT_PROJECT_ORG_ID` to the org UUID that owns the TaskFlow
+product project, and `TASKFLOW_PRODUCT_PROJECT_KEY` to its key (default `TF`).
+With those set, every `POST /api/v1/feedback` also creates a Task on the
+matching flow (BUG → bug, FEATURE → feature, IMPROVEMENT → improvement).
+With either unset, feedback persists without an associated task.
+
 ## Frontend Startup
 1. `cd frontend && npm install`
 2. `npm run dev` (starts on port 5173)

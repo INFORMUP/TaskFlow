@@ -31,7 +31,7 @@ async function authAndSkipModals(
 }
 
 test.describe("Feedback bubble", () => {
-  test("submits enhancement feedback from an authenticated page", async ({
+  test("submits improvement feedback from an authenticated page", async ({
     page,
   }) => {
     const user = await createUserWithOrg();
@@ -46,13 +46,13 @@ test.describe("Feedback bubble", () => {
 
     await expect(page.getByTestId("feedback-bubble-panel")).toBeVisible();
 
-    await page.getByTestId("feedback-type-enhancement").click();
-    await expect(page.getByTestId("feedback-type-enhancement")).toHaveAttribute(
+    await page.getByTestId("feedback-type-improvement").click();
+    await expect(page.getByTestId("feedback-type-improvement")).toHaveAttribute(
       "aria-pressed",
       "true",
     );
 
-    const message = `E2E enhancement ${Date.now()}`;
+    const message = `E2E improvement ${Date.now()}`;
     await page.getByTestId("feedback-message").fill(message);
 
     const submit = page.getByTestId("feedback-submit");
@@ -78,7 +78,7 @@ test.describe("Feedback bubble", () => {
         [user.id, message],
       );
       expect(rows).toHaveLength(1);
-      expect(rows[0].type).toBe("ENHANCEMENT");
+      expect(rows[0].type).toBe("IMPROVEMENT");
       expect(rows[0].page).toContain("/projects");
     } finally {
       await verify.end();

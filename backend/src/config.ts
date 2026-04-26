@@ -33,4 +33,14 @@ export const config = {
   smtpPass: process.env.SMTP_PASS ?? "",
   smtpFrom: process.env.SMTP_FROM ?? "TaskFlow <no-reply@taskflow.local>",
   inviteAcceptBaseUrl: process.env.INVITE_ACCEPT_BASE_URL ?? "http://localhost:5173/accept-invite",
+  // In-app feedback bubble routes submissions to a designated TaskFlow product
+  // project. When productProjectOrgId is unset, feedback is stored without
+  // creating a task (legacy behavior). Read lazily so tests can mutate
+  // process.env without reaching into module state.
+  get productProjectKey(): string {
+    return process.env.TASKFLOW_PRODUCT_PROJECT_KEY ?? "TF";
+  },
+  get productProjectOrgId(): string {
+    return process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID ?? "";
+  },
 };

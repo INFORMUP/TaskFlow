@@ -49,20 +49,27 @@ describe("FeedbackBubble", () => {
     );
   });
 
-  it("type selector toggles between BUG and ENHANCEMENT", async () => {
+  it("type selector toggles between BUG, IMPROVEMENT, and FEATURE", async () => {
     const wrapper = mount(FeedbackBubble);
     await wrapper.get("[data-testid='feedback-bubble-button']").trigger("click");
 
     const bugBtn = wrapper.get("[data-testid='feedback-type-bug']");
-    const enhBtn = wrapper.get("[data-testid='feedback-type-enhancement']");
+    const impBtn = wrapper.get("[data-testid='feedback-type-improvement']");
+    const featBtn = wrapper.get("[data-testid='feedback-type-feature']");
 
     // default is BUG
     expect(bugBtn.attributes("aria-pressed")).toBe("true");
-    expect(enhBtn.attributes("aria-pressed")).toBe("false");
+    expect(impBtn.attributes("aria-pressed")).toBe("false");
+    expect(featBtn.attributes("aria-pressed")).toBe("false");
 
-    await enhBtn.trigger("click");
+    await impBtn.trigger("click");
     expect(bugBtn.attributes("aria-pressed")).toBe("false");
-    expect(enhBtn.attributes("aria-pressed")).toBe("true");
+    expect(impBtn.attributes("aria-pressed")).toBe("true");
+    expect(featBtn.attributes("aria-pressed")).toBe("false");
+
+    await featBtn.trigger("click");
+    expect(impBtn.attributes("aria-pressed")).toBe("false");
+    expect(featBtn.attributes("aria-pressed")).toBe("true");
 
     await bugBtn.trigger("click");
     expect(bugBtn.attributes("aria-pressed")).toBe("true");
@@ -86,7 +93,7 @@ describe("FeedbackBubble", () => {
     const wrapper = mount(FeedbackBubble);
     await wrapper.get("[data-testid='feedback-bubble-button']").trigger("click");
     await wrapper
-      .get("[data-testid='feedback-type-enhancement']")
+      .get("[data-testid='feedback-type-improvement']")
       .trigger("click");
     await wrapper
       .get("[data-testid='feedback-message']")
@@ -94,7 +101,7 @@ describe("FeedbackBubble", () => {
     await wrapper.get("[data-testid='feedback-submit']").trigger("click");
 
     expect(submitFeedback).toHaveBeenCalledWith({
-      type: "ENHANCEMENT",
+      type: "IMPROVEMENT",
       message: "make it faster",
       page: "http://localhost/tasks",
     });

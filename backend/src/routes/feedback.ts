@@ -2,11 +2,30 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { CommonErrorResponses, ErrorResponse, IdParams } from "./_schemas.js";
+import { config } from "../config.js";
+import { createTask } from "../services/task.service.js";
+import {
+  FEEDBACK_BOT_DISPLAY_NAME,
+  FEEDBACK_BOT_USER_ID,
+} from "../constants/system-users.js";
 
 const FeedbackType = Type.Union([
   Type.Literal("BUG"),
-  Type.Literal("ENHANCEMENT"),
+  Type.Literal("FEATURE"),
+  Type.Literal("IMPROVEMENT"),
 ]);
+
+const FEEDBACK_TYPE_TO_FLOW_SLUG: Record<string, string> = {
+  BUG: "bug",
+  FEATURE: "feature",
+  IMPROVEMENT: "improvement",
+};
+
+function truncateTitle(message: string, max = 80): string {
+  const oneLine = message.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= max) return oneLine;
+  return oneLine.slice(0, max - 1).trimEnd() + "…";
+}
 
 const FeedbackRecord = Type.Object(
   {
@@ -18,6 +37,7 @@ const FeedbackRecord = Type.Object(
     page: Type.Union([Type.String(), Type.Null()]),
     adminNotes: Type.Union([Type.String(), Type.Null()]),
     archivedAt: Type.Union([Type.String(), Type.Null()]),
+    taskId: Type.Union([Type.String(), Type.Null()]),
     createdAt: Type.String(),
   },
   { additionalProperties: true },
@@ -98,6 +118,98 @@ function csvEscape(value: unknown): string {
   return s;
 }
 
+interface TryCreateProductTaskInput {
+  feedbackType: "BUG" | "FEATURE" | "IMPROVEMENT";
+  message: string;
+  page: string | null;
+  log: FastifyRequest["log"];
+}
+
+// Cache the upsert per process so we don't write on every feedback POST.
+// The seeder also creates this user; the upsert is defense-in-depth for
+// environments where the seed hasn't been re-run after this change shipped.
+let feedbackBotEnsured: Promise<void> | null = null;
+function ensureFeedbackBotUser(): Promise<void> {
+  if (!feedbackBotEnsured) {
+    feedbackBotEnsured = prisma.user
+      .upsert({
+        where: { id: FEEDBACK_BOT_USER_ID },
+        update: {},
+        create: {
+          id: FEEDBACK_BOT_USER_ID,
+          email: null,
+          displayName: FEEDBACK_BOT_DISPLAY_NAME,
+          actorType: "agent",
+          status: "active",
+        },
+      })
+      .then(() => undefined)
+      .catch((err) => {
+        feedbackBotEnsured = null;
+        throw err;
+      });
+  }
+  return feedbackBotEnsured;
+}
+
+async function tryCreateProductTask(
+  input: TryCreateProductTaskInput,
+): Promise<string | null> {
+  const { productProjectOrgId, productProjectKey } = config;
+  if (!productProjectOrgId) return null;
+
+  const project = await prisma.project.findFirst({
+    where: { orgId: productProjectOrgId, key: productProjectKey },
+    select: { id: true },
+  });
+  if (!project) {
+    input.log.warn(
+      { productProjectOrgId, productProjectKey },
+      "feedback: product project not found; skipping task creation",
+    );
+    return null;
+  }
+
+  const flowSlug = FEEDBACK_TYPE_TO_FLOW_SLUG[input.feedbackType];
+  // Submitter attribution intentionally omitted from the task description —
+  // the Feedback row (orgId, userId, taskId) is the structured admin-only
+  // surface for that. Keeping it out of description avoids leaking submitter
+  // identity to product-org members who can read the task.
+  const description =
+    `${input.message}\n\n` +
+    `---\nSubmitted via in-app feedback bubble.` +
+    (input.page ? `\nPage: ${input.page}` : "");
+
+  try {
+    await ensureFeedbackBotUser();
+    const task = await createTask({
+      orgId: productProjectOrgId,
+      flowSlug,
+      title: truncateTitle(input.message),
+      description,
+      priority: "medium",
+      createdBy: FEEDBACK_BOT_USER_ID,
+      actorType: "agent",
+      assigneeUserId: null,
+      projectIds: [project.id],
+    });
+    if (!task) {
+      input.log.warn(
+        { productProjectOrgId, productProjectKey, flowSlug, projectId: project.id },
+        "feedback: flow not found in product org; skipping task creation",
+      );
+      return null;
+    }
+    return task.id;
+  } catch (err) {
+    input.log.error(
+      { err, flowSlug, projectId: project.id },
+      "feedback: failed to create product task",
+    );
+    return null;
+  }
+}
+
 export async function feedbackRoutes(fastify: FastifyInstance) {
   fastify.post<{ Body: Static<typeof CreateFeedbackBody> }>(
     "/api/v1/feedback",
@@ -124,6 +236,9 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           },
         });
       }
+      // Insert the feedback row first so a task-creation failure can't
+      // produce an orphan task with no feedback link. Then create the task,
+      // then update the row with the resulting taskId.
       const created = await prisma.feedback.create({
         data: {
           orgId: request.org.id,
@@ -133,6 +248,26 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           page: page ?? null,
         },
       });
+      const taskId = await tryCreateProductTask({
+        feedbackType: type,
+        message: trimmed,
+        page: page ?? null,
+        log: request.log,
+      });
+      if (taskId) {
+        try {
+          const updated = await prisma.feedback.update({
+            where: { id: created.id },
+            data: { taskId },
+          });
+          return reply.status(201).send(updated);
+        } catch (err) {
+          request.log.error(
+            { err, feedbackId: created.id, taskId },
+            "feedback: created task but failed to link it to feedback row (orphan task)",
+          );
+        }
+      }
       return reply.status(201).send(created);
     },
   );

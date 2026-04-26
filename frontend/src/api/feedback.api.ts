@@ -1,6 +1,6 @@
 import { apiFetch } from "./client";
 
-export type FeedbackType = "BUG" | "ENHANCEMENT";
+export type FeedbackType = "BUG" | "FEATURE" | "IMPROVEMENT";
 
 export interface Feedback {
   id: string;
@@ -11,6 +11,7 @@ export interface Feedback {
   page: string | null;
   adminNotes: string | null;
   archivedAt: string | null;
+  taskId: string | null;
   createdAt: string;
 }
 
