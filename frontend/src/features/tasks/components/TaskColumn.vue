@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { Task } from "@/api/tasks.api";
 import TaskCard from "./TaskCard.vue";
+import TaskColumnEmptyState from "./TaskColumnEmptyState.vue";
 
 defineProps<{
   status: { slug: string; name: string };
   tasks: Task[];
+  flowSlug: string;
 }>();
 
 const emit = defineEmits<{
@@ -25,7 +27,11 @@ const emit = defineEmits<{
         :task="task"
         @click="emit('taskClick', task)"
       />
-      <div v-if="tasks.length === 0" class="column__empty">No tasks</div>
+      <TaskColumnEmptyState
+        v-if="tasks.length === 0"
+        :flow-slug="flowSlug"
+        :status-slug="status.slug"
+      />
     </div>
   </div>
 </template>
@@ -68,12 +74,5 @@ const emit = defineEmits<{
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-}
-
-.column__empty {
-  text-align: center;
-  padding: 1rem;
-  color: var(--text-secondary);
-  font-size: 0.8125rem;
 }
 </style>
