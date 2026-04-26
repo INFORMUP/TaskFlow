@@ -164,21 +164,20 @@ export async function claimPendingInvitationsForUser(
 
   let claimed = 0;
   for (const inv of pending) {
-    await prisma.$transaction(async (tx) => {
-      const existing = await tx.orgMember.findUnique({
-        where: { orgId_userId: { orgId: inv.orgId, userId } },
-      });
-      if (!existing) {
-        await tx.orgMember.create({
-          data: { orgId: inv.orgId, userId, role: inv.role },
-        });
-      }
-      await tx.invitation.update({
-        where: { id: inv.id },
+    const won = await prisma.$transaction(async (tx) => {
+      const result = await tx.invitation.updateMany({
+        where: { id: inv.id, acceptedAt: null },
         data: { acceptedAt: now, acceptedByUserId: userId },
       });
+      if (result.count === 0) return false;
+      await tx.orgMember.upsert({
+        where: { orgId_userId: { orgId: inv.orgId, userId } },
+        create: { orgId: inv.orgId, userId, role: inv.role },
+        update: {},
+      });
+      return true;
     });
-    claimed += 1;
+    if (won) claimed += 1;
   }
   return claimed;
 }
