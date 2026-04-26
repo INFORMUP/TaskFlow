@@ -19,7 +19,7 @@ Create a new task in TaskFlow at taskflow.informup.org. **Do not** create a GitH
 
 3. **Flow**: default to `feature`. If the title clearly suggests otherwise (`bug`, `improvement`), confirm with the user before switching. Available slugs: `feature`, `bug`, `improvement` (and others — list via `GET /api/v1/flows` if needed).
 
-4. **Project**: default to the Taskflow project (`3699c368-ddaf-4233-a569-05d78b0b4d0d`). Don't ask unless the user has set up other projects since this skill was written.
+4. **Project**: default to the Taskflow project. Resolve its UUID at runtime via `GET /api/v1/projects?slug=taskflow` and read `data[0].id` — don't hardcode the UUID, since reseeds can change it. If the lookup returns zero results, stop and surface the error.
 
 5. **Token**: read from `~/.taskflow-import-token` (chmod 600). Do not log the token.
 

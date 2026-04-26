@@ -69,7 +69,7 @@ Pick up a PR with requested changes, address each comment with a code fix or a r
    - `git push origin <head-branch>`.
 
 10. **Reply to each comment**
-    - **Inline diff comments**: reply via `gh api -X POST repos/INFORMUP/TaskFlow/pulls/<number>/comments -f body="..." -F in_reply_to=<comment-id>`. (There is no `/replies` sub-resource — replies are created by POSTing to the same `/comments` collection with `in_reply_to` pointing at the parent comment id.)
+    - **Inline diff comments**: reply via `gh api -X POST repos/INFORMUP/TaskFlow/pulls/<number>/comments/<comment-id>/replies -f body="..."`. (GitHub also accepts POSTing to the parent `/comments` collection with `-F in_reply_to=<comment-id>`; either works, but the `/replies` sub-resource is the documented path.)
     - **Review summary comments**: there's no per-summary reply API — post a single PR-level conversation comment summarizing what was addressed:
       ```bash
       gh pr comment <number> --body "$(cat <<'EOF'
