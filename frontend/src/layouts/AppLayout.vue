@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import NavBar from "@/components/NavBar.vue";
+import FeedbackBubble from "@/components/FeedbackBubble.vue";
 </script>
 
 <template>
@@ -8,6 +9,7 @@ import NavBar from "@/components/NavBar.vue";
     <main class="app-main">
       <slot />
     </main>
+    <FeedbackBubble />
   </div>
 </template>
 
