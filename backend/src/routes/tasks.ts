@@ -76,6 +76,9 @@ const UpdateTaskBody = Type.Object({
   dueDate: Type.Optional(
     Type.Union([Type.String({ description: "ISO 8601 date or date-time." }), Type.Null()])
   ),
+  assigneeUserId: Type.Optional(
+    Type.Union([Type.String({ format: "uuid" }), Type.Null()])
+  ),
 });
 
 const ProjectIdBody = Type.Object({ projectId: Type.String({ format: "uuid" }) });
@@ -419,6 +422,17 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
+      if (updates.assigneeUserId) {
+        const assignee = await prisma.user.findUnique({
+          where: { id: updates.assigneeUserId },
+        });
+        if (!assignee) {
+          return reply.status(400).send({
+            error: { code: "INVALID_ASSIGNEE", message: "Assignee user not found" },
+          });
+        }
+      }
+
       const updated = await prisma.task.update({
         where: { id },
         data: {
@@ -426,6 +440,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
           ...(updates.description !== undefined && { description: updates.description }),
           ...(updates.priority && { priority: updates.priority }),
           ...(updates.dueDate !== undefined && { dueDate: updates.dueDate ? new Date(updates.dueDate) : null }),
+          ...(updates.assigneeUserId !== undefined && { assigneeId: updates.assigneeUserId }),
         },
         include: taskInclude,
       });

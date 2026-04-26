@@ -66,7 +66,13 @@ export function removeTaskProject(id: string, projectId: string): Promise<void> 
 
 export function updateTask(
   id: string,
-  data: { title?: string; description?: string; priority?: string; dueDate?: string | null }
+  data: {
+    title?: string;
+    description?: string;
+    priority?: string;
+    dueDate?: string | null;
+    assigneeUserId?: string | null;
+  }
 ): Promise<Task> {
   return apiFetch(`/api/v1/tasks/${id}`, {
     method: "PATCH",
