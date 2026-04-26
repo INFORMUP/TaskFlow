@@ -4,10 +4,22 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(
-  readFileSync(join(here, "../../package.json"), "utf8")
-) as { version: string };
+function readNearestPackageJson(start: string): { version: string } {
+  let dir = start;
+  while (true) {
+    try {
+      return JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    } catch {
+      const parent = dirname(dir);
+      if (parent === dir) {
+        throw new Error("package.json not found from " + start);
+      }
+      dir = parent;
+    }
+  }
+}
+
+const pkg = readNearestPackageJson(dirname(fileURLToPath(import.meta.url)));
 
 export const APP_VERSION = pkg.version;
 

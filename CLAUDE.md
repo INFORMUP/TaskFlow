@@ -49,7 +49,7 @@ external/      # Reference projects (git submodules)
 ## PR Titles (Conventional Commits)
 - PRs into `staging` and direct hotfix PRs into `main` must have titles following Conventional Commits — e.g. `feat(api): add version endpoint`, `fix: handle null assignee`, `feat!: drop deprecated field` for breaking changes. The `commitlint` workflow enforces this.
 - Allowed types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`, `style`. Use `!` after type/scope for breaking changes.
-- The app version is bumped automatically by release-please based on these prefixes (`feat` → minor, `fix` → patch, `!` → major). Choose the type accordingly — it determines the next version.
+- The app version is bumped automatically by release-please based on these prefixes (`feat` → minor, `fix` → patch, `!` → major). Choose the type accordingly — it determines the next version. **Note**: while the app is < 1.0.0, semver convention treats breaking changes as a minor bump rather than a major bump, so `!` will produce a `0.x.0` bump until the first `1.0.0` release.
 - The `staging` → `main` promotion PR is exempt and should be a **merge commit** (not squash) so the underlying conventional commits stay visible to release-please.
 
 ## Mistakes

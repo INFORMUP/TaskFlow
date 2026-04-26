@@ -9,21 +9,10 @@ jobs:
   lint-pr-title:
     runs-on: ubuntu-latest
     steps:
-      - name: Skip for release-please PRs
-        id: skip
-        if: startsWith(github.head_ref, 'release-please--')
-        run: echo "skip=true" >> "$GITHUB_OUTPUT"
-
-      - name: Skip for staging->main promotion
-        if: steps.skip.outputs.skip != 'true' && github.base_ref == 'main' && github.head_ref == 'staging'
-        id: skip-promo
-        run: echo "skip=true" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@v4
-        if: steps.skip.outputs.skip != 'true' && steps.skip-promo.outputs.skip != 'true'
-
       - name: Validate PR title (Conventional Commits)
-        if: steps.skip.outputs.skip != 'true' && steps.skip-promo.outputs.skip != 'true'
+        if: |
+          !startsWith(github.head_ref, 'release-please--') &&
+          !(github.base_ref == 'main' && github.head_ref == 'staging')
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
