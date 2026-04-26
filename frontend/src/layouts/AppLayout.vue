@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import NavBar from "@/components/NavBar.vue";
+import FeedbackBubble from "@/components/FeedbackBubble.vue";
 
 const version = __APP_VERSION__;
 </script>
@@ -10,6 +11,7 @@ const version = __APP_VERSION__;
     <main class="app-main">
       <slot />
     </main>
+    <FeedbackBubble />
     <footer class="app-footer">
       <span>TaskFlow v{{ version }}</span>
     </footer>

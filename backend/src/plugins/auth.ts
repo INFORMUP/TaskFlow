@@ -116,6 +116,14 @@ export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance)
       return;
     }
 
+    // Routes that authenticate the user but don't require org membership.
+    // Accepting an invitation is the canonical case — the whole point is
+    // that the caller isn't in the org yet.
+    const NO_ORG_MEMBERSHIP_ROUTES = ["/api/v1/invitations/accept"];
+    const skipMembership = NO_ORG_MEMBERSHIP_ROUTES.some((r) =>
+      request.url.startsWith(r),
+    );
+
     const authHeader = request.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
       throw unauthorized("Missing or invalid authorization header");
@@ -127,6 +135,18 @@ export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance)
       ? await authenticateApiToken(rawToken)
       : await authenticateJwt(rawToken);
 
+    request.user = result.user;
+
+    if (skipMembership) {
+      // No-membership routes operate org-less: the caller's JWT orgId has
+      // nothing to do with the resource being acted on (e.g. an invitation
+      // belongs to its own org). Exposing it as `request.org.id` would
+      // silently mislead any future middleware/handler that scopes queries
+      // by it. Leave `id` empty so accidental use fails loudly instead.
+      request.org = { id: "", role: "member" };
+      return;
+    }
+
     const membership = await prisma.orgMember.findUnique({
       where: { orgId_userId: { orgId: result.orgId, userId: result.user.id } },
     });
@@ -134,7 +154,6 @@ export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance)
       throw forbidden("Not a member of the requested organization");
     }
 
-    request.user = result.user;
     request.org = { id: result.orgId, role: membership.role as OrgRole };
   });
 });

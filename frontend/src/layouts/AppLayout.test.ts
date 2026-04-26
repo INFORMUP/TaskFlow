@@ -12,7 +12,7 @@ describe("AppLayout", () => {
   it("renders the app version in the footer", () => {
     const wrapper = mount(AppLayout, {
       global: {
-        stubs: { NavBar: true, RouterLink: true, RouterView: true },
+        stubs: { NavBar: true, FeedbackBubble: true, RouterLink: true, RouterView: true },
       },
     });
     expect(wrapper.find(".app-footer").text()).toBe(`TaskFlow v${pkg.version}`);
