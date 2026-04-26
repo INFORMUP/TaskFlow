@@ -106,6 +106,7 @@ export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance)
   fastify.addHook("onRequest", async (request: FastifyRequest, _reply: FastifyReply) => {
     const PUBLIC_ROUTES = [
       "/health",
+      "/version",
       "/api/v1/auth/callback",
       "/api/v1/auth/refresh",
       "/docs",

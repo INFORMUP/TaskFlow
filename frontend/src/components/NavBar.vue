@@ -45,6 +45,15 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
     <div class="navbar__brand">TaskFlow</div>
     <div class="navbar__tabs">
       <router-link
+        to="/"
+        class="navbar__tab"
+        :class="{ 'navbar__tab--active': route.path === '/' }"
+        :aria-current="route.path === '/' ? 'page' : undefined"
+        data-testid="navbar-my-work-link"
+      >
+        My Work
+      </router-link>
+      <router-link
         to="/flows"
         class="navbar__tab"
         :class="{ 'navbar__tab--active': route.path.startsWith('/flows') || route.path.startsWith('/tasks') }"

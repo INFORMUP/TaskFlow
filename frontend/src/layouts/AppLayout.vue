@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import NavBar from "@/components/NavBar.vue";
 import FeedbackBubble from "@/components/FeedbackBubble.vue";
+
+const version = __APP_VERSION__;
 </script>
 
 <template>
@@ -10,6 +12,9 @@ import FeedbackBubble from "@/components/FeedbackBubble.vue";
       <slot />
     </main>
     <FeedbackBubble />
+    <footer class="app-footer">
+      <span>TaskFlow v{{ version }}</span>
+    </footer>
   </div>
 </template>
 
@@ -26,5 +31,13 @@ import FeedbackBubble from "@/components/FeedbackBubble.vue";
   max-width: 1400px;
   width: 100%;
   margin: 0 auto;
+}
+
+.app-footer {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #6b7280);
+  text-align: center;
+  border-top: 1px solid var(--color-border, #e5e7eb);
 }
 </style>
