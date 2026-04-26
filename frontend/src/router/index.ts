@@ -3,7 +3,9 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from "vue-router"
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
-    redirect: "/flows",
+    name: "my-work",
+    component: () => import("@/features/tasks/views/MyWorkView.vue"),
+    meta: { layout: "app" },
   },
   {
     path: "/login",

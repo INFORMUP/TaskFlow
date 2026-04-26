@@ -6,9 +6,9 @@ beforeEach(() => {
 });
 
 describe("router", () => {
-  it("/ has redirect to /flows", () => {
-    const matched = router.resolve("/");
-    expect(matched.matched.length).toBeGreaterThan(0);
+  it("/ resolves to the my-work route", () => {
+    const route = router.resolve("/");
+    expect(route.name).toBe("my-work");
   });
 
   it("/login route exists", () => {
