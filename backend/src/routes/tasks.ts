@@ -2,7 +2,7 @@ import { FastifyInstance } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { buildTaskViewWhere, canPerformAction, enforceScope } from "../services/permission.service.js";
-import { addProjectToTask, createTask, removeProjectFromTask, taskInclude, TaskServiceError } from "../services/task.service.js";
+import { addProjectToTask, createTask, removeProjectFromTask, taskDetailInclude, taskInclude, TaskServiceError } from "../services/task.service.js";
 import { CommonErrorResponses, IdParams, UserSummary } from "./_schemas.js";
 
 const FlowRef = Type.Object(
@@ -67,6 +67,9 @@ const CreateTaskBody = Type.Object({
     Type.Union([Type.String({ description: "ISO 8601 date or date-time." }), Type.Null()])
   ),
   assigneeUserId: Type.Optional(Type.Union([Type.String({ format: "uuid" }), Type.Null()])),
+  spawnedFromTaskId: Type.Optional(
+    Type.Union([Type.String({ format: "uuid", description: "UUID of the parent task this one was spawned from." }), Type.Null()])
+  ),
 });
 
 const UpdateTaskBody = Type.Object({
@@ -114,7 +117,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       if (!enforceScope(request, reply, "tasks:write")) return;
-      const { flow, title, description, priority, projectIds, dueDate, assigneeUserId } = request.body;
+      const { flow, title, description, priority, projectIds, dueDate, assigneeUserId, spawnedFromTaskId } = request.body;
 
       if (!projectIds || projectIds.length === 0) {
         return reply.status(400).send({
@@ -136,6 +139,20 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
+      if (spawnedFromTaskId) {
+        const flowIdBySlug = await getFlowIdBySlug(request.org.id);
+        const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+        const parent = await prisma.task.findFirst({
+          where: { id: spawnedFromTaskId, isDeleted: false, ...viewWhere },
+          select: { id: true },
+        });
+        if (!parent) {
+          return reply.status(404).send({
+            error: { code: "SPAWNED_FROM_NOT_FOUND", message: "Parent task not found or not visible" },
+          });
+        }
+      }
+
       try {
         const task = await createTask({
           orgId: request.org.id,
@@ -148,6 +165,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
           assigneeUserId,
           projectIds: projectIds ?? [],
           dueDate: dueDate ?? null,
+          spawnedFromTaskId: spawnedFromTaskId ?? null,
         });
         return reply.status(201).send(formatTask(task!));
       } catch (err) {
@@ -368,7 +386,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
       const task = await prisma.task.findFirst({
         where: { id, isDeleted: false, ...viewWhere },
-        include: taskInclude,
+        include: taskDetailInclude,
       });
 
       if (!task) {
@@ -484,7 +502,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 }
 
 function formatTask(task: any) {
-  return {
+  const base: Record<string, unknown> = {
     id: task.id,
     displayId: task.displayId,
     title: task.title,
@@ -506,4 +524,26 @@ function formatTask(task: any) {
       owner: tp.project.owner,
     })),
   };
+
+  // Detail-only fields, present only when taskDetailInclude was used.
+  if ("spawnedFrom" in task) {
+    base.spawnedFromTask = task.spawnedFrom
+      ? {
+          id: task.spawnedFrom.id,
+          displayId: task.spawnedFrom.displayId,
+          title: task.spawnedFrom.title,
+          flow: { slug: task.spawnedFrom.flow.slug },
+        }
+      : null;
+  }
+  if ("spawnedTasks" in task) {
+    base.spawnedTasks = (task.spawnedTasks ?? []).map((c: any) => ({
+      id: c.id,
+      displayId: c.displayId,
+      title: c.title,
+      flow: { slug: c.flow.slug },
+      currentStatus: { slug: c.currentStatus.slug, name: c.currentStatus.name },
+    }));
+  }
+  return base;
 }

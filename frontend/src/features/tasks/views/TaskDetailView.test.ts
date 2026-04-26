@@ -153,6 +153,54 @@ describe("TaskDetailView — agent actor display", () => {
     expect(html).toContain('href="https://example.com"');
   });
 
+  it("renders 'Spawned from' link when the task has a parent", async () => {
+    getTask.mockResolvedValue(
+      taskFixture({
+        spawnedFromTask: {
+          id: "parent-id",
+          displayId: "FEAT-99",
+          title: "Parent task",
+          flow: { slug: "feature" },
+        },
+      })
+    );
+    const wrapper = await mountDetail();
+    const link = wrapper.find(".detail__spawned-from a");
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toContain("FEAT-99");
+    expect(link.text()).toContain("Parent task");
+    expect(link.attributes("href")).toBe("/tasks/feature/parent-id");
+  });
+
+  it("renders 'Follow-ups' section listing spawned tasks", async () => {
+    getTask.mockResolvedValue(
+      taskFixture({
+        spawnedTasks: [
+          {
+            id: "child-id",
+            displayId: "FEAT-100",
+            title: "Follow-up A",
+            flow: { slug: "feature" },
+            currentStatus: { slug: "discuss", name: "Discuss" },
+          },
+        ],
+      })
+    );
+    const wrapper = await mountDetail();
+    const section = wrapper.find(".detail__followups");
+    expect(section.exists()).toBe(true);
+    expect(section.text()).toContain("FEAT-100");
+    expect(section.text()).toContain("Follow-up A");
+    expect(section.text()).toContain("Discuss");
+    expect(section.find("a").attributes("href")).toBe("/tasks/feature/child-id");
+  });
+
+  it("hides 'Spawned from' and 'Follow-ups' on a regular task", async () => {
+    const wrapper = await mountDetail();
+    expect(wrapper.find(".detail__spawned-from").exists()).toBe(false);
+    expect(wrapper.find(".detail__followups").exists()).toBe(false);
+  });
+
   it("does not show the agent badge for a human actor", async () => {
     getTransitions.mockResolvedValue({
       data: [transitionFixture({ actor: HUMAN, actorType: "human" })],

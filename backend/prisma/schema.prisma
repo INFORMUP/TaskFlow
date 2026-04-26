@@ -211,6 +211,7 @@ model Task {
   assigneeId      String?   @map("assignee_id") @db.Uuid
   dueDate         DateTime? @map("due_date") @db.Date
   isDeleted       Boolean   @default(false) @map("is_deleted")
+  spawnedFromTaskId String? @map("spawned_from_task_id") @db.Uuid
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
 
@@ -218,6 +219,8 @@ model Task {
   currentStatus FlowStatus       @relation(fields: [currentStatusId], references: [id])
   creator       User             @relation("TaskCreatedBy", fields: [createdBy], references: [id])
   assignee      User?            @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  spawnedFrom   Task?            @relation("TaskSpawnedFrom", fields: [spawnedFromTaskId], references: [id], onDelete: SetNull)
+  spawnedTasks  Task[]           @relation("TaskSpawnedFrom")
   transitions   TaskTransition[]
   comments      Comment[]
   projects      TaskProject[]
@@ -229,6 +232,7 @@ model Task {
   @@index([assigneeId])
   @@index([createdBy])
   @@index([dueDate])
+  @@index([spawnedFromTaskId])
   @@map("tasks")
 }
 
