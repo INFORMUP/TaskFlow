@@ -96,6 +96,7 @@ const ListTasksQuery = Type.Object({
   projectOwnerUserId: Type.Optional(Type.String({ format: "uuid" })),
   dueBefore: Type.Optional(Type.String({ description: "ISO 8601 date or date-time." })),
   dueAfter: Type.Optional(Type.String({ description: "ISO 8601 date or date-time." })),
+  q: Type.Optional(Type.String({ description: "Case-insensitive substring match against title or description." })),
   cursor: Type.Optional(Type.String({ description: "Opaque cursor — an ISO timestamp from a previous response." })),
   limit: Type.Optional(Type.String({ description: "Integer 1–100 as a string." })),
 });
@@ -334,6 +335,14 @@ export async function taskRoutes(fastify: FastifyInstance) {
             project: { ownerUserId: query.projectOwnerUserId },
           },
         };
+      }
+
+      if (query.q) {
+        const q = query.q;
+        where.OR = [
+          { title: { contains: q, mode: "insensitive" } },
+          { description: { contains: q, mode: "insensitive" } },
+        ];
       }
 
       if (query.dueBefore || query.dueAfter) {

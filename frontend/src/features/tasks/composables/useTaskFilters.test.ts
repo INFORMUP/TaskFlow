@@ -1,0 +1,77 @@
+import { describe, expect, it } from "vitest";
+import { defineComponent, h } from "vue";
+import { mount } from "@vue/test-utils";
+import { createMemoryHistory, createRouter, RouterView } from "vue-router";
+import { useTaskFilters, toApiParams, type TaskFilters } from "./useTaskFilters";
+
+function setupWithQuery(query: Record<string, string> = {}) {
+  let captured: ReturnType<typeof useTaskFilters>;
+  const Probe = defineComponent({
+    setup() {
+      captured = useTaskFilters();
+      return () => h("div");
+    },
+  });
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: "/", component: Probe }],
+  });
+  const search = new URLSearchParams(query).toString();
+  router.push(search ? `/?${search}` : "/");
+  return router.isReady().then(() => {
+    mount(RouterView, { global: { plugins: [router] } });
+    return { router, get filters() { return captured.filters.value; }, captured: () => captured };
+  });
+}
+
+describe("useTaskFilters", () => {
+  it("reads q from the URL query", async () => {
+    const ctx = await setupWithQuery({ q: "login bug" });
+    expect(ctx.filters.q).toBe("login bug");
+  });
+
+  it("writes q back to the URL via setFilters", async () => {
+    const ctx = await setupWithQuery();
+    ctx.captured().setFilters({ q: "redirect" });
+    await ctx.router.isReady();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.router.currentRoute.value.query.q).toBe("redirect");
+  });
+
+  it("clears q when setFilters is called with empty string", async () => {
+    const ctx = await setupWithQuery({ q: "stale" });
+    ctx.captured().setFilters({ q: "" });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.router.currentRoute.value.query.q).toBeUndefined();
+  });
+
+  it("toApiParams forwards q", () => {
+    const f: TaskFilters = {
+      projectId: "",
+      projectOwnerUserId: "",
+      status: "",
+      priority: "",
+      assigneeUserId: "",
+      dueAfter: "",
+      dueBefore: "",
+      q: "search me",
+      view: "board",
+    };
+    expect(toApiParams(f)).toEqual({ q: "search me" });
+  });
+
+  it("toApiParams omits q when empty", () => {
+    const f: TaskFilters = {
+      projectId: "abc",
+      projectOwnerUserId: "",
+      status: "",
+      priority: "",
+      assigneeUserId: "",
+      dueAfter: "",
+      dueBefore: "",
+      q: "",
+      view: "board",
+    };
+    expect(toApiParams(f)).toEqual({ projectId: "abc" });
+  });
+});

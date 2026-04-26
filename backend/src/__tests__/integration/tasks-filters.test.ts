@@ -145,4 +145,55 @@ describe("tasks list filters", () => {
     const titles = res.json().data.map((t: any) => t.title);
     expect(titles).toEqual(["Mine"]);
   });
+
+  describe("q free-text search", () => {
+    it("matches case-insensitive substring in title", async () => {
+      const app = await buildApp();
+      await createTask(app, { title: "Login redirect bug" });
+      await createTask(app, { title: "Header layout drift" });
+      await createTask(app, { title: "Track LOGIN attempts" });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/v1/tasks?q=login",
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      const titles = res.json().data.map((t: any) => t.title).sort();
+      expect(titles).toEqual(["Login redirect bug", "Track LOGIN attempts"]);
+    });
+
+    it("matches substring in description", async () => {
+      const app = await buildApp();
+      await createTask(app, { title: "First", description: "Touches the Prisma client" });
+      await createTask(app, { title: "Second", description: "Pure UI change" });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/v1/tasks?q=prisma",
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      const titles = res.json().data.map((t: any) => t.title);
+      expect(titles).toEqual(["First"]);
+    });
+
+    it("combines q with other filters (AND semantics)", async () => {
+      const app = await buildApp();
+      await createTask(app, {
+        title: "Login redirect bug",
+        projectIds: [projectEngId],
+      });
+      await createTask(app, {
+        title: "Login banner copy",
+        projectIds: [projectProdId],
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/v1/tasks?q=login&projectId=${projectEngId}`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      const titles = res.json().data.map((t: any) => t.title);
+      expect(titles).toEqual(["Login redirect bug"]);
+    });
+  });
 });
