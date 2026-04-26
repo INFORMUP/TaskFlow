@@ -1,10 +1,16 @@
 import { apiFetch } from "@/api/client";
 
+export interface FlowStats {
+  openCount: number;
+  assignedToMeCount: number;
+}
+
 export interface Flow {
   id: string;
   slug: string;
   name: string;
   description: string | null;
+  stats: FlowStats;
 }
 
 export interface FlowStatus {

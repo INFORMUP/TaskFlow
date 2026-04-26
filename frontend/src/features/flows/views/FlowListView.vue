@@ -36,6 +36,7 @@ onMounted(load);
           <th scope="col">Name</th>
           <th scope="col">Slug</th>
           <th scope="col">Description</th>
+          <th scope="col" class="flows__count-col">Open</th>
         </tr>
       </thead>
       <tbody>
@@ -51,6 +52,16 @@ onMounted(load);
           </td>
           <td class="flows__slug">{{ f.slug }}</td>
           <td>{{ f.description ?? "—" }}</td>
+          <td class="flows__count-col">
+            <span
+              class="flows__open-count"
+              :data-testid="`flow-open-count-${f.slug}`"
+            >{{ f.stats.openCount }}</span>
+            <span
+              class="flows__mine-count"
+              :data-testid="`flow-mine-count-${f.slug}`"
+            >{{ f.stats.assignedToMeCount }} mine</span>
+          </td>
         </tr>
       </tbody>
     </table>
@@ -104,5 +115,19 @@ onMounted(load);
 }
 .flows__error {
   color: var(--priority-critical, #c0392b);
+}
+.flows__count-col {
+  text-align: right;
+  white-space: nowrap;
+}
+.flows__open-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.flows__mine-count {
+  margin-left: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
 }
 </style>

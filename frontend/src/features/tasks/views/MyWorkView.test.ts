@@ -47,7 +47,13 @@ const featureStatuses: FlowStatus[] = [
 ];
 
 const flows: Flow[] = [
-  { id: "f-feature", slug: "feature", name: "Feature", description: null },
+  {
+    id: "f-feature",
+    slug: "feature",
+    name: "Feature",
+    description: null,
+    stats: { openCount: 0, assignedToMeCount: 0 },
+  },
 ];
 
 function makeRouter() {

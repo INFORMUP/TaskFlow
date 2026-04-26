@@ -10,7 +10,13 @@ vi.mock("@/api/flows.api", () => ({
 }));
 
 const FLOWS: Flow[] = [
-  { id: "f-1", slug: "bug", name: "Bug", description: "Defect resolution" },
+  {
+    id: "f-1",
+    slug: "bug",
+    name: "Bug",
+    description: "Defect resolution",
+    stats: { openCount: 4, assignedToMeCount: 1 },
+  },
 ];
 
 beforeEach(() => {

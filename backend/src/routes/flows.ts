@@ -2,6 +2,12 @@ import { FastifyInstance } from "fastify";
 import { Type } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { CommonErrorResponses, ErrorResponse, IdParams } from "./_schemas.js";
+import { buildTaskViewWhere } from "../services/permission.service.js";
+
+const FlowStats = Type.Object({
+  openCount: Type.Integer({ minimum: 0 }),
+  assignedToMeCount: Type.Integer({ minimum: 0 }),
+});
 
 const FlowSummary = Type.Object(
   {
@@ -9,6 +15,7 @@ const FlowSummary = Type.Object(
     slug: Type.String(),
     name: Type.String(),
     description: Type.Union([Type.String(), Type.Null()]),
+    stats: FlowStats,
   },
   { additionalProperties: true }
 );
@@ -30,7 +37,7 @@ export async function flowRoutes(fastify: FastifyInstance) {
     {
       schema: {
         summary: "List flows",
-        description: "Returns every flow defined in the system (engineering, operations, fundraising, etc.).",
+        description: "Returns every flow defined in the system, with per-flow open task counts scoped to the requester.",
         tags: ["flows"],
         response: {
           200: Type.Object(
@@ -48,12 +55,45 @@ export async function flowRoutes(fastify: FastifyInstance) {
         where: { orgId: request.org.id },
         orderBy: { slug: "asc" },
       });
+
+      const flowIdBySlug = new Map(flows.map((f) => [f.slug, f.id]));
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const userId = request.user.id;
+      const viewWhere = buildTaskViewWhere(teamSlugs, userId, flowIdBySlug);
+
+      const baseWhere = {
+        flowId: { in: flows.map((f) => f.id) },
+        isDeleted: false,
+        currentStatus: { is: { slug: { not: "closed" } } },
+        ...viewWhere,
+      } as const;
+
+      const [openGroups, mineGroups] = await Promise.all([
+        prisma.task.groupBy({
+          by: ["flowId"],
+          where: baseWhere,
+          _count: { _all: true },
+        }),
+        prisma.task.groupBy({
+          by: ["flowId"],
+          where: { ...baseWhere, assigneeId: userId },
+          _count: { _all: true },
+        }),
+      ]);
+
+      const openByFlow = new Map(openGroups.map((g) => [g.flowId, g._count._all]));
+      const mineByFlow = new Map(mineGroups.map((g) => [g.flowId, g._count._all]));
+
       return {
         data: flows.map((f) => ({
           id: f.id,
           slug: f.slug,
           name: f.name,
           description: f.description,
+          stats: {
+            openCount: openByFlow.get(f.id) ?? 0,
+            assignedToMeCount: mineByFlow.get(f.id) ?? 0,
+          },
         })),
       };
     }
