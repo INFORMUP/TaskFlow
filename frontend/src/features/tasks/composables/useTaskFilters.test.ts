@@ -55,6 +55,7 @@ describe("useTaskFilters", () => {
       dueAfter: "",
       dueBefore: "",
       q: "search me",
+      labelIds: [],
       view: "board",
     };
     expect(toApiParams(f)).toEqual({ q: "search me" });
@@ -70,8 +71,45 @@ describe("useTaskFilters", () => {
       dueAfter: "",
       dueBefore: "",
       q: "",
+      labelIds: [],
       view: "board",
     };
     expect(toApiParams(f)).toEqual({ projectId: "abc" });
+  });
+
+  it("toApiParams emits labelIds as comma-joined `label`", () => {
+    const f: TaskFilters = {
+      projectId: "",
+      projectOwnerUserId: "",
+      status: "",
+      priority: "",
+      assigneeUserId: "",
+      dueAfter: "",
+      dueBefore: "",
+      q: "",
+      labelIds: ["a", "b"],
+      view: "board",
+    };
+    expect(toApiParams(f)).toEqual({ label: "a,b" });
+  });
+
+  it("reads repeated label query params", async () => {
+    const ctx = await setupWithQuery();
+    await ctx.router.push({ path: "/", query: { label: ["aa", "bb"] } });
+    expect(ctx.filters.labelIds).toEqual(["aa", "bb"]);
+  });
+
+  it("setFilters({ labelIds }) round-trips through the URL", async () => {
+    const ctx = await setupWithQuery();
+    ctx.captured().setFilters({ labelIds: ["x", "y"] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.router.currentRoute.value.query.label).toEqual(["x", "y"]);
+  });
+
+  it("setFilters({ labelIds: [] }) clears the label query param", async () => {
+    const ctx = await setupWithQuery({ label: "stale" });
+    ctx.captured().setFilters({ labelIds: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.router.currentRoute.value.query.label).toBeUndefined();
   });
 });

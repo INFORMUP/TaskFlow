@@ -77,6 +77,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/features/settings/views/SettingsView.vue"),
     meta: { layout: "app" },
   },
+  {
+    path: "/settings/labels",
+    name: "settings-labels",
+    component: () => import("@/features/labels/views/LabelsSettingsView.vue"),
+    meta: { layout: "app" },
+  },
 ];
 
 const router = createRouter({

@@ -3,6 +3,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { buildTaskViewWhere, canPerformAction, enforceScope } from "../services/permission.service.js";
 import { addProjectToTask, createTask, removeProjectFromTask, taskDetailInclude, taskInclude, TaskServiceError } from "../services/task.service.js";
+import { attachLabel, detachLabel, LabelServiceError } from "../services/label.service.js";
 import { CommonErrorResponses, IdParams, UserSummary } from "./_schemas.js";
 
 const FlowRef = Type.Object(
@@ -19,6 +20,15 @@ const StatusRef = Type.Object(
     id: Type.String({ format: "uuid" }),
     slug: Type.String(),
     name: Type.String(),
+  },
+  { additionalProperties: true }
+);
+
+const LabelSummary = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    name: Type.String(),
+    color: Type.String(),
   },
   { additionalProperties: true }
 );
@@ -50,6 +60,7 @@ const TaskRecord = Type.Object(
     creator: UserSummary,
     assignee: Type.Union([UserSummary, Type.Null()]),
     projects: Type.Array(ProjectMembership),
+    labels: Type.Array(LabelSummary),
   },
   { additionalProperties: true }
 );
@@ -97,9 +108,29 @@ const ListTasksQuery = Type.Object({
   dueBefore: Type.Optional(Type.String({ description: "ISO 8601 date or date-time." })),
   dueAfter: Type.Optional(Type.String({ description: "ISO 8601 date or date-time." })),
   q: Type.Optional(Type.String({ description: "Case-insensitive substring match against title or description." })),
+  label: Type.Optional(
+    Type.Union([Type.String(), Type.Array(Type.String())], {
+      description: "Repeated label=<uuid> or comma-separated label=a,b,c. Tasks must have ALL supplied labels.",
+    })
+  ),
   cursor: Type.Optional(Type.String({ description: "Opaque cursor — an ISO timestamp from a previous response." })),
   limit: Type.Optional(Type.String({ description: "Integer 1–100 as a string." })),
 });
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseLabelParam(raw: string | string[] | undefined): string[] {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  const ids: string[] = [];
+  for (const entry of arr) {
+    for (const part of entry.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed && UUID_RE.test(trimmed)) ids.push(trimmed);
+    }
+  }
+  return Array.from(new Set(ids));
+}
 
 async function getFlowIdBySlug(orgId: string): Promise<Map<string, string>> {
   const flows = await prisma.flow.findMany({ where: { orgId } });
@@ -345,6 +376,15 @@ export async function taskRoutes(fastify: FastifyInstance) {
         ];
       }
 
+      const labelIds = parseLabelParam(query.label);
+      if (labelIds.length > 0) {
+        // Intersection: task must have every supplied label.
+        where.AND = [
+          ...((where.AND as Record<string, unknown>[]) ?? []),
+          ...labelIds.map((labelId) => ({ labels: { some: { labelId } } })),
+        ];
+      }
+
       if (query.dueBefore || query.dueAfter) {
         const due: Record<string, Date> = {};
         if (query.dueAfter) due.gte = new Date(query.dueAfter);
@@ -523,6 +563,100 @@ export async function taskRoutes(fastify: FastifyInstance) {
       return { success: true as const };
     }
   );
+
+  fastify.post<{ Params: { id: string }; Body: { labelId: string } }>(
+    "/api/v1/tasks/:id/labels",
+    {
+      schema: {
+        summary: "Attach a label to a task",
+        description: "Requires tasks:write scope and `edit` permission for the task's flow.",
+        tags: ["tasks"],
+        params: IdParams,
+        body: Type.Object({ labelId: Type.String({ format: "uuid" }) }),
+        response: {
+          204: Type.Null(),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:write")) return;
+      const { id } = request.params;
+      const { labelId } = request.body;
+
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+      const task = await prisma.task.findFirst({
+        where: { id, isDeleted: false, ...viewWhere },
+        include: { flow: true },
+      });
+      if (!task) {
+        return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
+      }
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "You do not have permission to edit this task" },
+        });
+      }
+
+      try {
+        await attachLabel(request.org.id, id, labelId);
+        return reply.status(204).send();
+      } catch (err) {
+        if (err instanceof LabelServiceError) {
+          return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+        }
+        throw err;
+      }
+    }
+  );
+
+  fastify.delete<{ Params: { id: string; labelId: string } }>(
+    "/api/v1/tasks/:id/labels/:labelId",
+    {
+      schema: {
+        summary: "Detach a label from a task",
+        description: "Requires tasks:write scope and `edit` permission for the task's flow.",
+        tags: ["tasks"],
+        params: Type.Object({
+          id: Type.String({ format: "uuid" }),
+          labelId: Type.String({ format: "uuid" }),
+        }),
+        response: { 204: Type.Null(), ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:write")) return;
+      const { id, labelId } = request.params;
+
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
+      const task = await prisma.task.findFirst({
+        where: { id, isDeleted: false, ...viewWhere },
+        include: { flow: true },
+      });
+      if (!task) {
+        return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
+      }
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+        return reply.status(403).send({
+          error: { code: "FORBIDDEN", message: "You do not have permission to edit this task" },
+        });
+      }
+
+      try {
+        await detachLabel(request.org.id, id, labelId);
+        return reply.status(204).send();
+      } catch (err) {
+        if (err instanceof LabelServiceError) {
+          return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+        }
+        throw err;
+      }
+    }
+  );
 }
 
 function formatTask(task: any) {
@@ -546,6 +680,11 @@ function formatTask(task: any) {
       key: tp.project.key,
       name: tp.project.name,
       owner: tp.project.owner,
+    })),
+    labels: (task.labels ?? []).map((tl: any) => ({
+      id: tl.label.id,
+      name: tl.label.name,
+      color: tl.label.color,
     })),
   };
 

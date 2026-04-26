@@ -10,6 +10,7 @@ export interface TaskFilters {
   dueAfter: string;
   dueBefore: string;
   q: string;
+  labelIds: string[];
   view: "board" | "list";
 }
 
@@ -22,12 +23,19 @@ const FILTER_KEYS: (keyof TaskFilters)[] = [
   "dueAfter",
   "dueBefore",
   "q",
+  "labelIds",
   "view",
 ];
 
 function asString(v: unknown): string {
   if (Array.isArray(v)) return (v[0] as string) ?? "";
   return typeof v === "string" ? v : "";
+}
+
+function asStringArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
+  if (typeof v === "string") return v ? v.split(",").filter(Boolean) : [];
+  return [];
 }
 
 export function useTaskFilters() {
@@ -43,33 +51,54 @@ export function useTaskFilters() {
     dueAfter: asString(route.query.dueAfter),
     dueBefore: asString(route.query.dueBefore),
     q: asString(route.query.q),
+    labelIds: asStringArray(route.query.label),
     view: (asString(route.query.view) === "list" ? "list" : "board"),
   }));
 
   function setFilters(patch: Partial<TaskFilters>) {
-    const next: Record<string, string | undefined> = { ...route.query };
+    const next: Record<string, string | string[] | undefined> = { ...route.query };
     for (const key of FILTER_KEYS) {
       if (key in patch) {
         const v = patch[key];
-        next[key] = v ? String(v) : undefined;
+        if (key === "labelIds") {
+          const arr = (v as string[] | undefined) ?? [];
+          next.label = arr.length > 0 ? arr : undefined;
+        } else {
+          next[key] = v ? String(v) : undefined;
+        }
       }
     }
     router.replace({ query: cleanQuery(next) });
   }
 
   function resetFilters() {
-    const next: Record<string, string | undefined> = { ...route.query };
-    for (const key of FILTER_KEYS) if (key !== "view") next[key] = undefined;
+    const next: Record<string, string | string[] | undefined> = { ...route.query };
+    for (const key of FILTER_KEYS) {
+      if (key === "view") continue;
+      if (key === "labelIds") {
+        next.label = undefined;
+      } else {
+        next[key] = undefined;
+      }
+    }
     router.replace({ query: cleanQuery(next) });
   }
 
   return { filters, setFilters, resetFilters };
 }
 
-function cleanQuery(q: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {};
+function cleanQuery(
+  q: Record<string, string | string[] | undefined>,
+): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
   for (const [k, v] of Object.entries(q)) {
-    if (v !== undefined && v !== "") out[k] = v;
+    if (v === undefined) continue;
+    if (Array.isArray(v)) {
+      const filtered = v.filter((x) => x !== "");
+      if (filtered.length > 0) out[k] = filtered;
+      continue;
+    }
+    if (v !== "") out[k] = v;
   }
   return out;
 }
@@ -85,5 +114,6 @@ export function toApiParams(f: TaskFilters, extras: Record<string, string> = {})
   if (f.dueAfter) params.dueAfter = f.dueAfter;
   if (f.dueBefore) params.dueBefore = f.dueBefore;
   if (f.q) params.q = f.q;
+  if (f.labelIds && f.labelIds.length > 0) params.label = f.labelIds.join(",");
   return params;
 }

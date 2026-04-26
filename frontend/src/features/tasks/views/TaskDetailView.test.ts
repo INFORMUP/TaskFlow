@@ -26,6 +26,11 @@ vi.mock("@/api/comments.api", () => ({
 vi.mock("@/api/client", () => ({
   apiFetch: (...a: unknown[]) => apiFetch(...a),
 }));
+vi.mock("@/api/labels.api", () => ({
+  listLabels: vi.fn().mockResolvedValue([]),
+  attachLabelToTask: vi.fn(),
+  detachLabelFromTask: vi.fn(),
+}));
 
 const HUMAN = { id: "u-human", displayName: "Alice", actorType: "human" };
 const AGENT = { id: "u-agent", displayName: "Agent-42", actorType: "agent" };
@@ -44,6 +49,7 @@ function taskFixture(overrides: Partial<Task> = {}): Task {
     creator: HUMAN,
     assignee: AGENT,
     projects: [],
+    labels: [],
     createdAt: "2026-04-10T10:00:00.000Z",
     updatedAt: "2026-04-10T10:00:00.000Z",
     ...overrides,
