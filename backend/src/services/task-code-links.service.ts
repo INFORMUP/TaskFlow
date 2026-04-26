@@ -13,11 +13,14 @@ export class CodeLinkServiceError extends Error {
 // for manual input or split into shaShort/shaFull with uniqueness on shaFull.
 const SHA_PATTERN = /^[a-f0-9]{7,40}$/i;
 
+// GitHub-only for now; extend when other providers (GitLab, Bitbucket) land.
+// Trailing-segment forms like /pull/42/files or /commit/<sha>#diff-… are
+// accepted so users can paste from any tab of the PR/commit UI.
 const PR_URL_PATTERN =
-  /^https?:\/\/github\.com\/([^\/\s]+)\/([^\/\s]+)\/pull\/(\d+)\/?$/i;
+  /^https?:\/\/github\.com\/([^\/\s]+)\/([^\/\s]+)\/pull\/(\d+)(?:[\/?#].*)?$/i;
 
 const COMMIT_URL_PATTERN =
-  /^https?:\/\/github\.com\/([^\/\s]+)\/([^\/\s]+)\/commit\/([a-f0-9]{7,40})\/?$/i;
+  /^https?:\/\/github\.com\/([^\/\s]+)\/([^\/\s]+)\/commit\/([a-f0-9]{7,40})(?:[\/?#].*)?$/i;
 
 function commitUrlFor(owner: string, name: string, sha: string) {
   return `https://github.com/${owner}/${name}/commit/${sha}`;
@@ -117,8 +120,8 @@ export async function createTaskCommit(orgId: string, taskId: string, input: Cre
       const repo = await prisma.projectRepository.findFirst({
         where: {
           provider: "GITHUB",
-          owner,
-          name,
+          owner: { equals: owner, mode: "insensitive" },
+          name: { equals: name, mode: "insensitive" },
           project: { orgId, tasks: { some: { taskId } } },
         },
       });
@@ -228,8 +231,8 @@ export async function createTaskPullRequest(
       const repo = await prisma.projectRepository.findFirst({
         where: {
           provider: "GITHUB",
-          owner,
-          name,
+          owner: { equals: owner, mode: "insensitive" },
+          name: { equals: name, mode: "insensitive" },
           project: { orgId, tasks: { some: { taskId } } },
         },
       });
@@ -300,7 +303,10 @@ export async function deleteTaskPullRequest(orgId: string, taskId: string, prId:
   await prisma.taskPullRequest.delete({ where: { id: prId } });
 }
 
-function formatCommit(row: any) {
+type CommitRow = Prisma.TaskCommitGetPayload<{ include: { repository: true } }>;
+type PullRequestRow = Prisma.TaskPullRequestGetPayload<{ include: { repository: true } }>;
+
+function formatCommit(row: CommitRow) {
   return {
     id: row.id,
     taskId: row.taskId,
@@ -322,7 +328,7 @@ function formatCommit(row: any) {
   };
 }
 
-function formatPullRequest(row: any) {
+function formatPullRequest(row: PullRequestRow) {
   return {
     id: row.id,
     taskId: row.taskId,

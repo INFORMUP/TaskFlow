@@ -73,9 +73,7 @@ const CreatePullRequestBody = Type.Object({
   repositoryId: Type.Optional(Type.String({ format: "uuid" })),
   number: Type.Optional(Type.Integer({ minimum: 1 })),
   title: Type.Optional(Type.Union([Type.String({ maxLength: MAX_NAME_LEN }), Type.Null()])),
-  state: Type.Optional(
-    Type.Union([Type.String({ enum: ["open", "closed", "merged"] }), Type.Null()]),
-  ),
+  state: Type.Optional(Type.String({ enum: ["open", "closed", "merged"] })),
   author: Type.Optional(Type.Union([Type.String({ maxLength: MAX_NAME_LEN }), Type.Null()])),
   mergedAt: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()])),
   url: Type.Optional(Type.Union([Type.String({ maxLength: MAX_URL_LEN }), Type.Null()])),

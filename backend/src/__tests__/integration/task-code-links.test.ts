@@ -426,4 +426,87 @@ describe("task ↔ commits and PRs (explicit linking)", () => {
       expect(res.json().error.code).toBe("INVALID_DATE");
     });
   });
+
+  describe("cascade behavior", () => {
+    it("deletes child commits and PRs when their task is deleted", async () => {
+      const sha = "a".repeat(40);
+      await prisma.taskCommit.create({
+        data: {
+          taskId: taskAId,
+          repositoryId: repoAId,
+          sha,
+          url: `https://github.com/INFORMUP/TaskFlow/commit/${sha}`,
+        },
+      });
+      await prisma.taskPullRequest.create({
+        data: {
+          taskId: taskAId,
+          repositoryId: repoAId,
+          number: 1,
+          state: "open",
+          url: "https://github.com/INFORMUP/TaskFlow/pull/1",
+        },
+      });
+
+      await prisma.taskProject.deleteMany({ where: { taskId: taskAId } });
+      await prisma.task.delete({ where: { id: taskAId } });
+
+      expect(await prisma.taskCommit.count({ where: { taskId: taskAId } })).toBe(0);
+      expect(await prisma.taskPullRequest.count({ where: { taskId: taskAId } })).toBe(0);
+    });
+
+    it("deletes child commits and PRs when their repository is deleted", async () => {
+      const sha = "b".repeat(40);
+      await prisma.taskCommit.create({
+        data: {
+          taskId: taskAId,
+          repositoryId: repoAId,
+          sha,
+          url: `https://github.com/INFORMUP/TaskFlow/commit/${sha}`,
+        },
+      });
+      await prisma.taskPullRequest.create({
+        data: {
+          taskId: taskAId,
+          repositoryId: repoAId,
+          number: 2,
+          state: "open",
+          url: "https://github.com/INFORMUP/TaskFlow/pull/2",
+        },
+      });
+
+      await prisma.projectRepository.delete({ where: { id: repoAId } });
+
+      expect(await prisma.taskCommit.count({ where: { repositoryId: repoAId } })).toBe(0);
+      expect(await prisma.taskPullRequest.count({ where: { repositoryId: repoAId } })).toBe(0);
+    });
+  });
+
+  describe("URL parsing edge cases", () => {
+    it("accepts a /pull/N/files URL pasted from the PR Files tab", async () => {
+      const app = await buildApp();
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskAId}/pull-requests`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { url: "https://github.com/INFORMUP/TaskFlow/pull/77/files" },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.json().number).toBe(77);
+      expect(res.json().repositoryId).toBe(repoAId);
+    });
+
+    it("matches repo owner/name case-insensitively", async () => {
+      const app = await buildApp();
+      const sha = "c".repeat(40);
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskAId}/commits`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { url: `https://github.com/informup/taskflow/commit/${sha}` },
+      });
+      expect(res.statusCode).toBe(201);
+      expect(res.json().repositoryId).toBe(repoAId);
+    });
+  });
 });
