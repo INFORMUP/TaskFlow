@@ -273,7 +273,7 @@ onMounted(async () => {
               @click="handleDeleteComment(c.id)"
             >Delete</button>
           </div>
-          <div class="comment__body">{{ c.body }}</div>
+          <MarkdownView :source="c.body" class="comment__body" />
         </div>
       </div>
       <div class="comment-form">
@@ -284,6 +284,7 @@ onMounted(async () => {
           rows="2"
           aria-label="Add a comment"
         />
+        <small class="comment-form__hint">Markdown supported</small>
         <button
           type="button"
           class="detail__btn"
@@ -515,11 +516,18 @@ onMounted(async () => {
   font-size: 0.75rem;
 }
 
-.comment__body {
-  white-space: pre-wrap;
+.comment__body :deep(p:last-child) {
+  margin-bottom: 0;
 }
 
 .comment-form {
   margin-top: 0.75rem;
+}
+
+.comment-form__hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
 }
 </style>

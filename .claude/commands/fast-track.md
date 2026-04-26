@@ -40,13 +40,14 @@ If a transition 403s mid-run, **stop**. Do not roll back. Surface the failing tr
    - `GET /api/v1/tasks/{id}` and `GET /api/v1/tasks/{id}/comments`.
    - Note `currentStatus.slug`. The skill is valid from `discuss`, `design`, `prototype`, or `implement`. From `validate` or later, stop — there is nothing left to fast-track.
 
-3. **Confirm with the user**
-   - Print: starting status, target status (`validate`), and the list of transitions + work this run will perform. Ask for explicit confirmation before doing anything mutating.
-   - This is the one human checkpoint the skill keeps. Don't skip it.
+3. **Confirm with the user (conditionally)**
+   - Print: starting status, target status (`validate`), and the list of transitions + work this run will perform.
+   - **Skip the confirmation prompts if the task description already reads as a complete scoping pass** — i.e. it contains substantive Problem (or Context), Proposal (or Approach), and Acceptance criteria sections, and ideally Out-of-scope. In that case, treat the description itself as the human checkpoint and proceed without asking. Just print the plan and start.
+   - Otherwise (thin/ambiguous description, or no acceptance criteria stated), ask for explicit confirmation before doing anything mutating. This is the human checkpoint the skill falls back to when the description doesn't carry its own.
 
 4. **Stage: `discuss` → `design` (if needed)**
    - Only runs if `currentStatus.slug == "discuss"`.
-   - The actual product-side discussion in `discuss` is normally a human gate. Fast-tracking past it requires the user to confirm they've already had that conversation (re-prompt: "Has the discuss-stage scoping been done already? y/N"). If no, stop.
+   - The actual product-side discussion in `discuss` is normally a human gate. Fast-tracking past it requires evidence that the conversation has already happened. **If the description already reads as a complete scoping pass (per step 3's bar), treat that as the evidence and proceed without re-prompting.** Otherwise, prompt: "Has the discuss-stage scoping been done already? y/N" — if no, stop.
    - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"design","note":"Fast-track: moving to design to produce spec."}`.
    - Requires `product` team. 403 → stop.
 

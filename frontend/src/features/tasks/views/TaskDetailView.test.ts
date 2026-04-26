@@ -140,6 +140,19 @@ describe("TaskDetailView — agent actor display", () => {
     expect(meta.find("[data-testid='actor-agent-badge']").exists()).toBe(true);
   });
 
+  it("renders comment bodies as markdown", async () => {
+    getComments.mockResolvedValue({
+      data: [commentFixture({ body: "**bold** and `code` and a [link](https://example.com)" })],
+    });
+    const wrapper = await mountDetail();
+    const comment = wrapper.find(".comment");
+    expect(comment.exists()).toBe(true);
+    const html = comment.html();
+    expect(html).toContain("<strong>bold</strong>");
+    expect(html).toContain("<code>code</code>");
+    expect(html).toContain('href="https://example.com"');
+  });
+
   it("renders 'Spawned from' link when the task has a parent", async () => {
     getTask.mockResolvedValue(
       taskFixture({
