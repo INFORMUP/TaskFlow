@@ -2,11 +2,26 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { CommonErrorResponses, ErrorResponse, IdParams } from "./_schemas.js";
+import { config } from "../config.js";
+import { createTask } from "../services/task.service.js";
 
 const FeedbackType = Type.Union([
   Type.Literal("BUG"),
-  Type.Literal("ENHANCEMENT"),
+  Type.Literal("FEATURE"),
+  Type.Literal("IMPROVEMENT"),
 ]);
+
+const FEEDBACK_TYPE_TO_FLOW_SLUG: Record<string, string> = {
+  BUG: "bug",
+  FEATURE: "feature",
+  IMPROVEMENT: "improvement",
+};
+
+function truncateTitle(message: string, max = 80): string {
+  const oneLine = message.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= max) return oneLine;
+  return oneLine.slice(0, max - 1).trimEnd() + "…";
+}
 
 const FeedbackRecord = Type.Object(
   {
@@ -18,6 +33,7 @@ const FeedbackRecord = Type.Object(
     page: Type.Union([Type.String(), Type.Null()]),
     adminNotes: Type.Union([Type.String(), Type.Null()]),
     archivedAt: Type.Union([Type.String(), Type.Null()]),
+    taskId: Type.Union([Type.String(), Type.Null()]),
     createdAt: Type.String(),
   },
   { additionalProperties: true },
@@ -98,6 +114,62 @@ function csvEscape(value: unknown): string {
   return s;
 }
 
+interface TryCreateProductTaskInput {
+  feedbackType: "BUG" | "FEATURE" | "IMPROVEMENT";
+  message: string;
+  page: string | null;
+  submitterUserId: string;
+  submitterOrgId: string;
+  log: FastifyRequest["log"];
+}
+
+async function tryCreateProductTask(
+  input: TryCreateProductTaskInput,
+): Promise<string | null> {
+  const { productProjectOrgId, productProjectKey } = config;
+  if (!productProjectOrgId) return null;
+
+  const project = await prisma.project.findFirst({
+    where: { orgId: productProjectOrgId, key: productProjectKey },
+    select: { id: true },
+  });
+  if (!project) {
+    input.log.warn(
+      { productProjectOrgId, productProjectKey },
+      "feedback: product project not found; skipping task creation",
+    );
+    return null;
+  }
+
+  const flowSlug = FEEDBACK_TYPE_TO_FLOW_SLUG[input.feedbackType];
+  const description =
+    `${input.message}\n\n` +
+    `---\nSubmitted via in-app feedback bubble.\n` +
+    (input.page ? `Page: ${input.page}\n` : "") +
+    `Submitter user_id: ${input.submitterUserId}\n` +
+    `Submitter org_id: ${input.submitterOrgId}`;
+
+  try {
+    const task = await createTask({
+      orgId: productProjectOrgId,
+      flowSlug,
+      title: truncateTitle(input.message),
+      description,
+      priority: "medium",
+      createdBy: input.submitterUserId,
+      actorType: "human",
+      projectIds: [project.id],
+    });
+    return task?.id ?? null;
+  } catch (err) {
+    input.log.error(
+      { err, flowSlug, projectId: project.id },
+      "feedback: failed to create product task",
+    );
+    return null;
+  }
+}
+
 export async function feedbackRoutes(fastify: FastifyInstance) {
   fastify.post<{ Body: Static<typeof CreateFeedbackBody> }>(
     "/api/v1/feedback",
@@ -133,6 +205,22 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           page: page ?? null,
         },
       });
+
+      const taskId = await tryCreateProductTask({
+        feedbackType: type,
+        message: trimmed,
+        page: page ?? null,
+        submitterUserId: request.user.id,
+        submitterOrgId: request.org.id,
+        log: request.log,
+      });
+      if (taskId) {
+        const linked = await prisma.feedback.update({
+          where: { id: created.id },
+          data: { taskId },
+        });
+        return reply.status(201).send(linked);
+      }
       return reply.status(201).send(created);
     },
   );
