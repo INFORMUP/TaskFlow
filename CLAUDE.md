@@ -78,7 +78,7 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
   - `feature.design` requires `product` team
   - `feature.prototype` / `feature.implement` / `feature.validate` requires `engineer` or `agent`
   - `feature.review` requires `engineer` or `product`
-- **Transitions always need a note.** The server rejects empty notes (validated in `transition.service.ts`).
+- **Transition notes are optional.** The server accepts transitions without a `note`. Skills should include one only when context genuinely matters (backward bounces, closing transitions); routine forward moves can omit it.
 - **`closed` is terminal.** There is intentionally no `verify`/`monitor` stage between `review` and `closed`. Prod regressions are tracked as fresh `BUG` tasks, not as a per-task verification gate. Revisit only when a real prod miss creates the need.
 
 ## API Tokens (local scripts)

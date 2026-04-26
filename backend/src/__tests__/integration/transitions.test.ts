@@ -72,7 +72,7 @@ describe("transitions API", () => {
       expect(updatedTask!.currentStatus.slug).toBe("investigate");
     });
 
-    it("rejects transition without note", async () => {
+    it("accepts transition without a note", async () => {
       const app = await buildApp();
       const task = await createBugTask(app, engineerToken);
 
@@ -82,10 +82,17 @@ describe("transitions API", () => {
         headers: { authorization: `Bearer ${engineerToken}` },
         payload: { toStatus: "investigate" },
       });
-      expect(response.statusCode).toBe(422);
+      expect(response.statusCode).toBe(201);
+
+      const transitions = await prisma.taskTransition.findMany({
+        where: { taskId: task.id },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      });
+      expect(transitions[0].note).toBe("");
     });
 
-    it("rejects transition with empty note", async () => {
+    it("accepts transition with an empty/whitespace note", async () => {
       const app = await buildApp();
       const task = await createBugTask(app, engineerToken);
 
@@ -95,7 +102,27 @@ describe("transitions API", () => {
         headers: { authorization: `Bearer ${engineerToken}` },
         payload: { toStatus: "investigate", note: "  " },
       });
-      expect(response.statusCode).toBe(422);
+      expect(response.statusCode).toBe(201);
+    });
+
+    it("persists a provided note unchanged", async () => {
+      const app = await buildApp();
+      const task = await createBugTask(app, engineerToken);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${task.id}/transitions`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { toStatus: "investigate", note: "Confirmed reproducible" },
+      });
+      expect(response.statusCode).toBe(201);
+
+      const transitions = await prisma.taskTransition.findMany({
+        where: { taskId: task.id },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      });
+      expect(transitions[0].note).toBe("Confirmed reproducible");
     });
 
     it("rejects invalid transition (triage -> resolve)", async () => {

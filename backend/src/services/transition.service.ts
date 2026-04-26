@@ -42,17 +42,6 @@ export function validateTransition(
   };
 }
 
-export function validateNote(note: string): ValidationResult {
-  if (!note || !note.trim()) {
-    return {
-      valid: false,
-      error: "NOTE_REQUIRED",
-      message: "A status change note is required for all transitions",
-    };
-  }
-  return { valid: true };
-}
-
 export function validateResolution(
   flowSlug: string,
   resolution: string | undefined | null

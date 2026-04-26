@@ -48,19 +48,19 @@ If a transition 403s mid-run, **stop**. Do not roll back. Surface the failing tr
 4. **Stage: `discuss` → `design` (if needed)**
    - Only runs if `currentStatus.slug == "discuss"`.
    - The actual product-side discussion in `discuss` is normally a human gate. Fast-tracking past it requires evidence that the conversation has already happened. **If the description already reads as a complete scoping pass (per step 3's bar), treat that as the evidence and proceed without re-prompting.** Otherwise, prompt: "Has the discuss-stage scoping been done already? y/N" — if no, stop.
-   - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"design","note":"Fast-track: moving to design to produce spec."}`.
+   - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"design"}`. No filler note — the design spec posted in step 5 is the real signal.
    - Requires `product` team. 403 → stop.
 
 5. **Stage: design work + `design` → `prototype`**
    - Only runs if status is now `design`.
    - Do the full `/design` work: read task + comments + relevant code, write the design spec (Goal / User stories / Acceptance criteria / Technical approach / Out of scope / Open questions), `POST /api/v1/tasks/{id}/comments` with the spec body. **Do not skimp** — the spec's acceptance criteria become the contract for the implementation and validation steps below.
    - If the spec ends up with material **Open questions** that block implementation, stop. Leave the task in `design` and tell the user the fast-track can't proceed without those answered. Don't paper over open questions to keep moving.
-   - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"prototype","note":"Fast-track: design spec posted, advancing."}`. Requires `engineer` or `agent`.
+   - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"prototype"}`. Requires `engineer` or `agent`. The just-posted design spec is the signal.
 
 6. **Stage: `prototype` → `implement`**
    - Only runs if status is now `prototype`.
    - Fast-track does **not** do separate prototype work — the design spec from step 5 is treated as sufficient. If you genuinely need a prototype (spike, throwaway exploration), stop and use `/transition` manually instead; this skill is wrong for that case.
-   - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"implement","note":"Fast-track: skipping standalone prototype, advancing to implement."}`. Requires `engineer` or `agent`.
+   - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"implement"}`. Requires `engineer` or `agent`.
 
 7. **Stage: implementation work**
    - Status must be `implement` now. Do the full `/implement` work:
@@ -73,7 +73,7 @@ If a transition 403s mid-run, **stop**. Do not roll back. Surface the failing tr
    - Link the PR back to the task: `POST /api/v1/tasks/{id}/pull-requests` with `{ "number", "title", "state":"open", "url" }`. Do not also post a duplicate comment.
 
 8. **Stage: `implement` → `validate`**
-   - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"validate","note":"Fast-track: implementation complete, PR opened — <pr-url>"}`. Requires `engineer` or `agent`.
+   - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"validate"}`. Requires `engineer` or `agent`. The linked PR is the signal.
 
 9. **Report**
    - Print:

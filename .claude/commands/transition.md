@@ -19,7 +19,7 @@ For forward moves through a normal workflow, prefer the status-specific skill (`
 - `$ARGUMENTS` — `<task-id-or-display-id> <to-status> [note...]`
   - Task ID: a UUID or a display ID like `FEAT-2`, `BUG-1`, `IMP-3`. Prefix → flow: `FEAT`→`feature`, `BUG`→`bug`, `IMP`→`improvement`.
   - To-status: status slug (e.g. `design`, `prototype`, `closed`).
-  - Note: optional on the command line. If omitted, ask the user — the server requires a note for every transition.
+  - Note: optional. The server accepts transitions without a note. Ask the user when context genuinely matters (backward bounces, closing transitions); skip the prompt for routine forward moves.
 
 ## Instructions
 
@@ -32,8 +32,10 @@ For forward moves through a normal workflow, prefer the status-specific skill (`
    - Otherwise treat it as a display ID. Derive the flow from the prefix and `GET /api/v1/tasks?flow=<slug>`, then match `displayId`. Stop with a clear error if no match.
    - Capture `flow.slug`, `currentStatus.slug`, and `id` for the next steps.
 
-3. **Get note**
-   - If the user supplied a note, use it. Otherwise prompt: "Note for this transition?" Reject empty.
+3. **Get note (when warranted)**
+   - If the user supplied a note, use it.
+   - If the move is a backward bounce (`design → discuss`, `prototype → design`, `implement → approve`, etc.) or a closing transition, prompt: "Note for this transition?" — context matters here.
+   - For routine forward moves, omit the note — the server accepts transitions without one.
 
 4. **Closing transition? Get resolution.**
    - If `to-status == "closed"`, a resolution is required.
@@ -46,7 +48,7 @@ For forward moves through a normal workflow, prefer the status-specific skill (`
 5. **POST the transition**
    - `POST /api/v1/tasks/{id}/transitions` with body:
      ```json
-     { "toStatus": "<slug>", "note": "<note>", "resolution": "<resolution-if-closing>" }
+     { "toStatus": "<slug>", "note": "<note-if-any>", "resolution": "<resolution-if-closing>" }
      ```
    - Headers: `Authorization: Bearer <token>`, `Content-Type: application/json`.
 
@@ -54,6 +56,7 @@ For forward moves through a normal workflow, prefer the status-specific skill (`
    - **422 `TRANSITION_NOT_ALLOWED`**: the response body's `error.details.allowedTransitions` lists the legal targets from the current status. Print them and stop — do not retry with a guessed status.
    - **422 `INVALID_STATUS`**: the slug doesn't exist on this flow. Print the message; ask the user to re-check.
    - **422 `RESOLUTION_REQUIRED` / `INVALID_RESOLUTION`**: re-prompt for a valid resolution.
+   - **Note**: the server no longer rejects empty notes — there is no `NOTE_REQUIRED` error to handle.
    - **403 `FORBIDDEN`**: the token user's team can't transition into this status. Surface the message and stop — fixing this means changing team membership or the permission matrix, not retrying.
    - **403 `INSUFFICIENT_SCOPE`**: the token lacks `transitions:write`. Tell the user to re-mint with that scope.
 
