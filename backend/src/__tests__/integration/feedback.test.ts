@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { buildApp } from "../helpers/app.js";
 import { mintTestToken, TEST_ENGINEER_ID, TEST_USER_ID } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
+import { DEFAULT_ORG_ID } from "../../constants/org.js";
+import { FEEDBACK_BOT_USER_ID } from "../../constants/system-users.js";
 
 const prisma = new PrismaClient();
 
@@ -144,7 +146,7 @@ describe("feedback API", () => {
         url: "/api/v1/feedback",
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          type: "ENHANCEMENT",
+          type: "FEATURE",
           message: "nice to have",
           orgId: ORG_B_ID,
         } as unknown as Record<string, unknown>,
@@ -180,7 +182,7 @@ describe("feedback API", () => {
           {
             orgId: ORG_A_ID,
             userId: TEST_USER_ID,
-            type: "ENHANCEMENT",
+            type: "FEATURE",
             message: "a2",
             createdAt: new Date("2026-04-10T00:00:00Z"),
           },
@@ -372,7 +374,7 @@ describe("feedback API", () => {
           {
             orgId: ORG_A_ID,
             userId: TEST_USER_ID,
-            type: "ENHANCEMENT",
+            type: "FEATURE",
             message: "idea A",
             archivedAt: new Date(),
           },
@@ -406,5 +408,192 @@ describe("feedback API", () => {
       expect(res.body).toContain("idea A");
       expect(res.body).not.toContain("org B bug");
     });
+  });
+});
+
+describe("feedback API: product-task wiring", () => {
+  const ORG_C_ID = "d0000000-0000-4000-8000-0000000000c1";
+  const PRODUCT_PROJECT_KEY = "TFTEST";
+  const PRODUCT_PROJECT_ID = "d0000000-0000-4000-8000-0000000000d1";
+  let savedOrgId: string | undefined;
+  let savedKey: string | undefined;
+  let createdTaskIds: string[] = [];
+
+  async function clearTaskFixtures() {
+    createdTaskIds = createdTaskIds.filter((id): id is string => !!id);
+    if (createdTaskIds.length === 0) return;
+    await prisma.taskTransition.deleteMany({
+      where: { taskId: { in: createdTaskIds } },
+    });
+    await prisma.taskProject.deleteMany({
+      where: { taskId: { in: createdTaskIds } },
+    });
+    await prisma.feedback.updateMany({
+      where: { taskId: { in: createdTaskIds } },
+      data: { taskId: null },
+    });
+    await prisma.task.deleteMany({ where: { id: { in: createdTaskIds } } });
+    createdTaskIds = [];
+  }
+
+  async function clearOrgCFixtures() {
+    await prisma.feedback.deleteMany({ where: { orgId: ORG_C_ID } });
+    await prisma.orgMember.deleteMany({ where: { orgId: ORG_C_ID } });
+    await prisma.organization.deleteMany({ where: { id: ORG_C_ID } });
+  }
+
+  beforeAll(async () => {
+    await seedTestUsers(prisma);
+    savedOrgId = process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
+    savedKey = process.env.TASKFLOW_PRODUCT_PROJECT_KEY;
+
+    // Create the product project (in DEFAULT_ORG_ID) and attach the three
+    // engineering flows so feedback→task wiring can resolve them.
+    const flowSlugs = ["bug", "feature", "improvement"];
+    const flows = await prisma.flow.findMany({
+      where: { orgId: DEFAULT_ORG_ID, slug: { in: flowSlugs } },
+    });
+    if (flows.length !== 3) {
+      throw new Error(
+        "Dev DB missing seeded engineering flows; run `npx prisma db seed` first.",
+      );
+    }
+    await prisma.project.upsert({
+      where: { id: PRODUCT_PROJECT_ID },
+      update: {},
+      create: {
+        id: PRODUCT_PROJECT_ID,
+        orgId: DEFAULT_ORG_ID,
+        key: PRODUCT_PROJECT_KEY,
+        name: "TaskFlow product (test)",
+        ownerUserId: TEST_ENGINEER_ID,
+      },
+    });
+    for (const flow of flows) {
+      await prisma.projectFlow.upsert({
+        where: {
+          projectId_flowId: { projectId: PRODUCT_PROJECT_ID, flowId: flow.id },
+        },
+        update: {},
+        create: { projectId: PRODUCT_PROJECT_ID, flowId: flow.id },
+      });
+    }
+  });
+
+  beforeEach(async () => {
+    await clearTaskFixtures();
+    await clearOrgCFixtures();
+
+    // Submitter org (separate from the seeded product org).
+    await prisma.organization.create({
+      data: { id: ORG_C_ID, slug: "org-c-fb", name: "Org C FB" },
+    });
+    await prisma.orgMember.create({
+      data: { orgId: ORG_C_ID, userId: TEST_USER_ID, role: "member" },
+    });
+
+    // Point the route at the seeded TF project in DEFAULT_ORG_ID.
+    process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID = DEFAULT_ORG_ID;
+    process.env.TASKFLOW_PRODUCT_PROJECT_KEY = PRODUCT_PROJECT_KEY;
+  });
+
+  afterEach(async () => {
+    await clearTaskFixtures();
+    await clearOrgCFixtures();
+    if (savedOrgId === undefined) delete process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
+    else process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID = savedOrgId;
+    if (savedKey === undefined) delete process.env.TASKFLOW_PRODUCT_PROJECT_KEY;
+    else process.env.TASKFLOW_PRODUCT_PROJECT_KEY = savedKey;
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  async function postFeedback(type: string, message: string, page = "/x") {
+    const app = await buildApp();
+    const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
+    return app.inject({
+      method: "POST",
+      url: "/api/v1/feedback",
+      headers: { authorization: `Bearer ${token}` },
+      payload: { type, message, page },
+    });
+  }
+
+  it.each([
+    ["BUG", "bug"],
+    ["FEATURE", "feature"],
+    ["IMPROVEMENT", "improvement"],
+  ])(
+    "POST with type=%s creates a task on the matching flow in the product project",
+    async (type, expectedFlowSlug) => {
+      const res = await postFeedback(type, `${type} message body`);
+      expect(res.statusCode).toBe(201);
+      const body = res.json();
+      expect(body.taskId).toBeTruthy();
+      createdTaskIds.push(body.taskId);
+
+      const task = await prisma.task.findUnique({
+        where: { id: body.taskId },
+        include: { flow: true, projects: { include: { project: true } } },
+      });
+      expect(task).not.toBeNull();
+      expect(task!.flow.slug).toBe(expectedFlowSlug);
+      expect(task!.projects).toHaveLength(1);
+      expect(task!.projects[0].project.id).toBe(PRODUCT_PROJECT_ID);
+      expect(task!.projects[0].project.orgId).toBe(DEFAULT_ORG_ID);
+      expect(task!.title).toContain(type);
+      // Submitter PII must NOT leak into the cross-org task description.
+      expect(task!.description).not.toContain(TEST_USER_ID);
+      expect(task!.description).not.toContain(ORG_C_ID);
+      expect(task!.description).not.toContain("user@test.com");
+      expect(task!.description).not.toContain("org-c-fb");
+      // createdBy is the synthetic system user, not the submitter.
+      expect(task!.createdBy).toBe(FEEDBACK_BOT_USER_ID);
+      // No auto-assignment.
+      expect(task!.assigneeId).toBeNull();
+
+      // Cross-org: feedback row stays under the submitter's org.
+      expect(body.orgId).toBe(ORG_C_ID);
+      // Attribution lives structurally on the Feedback row.
+      const fb = await prisma.feedback.findUnique({ where: { id: body.id } });
+      expect(fb!.userId).toBe(TEST_USER_ID);
+      expect(fb!.orgId).toBe(ORG_C_ID);
+      expect(fb!.taskId).toBe(body.taskId);
+    },
+  );
+
+  it("does not create a task when productProjectOrgId is unset", async () => {
+    delete process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
+    const res = await postFeedback("BUG", "no task expected");
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.taskId).toBeNull();
+  });
+
+  it("succeeds (without task) when product project is misconfigured", async () => {
+    process.env.TASKFLOW_PRODUCT_PROJECT_KEY = "DOES-NOT-EXIST";
+    const res = await postFeedback("BUG", "misconfigured");
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.taskId).toBeNull();
+  });
+
+  it("creates exactly one task per submission and links via Feedback.taskId", async () => {
+    const res = await postFeedback("BUG", "wired up properly");
+    const body = res.json();
+    createdTaskIds.push(body.taskId);
+
+    const fb = await prisma.feedback.findUnique({ where: { id: body.id } });
+    expect(fb!.taskId).toBe(body.taskId);
+
+    const task = await prisma.task.findUnique({
+      where: { id: body.taskId },
+      include: { transitions: true },
+    });
+    // createTask writes one initial transition record.
+    expect(task!.transitions).toHaveLength(1);
+    expect(task!.transitions[0].fromStatusId).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { submitFeedback, type FeedbackType } from "@/api/feedback.api";
 
 const expanded = ref(false);
@@ -32,6 +32,17 @@ function close() {
 function setType(t: FeedbackType) {
   type.value = t;
 }
+
+const placeholderText = computed(() => {
+  switch (type.value) {
+    case "BUG":
+      return "What's broken? Steps to reproduce help.";
+    case "IMPROVEMENT":
+      return "What works but could be better?";
+    case "FEATURE":
+      return "What new capability would you like?";
+  }
+});
 
 function resetForm() {
   message.value = "";
@@ -165,17 +176,27 @@ watch(expanded, (v) => {
             data-testid="feedback-type-bug"
             @click="setType('BUG')"
           >
-            Bug Report
+            Bug
           </button>
           <button
             type="button"
-            class="feedback-bubble__type feedback-bubble__type--enh"
-            :class="{ 'feedback-bubble__type--active': type === 'ENHANCEMENT' }"
-            :aria-pressed="type === 'ENHANCEMENT'"
-            data-testid="feedback-type-enhancement"
-            @click="setType('ENHANCEMENT')"
+            class="feedback-bubble__type feedback-bubble__type--imp"
+            :class="{ 'feedback-bubble__type--active': type === 'IMPROVEMENT' }"
+            :aria-pressed="type === 'IMPROVEMENT'"
+            data-testid="feedback-type-improvement"
+            @click="setType('IMPROVEMENT')"
           >
-            Enhancement
+            Improvement
+          </button>
+          <button
+            type="button"
+            class="feedback-bubble__type feedback-bubble__type--feat"
+            :class="{ 'feedback-bubble__type--active': type === 'FEATURE' }"
+            :aria-pressed="type === 'FEATURE'"
+            data-testid="feedback-type-feature"
+            @click="setType('FEATURE')"
+          >
+            Feature
           </button>
         </div>
 
@@ -184,9 +205,7 @@ watch(expanded, (v) => {
           v-model="message"
           class="feedback-bubble__textarea"
           rows="4"
-          :placeholder="
-            type === 'BUG' ? 'Describe the bug...' : 'Describe your idea...'
-          "
+          :placeholder="placeholderText"
           data-testid="feedback-message"
         />
 
@@ -296,7 +315,7 @@ watch(expanded, (v) => {
 
 .feedback-bubble__types {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 0.5rem;
 }
 
@@ -322,7 +341,13 @@ watch(expanded, (v) => {
   color: var(--priority-critical);
 }
 
-.feedback-bubble__type--enh.feedback-bubble__type--active {
+.feedback-bubble__type--imp.feedback-bubble__type--active {
+  background: rgba(234, 179, 8, 0.12);
+  border-color: var(--priority-medium, #ca8a04);
+  color: var(--priority-medium, #ca8a04);
+}
+
+.feedback-bubble__type--feat.feedback-bubble__type--active {
   background: rgba(101, 163, 13, 0.12);
   border-color: var(--priority-low);
   color: var(--priority-low);

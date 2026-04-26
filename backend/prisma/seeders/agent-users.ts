@@ -5,6 +5,7 @@ import { DEFAULT_ORG_ID, ensureDefaultOrg } from "./organization.seeder.js";
 const AGENTS = [
   { slug: "triage-bot", displayName: "Triage Bot" },
   { slug: "investigator-bot", displayName: "Investigator Bot" },
+  { slug: "feedback-bot", displayName: "Feedback Bot" },
 ] as const;
 
 export async function seedAgentUsers(
