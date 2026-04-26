@@ -11,6 +11,7 @@ import { authRoutes } from "./routes/auth.js";
 import { apiTokenRoutes } from "./routes/api-tokens.js";
 import { userRoutes } from "./routes/users.js";
 import { taskRoutes } from "./routes/tasks.js";
+import { taskCodeLinkRoutes } from "./routes/task-code-links.js";
 import { transitionRoutes } from "./routes/transitions.js";
 import { assignmentRoutes } from "./routes/assignments.js";
 import { commentRoutes } from "./routes/comments.js";
@@ -62,6 +63,7 @@ export function createApp() {
   app.register(apiTokenRoutes);
   app.register(userRoutes);
   app.register(taskRoutes);
+  app.register(taskCodeLinkRoutes);
   app.register(transitionRoutes);
   app.register(assignmentRoutes);
   app.register(commentRoutes);
