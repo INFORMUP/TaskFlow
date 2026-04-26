@@ -46,6 +46,12 @@ external/      # Reference projects (git submodules)
 - A pre-commit hook runs `tsc --noEmit` (backend) and `vue-tsc --noEmit` (frontend) automatically. If it fails, fix type errors before committing.
 - Git hooks live in `.githooks/`. After cloning, run `git config core.hooksPath .githooks` to activate them.
 
+## PR Titles (Conventional Commits)
+- PRs into `staging` and direct hotfix PRs into `main` must have titles following Conventional Commits — e.g. `feat(api): add version endpoint`, `fix: handle null assignee`, `feat!: drop deprecated field` for breaking changes. The `commitlint` workflow enforces this.
+- Allowed types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`, `style`. Use `!` after type/scope for breaking changes.
+- The app version is bumped automatically by release-please based on these prefixes (`feat` → minor, `fix` → patch, `!` → major). Choose the type accordingly — it determines the next version.
+- The `staging` → `main` promotion PR is exempt and should be a **merge commit** (not squash) so the underlying conventional commits stay visible to release-please.
+
 ## Mistakes
 - **[tooling]**: Fastify plugins are encapsulated by default — use `fastify-plugin` (fp) wrapper for plugins that need to affect the global scope (error handler, auth decorator).
 - **[testing]**: Integration tests sharing PostgreSQL must run sequentially — set `fileParallelism: false` in vitest.config.ts to avoid FK constraint violations.
