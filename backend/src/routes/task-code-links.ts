@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyReply } from "fastify";
+import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { buildTaskViewWhere, canPerformAction, enforceScope } from "../services/permission.service.js";
@@ -93,14 +93,14 @@ function handleError(reply: FastifyReply, err: unknown) {
 }
 
 async function loadTaskOrForbid(
-  request: any,
+  request: FastifyRequest,
   reply: FastifyReply,
   taskId: string,
   action: "view" | "edit",
 ) {
   const flows = await prisma.flow.findMany({ where: { orgId: request.org.id } });
   const flowIdBySlug = new Map(flows.map((f) => [f.slug, f.id]));
-  const teamSlugs = request.user.teams.map((t: any) => t.slug);
+  const teamSlugs = request.user.teams.map((t) => t.slug);
   const viewWhere = buildTaskViewWhere(teamSlugs, request.user.id, flowIdBySlug);
   const task = await prisma.task.findFirst({
     where: { id: taskId, isDeleted: false, ...viewWhere },

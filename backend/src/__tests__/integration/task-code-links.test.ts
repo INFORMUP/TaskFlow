@@ -346,5 +346,84 @@ describe("task ↔ commits and PRs (explicit linking)", () => {
       expect(res.statusCode).toBe(422);
       expect(res.json().error.code).toBe("REPO_NOT_ON_TASK_PROJECT");
     });
+
+    it("rejects an invalid mergedAt with 400 INVALID_DATE", async () => {
+      const app = await buildApp();
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskAId}/pull-requests`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { repositoryId: repoAId, number: 11, state: "merged", mergedAt: "not-a-date" },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe("INVALID_DATE");
+    });
+  });
+
+  describe("commit URL parsing and SHA normalization", () => {
+    it("accepts a commit URL via `url` and parses repositoryId/sha", async () => {
+      const app = await buildApp();
+      const sha = "fedcba9876543210fedcba9876543210fedcba98";
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskAId}/commits`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { url: `https://github.com/INFORMUP/TaskFlow/commit/${sha}` },
+      });
+      expect(res.statusCode).toBe(201);
+      const body = res.json();
+      expect(body.sha).toBe(sha);
+      expect(body.repositoryId).toBe(repoAId);
+    });
+
+    it("normalizes SHA to lowercase so case-mixed duplicates are caught", async () => {
+      const app = await buildApp();
+      const lower = "abcdef0123456789abcdef0123456789abcdef01";
+      const upper = lower.toUpperCase();
+
+      const first = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskAId}/commits`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { repositoryId: repoAId, sha: upper },
+      });
+      expect(first.statusCode).toBe(201);
+      expect(first.json().sha).toBe(lower);
+
+      const second = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskAId}/commits`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { repositoryId: repoAId, sha: lower },
+      });
+      expect(second.statusCode).toBe(409);
+      expect(second.json().error.code).toBe("COMMIT_EXISTS");
+    });
+
+    it("returns 422 NO_TASK_REPO when the task's projects have no repos", async () => {
+      // Strip repos from project A (the only project on taskA)
+      await prisma.projectRepository.deleteMany({ where: { projectId: projectAId } });
+      const app = await buildApp();
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskAId}/commits`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { sha: "5".repeat(40) },
+      });
+      expect(res.statusCode).toBe(422);
+      expect(res.json().error.code).toBe("NO_TASK_REPO");
+    });
+
+    it("rejects an invalid authoredAt with 400 INVALID_DATE", async () => {
+      const app = await buildApp();
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskAId}/commits`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { repositoryId: repoAId, sha: "6".repeat(40), authoredAt: "not-a-date" },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe("INVALID_DATE");
+    });
   });
 });

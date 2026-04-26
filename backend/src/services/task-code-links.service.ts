@@ -20,6 +20,15 @@ function commitUrlFor(owner: string, name: string, sha: string) {
   return `https://github.com/${owner}/${name}/commit/${sha}`;
 }
 
+function parseOptionalDate(value: string | null | undefined, field: string): Date | null {
+  if (value == null || value === "") return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) {
+    throw new CodeLinkServiceError("INVALID_DATE", `${field} is not a valid date-time`, 400);
+  }
+  return d;
+}
+
 function prUrlFor(owner: string, name: string, number: number) {
   return `https://github.com/${owner}/${name}/pull/${number}`;
 }
@@ -124,6 +133,9 @@ export async function createTaskCommit(orgId: string, taskId: string, input: Cre
   if (!sha || !SHA_PATTERN.test(sha)) {
     throw new CodeLinkServiceError("INVALID_SHA", "sha must be 7-40 hex characters", 400);
   }
+  sha = sha.toLowerCase();
+  const authoredAt = parseOptionalDate(input.authoredAt, "authoredAt");
+
   if (!repositoryId) {
     const inferred = await inferTaskRepository(orgId, taskId);
     repositoryId = inferred.id;
@@ -140,7 +152,7 @@ export async function createTaskCommit(orgId: string, taskId: string, input: Cre
         sha,
         message: input.message ?? null,
         author: input.author ?? null,
-        authoredAt: input.authoredAt ? new Date(input.authoredAt) : null,
+        authoredAt,
         url,
       },
       include: { repository: true },
@@ -231,14 +243,16 @@ export async function createTaskPullRequest(
   if (number == null || !Number.isInteger(number) || number < 1) {
     throw new CodeLinkServiceError("INVALID_NUMBER", "PR number must be a positive integer", 400);
   }
-  if (!repositoryId) {
-    const inferred = await inferTaskRepository(orgId, taskId);
-    repositoryId = inferred.id;
-  }
 
   const state = (input.state ?? "open").toLowerCase();
   if (!VALID_PR_STATES.has(state)) {
     throw new CodeLinkServiceError("INVALID_STATE", "state must be open, closed, or merged", 400);
+  }
+  const mergedAt = parseOptionalDate(input.mergedAt, "mergedAt");
+
+  if (!repositoryId) {
+    const inferred = await inferTaskRepository(orgId, taskId);
+    repositoryId = inferred.id;
   }
 
   const { repo } = await resolveTaskRepository(orgId, taskId, repositoryId);
@@ -253,7 +267,7 @@ export async function createTaskPullRequest(
         title: input.title ?? null,
         state,
         author: input.author ?? null,
-        mergedAt: input.mergedAt ? new Date(input.mergedAt) : null,
+        mergedAt,
         url,
       },
       include: { repository: true },
