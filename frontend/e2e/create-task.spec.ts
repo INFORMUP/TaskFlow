@@ -37,7 +37,7 @@ test.describe("Task creation", () => {
     await createBtn.click();
 
     const title = `E2E bug ${Date.now()}`;
-    await page.getByPlaceholder("Title").fill(title);
+    await page.getByPlaceholder("Title", { exact: true }).fill(title);
 
     // Checking the TF project triggers the watcher that loads that project's
     // attached flows and auto-fills the default assignee. The "bug" flow comes
