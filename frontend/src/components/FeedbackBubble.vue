@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { submitFeedback, type FeedbackType } from "@/api/feedback.api";
 
 const expanded = ref(false);
@@ -9,6 +9,14 @@ const submitting = ref(false);
 const success = ref(false);
 const errorMessage = ref<string | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+let successTimer: ReturnType<typeof window.setTimeout> | null = null;
+
+function clearSuccessTimer() {
+  if (successTimer !== null) {
+    window.clearTimeout(successTimer);
+    successTimer = null;
+  }
+}
 
 function open() {
   expanded.value = true;
@@ -16,6 +24,7 @@ function open() {
 }
 
 function close() {
+  clearSuccessTimer();
   expanded.value = false;
   errorMessage.value = null;
 }
@@ -42,7 +51,9 @@ async function submit() {
       page: window.location.href,
     });
     success.value = true;
-    window.setTimeout(() => {
+    clearSuccessTimer();
+    successTimer = window.setTimeout(() => {
+      successTimer = null;
       success.value = false;
       resetForm();
       expanded.value = false;
@@ -55,6 +66,10 @@ async function submit() {
     submitting.value = false;
   }
 }
+
+onBeforeUnmount(() => {
+  clearSuccessTimer();
+});
 
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
