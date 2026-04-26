@@ -3,7 +3,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { canTransitionToStatus, enforceScope } from "../services/permission.service.js";
 import { resolveDefaultAssignee } from "../services/task.service.js";
-import { validateTransition, validateNote, validateResolution } from "../services/transition.service.js";
+import { validateTransition, validateResolution } from "../services/transition.service.js";
 import { CommonErrorResponses, IdParams, UserSummary } from "./_schemas.js";
 
 const StatusRef = Type.Object(
@@ -57,13 +57,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
       if (!enforceScope(request, reply, "transitions:write")) return;
       const { id } = request.params;
       const { toStatus, note, resolution, newAssigneeUserId } = request.body;
-
-      const noteResult = validateNote(note as string);
-      if (!noteResult.valid) {
-        return reply.status(422).send({
-          error: { code: noteResult.error!, message: noteResult.message! },
-        });
-      }
+      const noteValue = (note ?? "").trim();
 
       const task = await prisma.task.findFirst({
         where: { id, isDeleted: false, flow: { orgId: request.org.id } },
@@ -163,7 +157,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
             fromStatusId: task.currentStatusId,
             toStatusId: targetStatus.id,
             actorId: request.user.id,
-            note: note!,
+            note: noteValue,
             actorType: request.user.actorType,
             newAssigneeId: newAssigneeUserId ?? resolvedAssigneeId ?? null,
           },

@@ -88,7 +88,7 @@ Pick up a task in `implement` status, do the work, and open a PR into `staging`.
 
 10. **Offer transition**
     - Ask the user whether to transition the task to `validate` (next status after `implement` in the `feature` flow). If yes:
-      - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"validate","note":"PR opened — moving to validate. <pr-url>"}`.
+      - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"validate"}`. The linked PR is already on the task — no transition note needed.
     - If they decline, leave the task in `implement` (e.g. PR still in draft, or wants reviewer to advance it).
 
 ## Notes

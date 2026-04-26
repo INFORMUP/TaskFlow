@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   validateTransition,
-  validateNote,
   validateResolution,
   RESOLUTIONS,
 } from "../../services/transition.service.js";
@@ -44,30 +43,6 @@ describe("transition.service", () => {
     it("returns allowed targets on invalid transition", () => {
       const result = validateTransition("s1", "s4", allowedTransitions);
       expect(result.allowedTargets).toEqual(["s2", "s6"]);
-    });
-  });
-
-  describe("validateNote", () => {
-    it("accepts a non-empty note", () => {
-      const result = validateNote("Valid note");
-      expect(result.valid).toBe(true);
-    });
-
-    it("rejects an empty string", () => {
-      const result = validateNote("");
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("NOTE_REQUIRED");
-    });
-
-    it("rejects whitespace-only note", () => {
-      const result = validateNote("   ");
-      expect(result.valid).toBe(false);
-      expect(result.error).toBe("NOTE_REQUIRED");
-    });
-
-    it("rejects undefined note", () => {
-      const result = validateNote(undefined as unknown as string);
-      expect(result.valid).toBe(false);
     });
   });
 

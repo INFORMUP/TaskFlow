@@ -44,7 +44,7 @@ Pick up a TaskFlow task in the `design` status, produce a design spec, post it a
 7. **Offer transition**
    - Print the task URL: `https://taskflow.informup.org/tasks/<flow-slug>/<task-id>`.
    - Ask the user whether to transition the task to `prototype` (the next status in the `feature` flow). If yes:
-     - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus": "prototype", "note": "Design complete — see design spec comment."}`.
+     - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus": "prototype"}`. The design spec comment is the signal — no transition note needed.
      - Note: prototype requires the `engineer` or `agent` team. If the token user lacks this, surface the 403 and ask them to do it manually.
    - If they say no, stop — leaving the task in `design` for further review.
 

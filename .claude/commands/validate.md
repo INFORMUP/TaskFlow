@@ -79,7 +79,7 @@ Pick up a task in `validate` status, review its linked PR against the design spe
 8. **Update the task**
 
    - **If approved (7a)**: ask the user whether to transition to `review`. If yes:
-     - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"review","note":"Validation passed — see PR review."}`.
+     - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"review"}`. The GitHub APPROVE review is the signal — no transition note needed.
      - `review` requires `engineer` or `product` team — surface 403 if the token user lacks both.
    - **If changes requested (7b)**: leave the task in `validate`. Post a short comment on the task: `Validation requested changes — see PR review: <pr-url>`. Don't transition.
    - **If comment-only (7c)**: same as 7a — offer the transition, since the comments are non-blocking.
