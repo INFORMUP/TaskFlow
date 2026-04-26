@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createUserWithOrg } from "./helpers/test-user";
+import { createUserWithTeam } from "./helpers/test-user";
 
 // Prereq: backend dev server is running. Playwright only boots the frontend.
 // Covers the full API-token mint flow from SettingsView.vue: create form →
@@ -8,7 +8,7 @@ test.describe("API token minting (settings)", () => {
   test("user can mint, view plaintext once, and revoke a token", async ({
     page,
   }) => {
-    const user = await createUserWithOrg();
+    const user = await createUserWithTeam();
 
     await page.addInitScript(
       ({ accessToken, refreshToken }) => {
