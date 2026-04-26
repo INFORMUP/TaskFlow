@@ -100,6 +100,30 @@ describe("feedback API", () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it("rejects a message exceeding 5000 chars with 400", async () => {
+      const app = await buildApp();
+      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_A_ID });
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/feedback",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { type: "BUG", message: "x".repeat(5001) },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("accepts a message at the 5000-char boundary", async () => {
+      const app = await buildApp();
+      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_A_ID });
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/feedback",
+        headers: { authorization: `Bearer ${token}` },
+        payload: { type: "BUG", message: "x".repeat(5000) },
+      });
+      expect(res.statusCode).toBe(201);
+    });
+
     it("rejects an empty message (after trim) with 400", async () => {
       const app = await buildApp();
       const token = mintTestToken(TEST_USER_ID, { orgId: ORG_A_ID });

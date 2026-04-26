@@ -41,7 +41,7 @@ const FeedbackWithUser = Type.Intersect([
 
 const CreateFeedbackBody = Type.Object({
   type: FeedbackType,
-  message: Type.String({ minLength: 1 }),
+  message: Type.String({ minLength: 1, maxLength: 5000 }),
   page: Type.Optional(Type.String()),
 });
 

@@ -4,6 +4,7 @@ import { buildApp } from "../helpers/app.js";
 import { mintTestToken, TEST_ENGINEER_ID, TEST_USER_ID } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
 import { hashToken } from "../../services/token.service.js";
+import { claimPendingInvitationsForUser } from "../../routes/invitations.js";
 
 const prisma = new PrismaClient();
 
@@ -325,6 +326,45 @@ describe("invitations API", () => {
         payload: { token: inviteToken },
       });
       expect(accept.statusCode).toBe(403);
+    });
+
+    it("two concurrent claimPendingInvitationsForUser calls produce exactly one membership and one accepted invitation", async () => {
+      await prisma.user.create({
+        data: {
+          id: INVITEE_USER_ID,
+          email: INVITEE_EMAIL,
+          displayName: "Invitee",
+          actorType: "human",
+          status: "active",
+        },
+      });
+      await prisma.invitation.create({
+        data: {
+          orgId: ORG_ID,
+          email: INVITEE_EMAIL,
+          role: "member",
+          tokenHash: hashToken("tfinv_concurrent_fixture"),
+          expiresAt: new Date(Date.now() + 86400000),
+        },
+      });
+
+      const [a, b] = await Promise.all([
+        claimPendingInvitationsForUser(INVITEE_USER_ID, INVITEE_EMAIL),
+        claimPendingInvitationsForUser(INVITEE_USER_ID, INVITEE_EMAIL),
+      ]);
+      expect(a + b).toBe(1);
+
+      const members = await prisma.orgMember.findMany({
+        where: { orgId: ORG_ID, userId: INVITEE_USER_ID },
+      });
+      expect(members).toHaveLength(1);
+
+      const accepted = await prisma.invitation.findMany({
+        where: { orgId: ORG_ID, email: INVITEE_EMAIL },
+      });
+      expect(accepted).toHaveLength(1);
+      expect(accepted[0].acceptedByUserId).toBe(INVITEE_USER_ID);
+      expect(accepted[0].acceptedAt).not.toBeNull();
     });
 
     it("returns 410 for an expired invitation", async () => {
