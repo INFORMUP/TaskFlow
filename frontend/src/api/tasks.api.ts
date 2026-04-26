@@ -7,6 +7,17 @@ export interface TaskProjectChip {
   owner: { id: string; displayName: string; actorType: string };
 }
 
+export interface SpawnedFromRef {
+  id: string;
+  displayId: string;
+  title: string;
+  flow: { slug: string };
+}
+
+export interface SpawnedTaskRef extends SpawnedFromRef {
+  currentStatus: { slug: string; name: string };
+}
+
 export interface Task {
   id: string;
   displayId: string;
@@ -20,6 +31,8 @@ export interface Task {
   creator: { id: string; displayName: string; actorType: string };
   assignee: { id: string; displayName: string; actorType: string } | null;
   projects: TaskProjectChip[];
+  spawnedFromTask?: SpawnedFromRef | null;
+  spawnedTasks?: SpawnedTaskRef[];
   createdAt: string;
   updatedAt: string;
 }
@@ -46,6 +59,7 @@ export function createTask(data: {
   projectIds?: string[];
   assigneeUserId?: string | null;
   dueDate?: string | null;
+  spawnedFromTaskId?: string | null;
 }): Promise<Task> {
   return apiFetch("/api/v1/tasks", {
     method: "POST",
@@ -66,7 +80,13 @@ export function removeTaskProject(id: string, projectId: string): Promise<void> 
 
 export function updateTask(
   id: string,
-  data: { title?: string; description?: string; priority?: string; dueDate?: string | null }
+  data: {
+    title?: string;
+    description?: string;
+    priority?: string;
+    dueDate?: string | null;
+    assigneeUserId?: string | null;
+  }
 ): Promise<Task> {
   return apiFetch(`/api/v1/tasks/${id}`, {
     method: "PATCH",

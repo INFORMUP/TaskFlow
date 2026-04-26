@@ -5,7 +5,7 @@ argument-hint: "<task-id-or-display-id>"
 
 # Validate
 
-Pick up a task in `validate` status, review its linked PR against the design spec's acceptance criteria, and leave a GitHub review. If the PR passes cleanly, offer to transition to `review`. If issues are found, request changes on the PR and leave the task in `validate` — another agent will address the comments.
+Pick up a task in `validate` status, review its linked PR against the design spec's acceptance criteria, and leave a GitHub review. If every acceptance criterion is met, transition the task to `review` automatically. If issues are found, request changes on the PR and leave the task in `validate` — another agent will address the comments.
 
 ## Arguments
 
@@ -78,11 +78,11 @@ Pick up a task in `validate` status, review its linked PR against the design spe
 
 8. **Update the task**
 
-   - **If approved (7a)**: ask the user whether to transition to `review`. If yes:
+   - **If approved (7a)**: transition the task to `review` automatically — no need to ask.
      - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"review"}`. The GitHub APPROVE review is the signal — no transition note needed.
-     - `review` requires `engineer` or `product` team — surface 403 if the token user lacks both.
+     - `review` requires `engineer` or `product` team — surface 403 if the token user lacks both, and leave the task in `validate`.
    - **If changes requested (7b)**: leave the task in `validate`. Post a short comment on the task: `Validation requested changes — see PR review: <pr-url>`. Don't transition.
-   - **If comment-only (7c)**: same as 7a — offer the transition, since the comments are non-blocking.
+   - **If comment-only (7c)**: ask the user whether to transition to `review`, since the comments are non-blocking but you didn't fully clear the diff. If yes, same POST as 7a.
 
 ## Notes
 

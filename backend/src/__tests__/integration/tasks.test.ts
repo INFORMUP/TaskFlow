@@ -533,6 +533,71 @@ describe("tasks API", () => {
       });
       expect(response.statusCode).toBe(403);
     });
+
+    it("updates assignee when assigneeUserId is provided", async () => {
+      const app = await buildApp();
+      const createRes = await app.inject({
+        method: "POST",
+        url: "/api/v1/tasks",
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Reassign me", priority: "low" },
+      });
+      const task = createRes.json();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/v1/tasks/${task.id}`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { assigneeUserId: TEST_PRODUCT_ID },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().assignee?.id).toBe(TEST_PRODUCT_ID);
+    });
+
+    it("clears assignee when assigneeUserId is null", async () => {
+      const app = await buildApp();
+      const createRes = await app.inject({
+        method: "POST",
+        url: "/api/v1/tasks",
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: {
+          projectIds: [TEST_PROJECT_ID],
+          flow: "bug",
+          title: "Unassign me",
+          priority: "low",
+          assigneeUserId: TEST_ENGINEER_ID,
+        },
+      });
+      const task = createRes.json();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/v1/tasks/${task.id}`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { assigneeUserId: null },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().assignee).toBeNull();
+    });
+
+    it("returns 400 when assigneeUserId references a non-existent user", async () => {
+      const app = await buildApp();
+      const createRes = await app.inject({
+        method: "POST",
+        url: "/api/v1/tasks",
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "bug", title: "Bad assignee", priority: "low" },
+      });
+      const task = createRes.json();
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: `/api/v1/tasks/${task.id}`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { assigneeUserId: "00000000-0000-0000-0000-000000000000" },
+      });
+      expect(response.statusCode).toBe(400);
+    });
   });
 
   describe("DELETE /api/v1/tasks/:id", () => {
