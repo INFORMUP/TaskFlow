@@ -13,6 +13,10 @@ import {
 } from "../services/task-code-links.service.js";
 import { CommonErrorResponses, IdParams } from "./_schemas.js";
 
+const MAX_MESSAGE_LEN = 1024;
+const MAX_NAME_LEN = 256;
+const MAX_URL_LEN = 2048;
+
 const RepoRef = Type.Object(
   {
     id: Type.String({ format: "uuid" }),
@@ -20,7 +24,7 @@ const RepoRef = Type.Object(
     owner: Type.String(),
     name: Type.String(),
   },
-  { additionalProperties: true }
+  { additionalProperties: false }
 );
 
 const CommitRecord = Type.Object(
@@ -36,16 +40,16 @@ const CommitRecord = Type.Object(
     url: Type.String(),
     createdAt: Type.String({ format: "date-time" }),
   },
-  { additionalProperties: true }
+  { additionalProperties: false }
 );
 
 const CreateCommitBody = Type.Object({
   repositoryId: Type.Optional(Type.String({ format: "uuid" })),
-  sha: Type.Optional(Type.String()),
-  message: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-  author: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-  authoredAt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-  url: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  sha: Type.Optional(Type.String({ maxLength: 40 })),
+  message: Type.Optional(Type.Union([Type.String({ maxLength: MAX_MESSAGE_LEN }), Type.Null()])),
+  author: Type.Optional(Type.Union([Type.String({ maxLength: MAX_NAME_LEN }), Type.Null()])),
+  authoredAt: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()])),
+  url: Type.Optional(Type.Union([Type.String({ maxLength: MAX_URL_LEN }), Type.Null()])),
 });
 
 const PullRequestRecord = Type.Object(
@@ -62,17 +66,19 @@ const PullRequestRecord = Type.Object(
     url: Type.String(),
     createdAt: Type.String({ format: "date-time" }),
   },
-  { additionalProperties: true }
+  { additionalProperties: false }
 );
 
 const CreatePullRequestBody = Type.Object({
   repositoryId: Type.Optional(Type.String({ format: "uuid" })),
   number: Type.Optional(Type.Integer({ minimum: 1 })),
-  title: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-  state: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-  author: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-  mergedAt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-  url: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  title: Type.Optional(Type.Union([Type.String({ maxLength: MAX_NAME_LEN }), Type.Null()])),
+  state: Type.Optional(
+    Type.Union([Type.String({ enum: ["open", "closed", "merged"] }), Type.Null()]),
+  ),
+  author: Type.Optional(Type.Union([Type.String({ maxLength: MAX_NAME_LEN }), Type.Null()])),
+  mergedAt: Type.Optional(Type.Union([Type.String({ maxLength: 64 }), Type.Null()])),
+  url: Type.Optional(Type.Union([Type.String({ maxLength: MAX_URL_LEN }), Type.Null()])),
 });
 
 const CommitParams = Type.Object({
@@ -126,7 +132,7 @@ export async function taskCodeLinkRoutes(fastify: FastifyInstance) {
         tags: ["tasks"],
         params: IdParams,
         response: {
-          200: Type.Object({ data: Type.Array(CommitRecord) }, { additionalProperties: true }),
+          200: Type.Object({ data: Type.Array(CommitRecord) }, { additionalProperties: false }),
           ...CommonErrorResponses,
         },
       },
@@ -198,7 +204,7 @@ export async function taskCodeLinkRoutes(fastify: FastifyInstance) {
         tags: ["tasks"],
         params: IdParams,
         response: {
-          200: Type.Object({ data: Type.Array(PullRequestRecord) }, { additionalProperties: true }),
+          200: Type.Object({ data: Type.Array(PullRequestRecord) }, { additionalProperties: false }),
           ...CommonErrorResponses,
         },
       },

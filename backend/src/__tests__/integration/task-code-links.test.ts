@@ -323,7 +323,7 @@ describe("task ↔ commits and PRs (explicit linking)", () => {
       expect(second.json().error.code).toBe("PR_EXISTS");
     });
 
-    it("rejects invalid PR state with 400 INVALID_STATE", async () => {
+    it("rejects invalid PR state at the schema with 400", async () => {
       const app = await buildApp();
       const res = await app.inject({
         method: "POST",
@@ -332,7 +332,7 @@ describe("task ↔ commits and PRs (explicit linking)", () => {
         payload: { repositoryId: repoAId, number: 1, state: "bogus" },
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json().error.code).toBe("INVALID_STATE");
+      expect(res.json().error.code).toBe("FST_ERR_VALIDATION");
     });
 
     it("rejects a repo not on the task's projects with 422", async () => {

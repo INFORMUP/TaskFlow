@@ -7,8 +7,11 @@ export class CodeLinkServiceError extends Error {
   }
 }
 
+// TODO(#32): tighten before webhook ingestion lands. The unique key is
+// (repository_id, sha) and 7-char manual SHAs can collide with the 40-char
+// SHAs the webhook will insert for the same commit. Either require 40 chars
+// for manual input or split into shaShort/shaFull with uniqueness on shaFull.
 const SHA_PATTERN = /^[a-f0-9]{7,40}$/i;
-const VALID_PR_STATES = new Set(["open", "closed", "merged"]);
 
 const PR_URL_PATTERN =
   /^https?:\/\/github\.com\/([^\/\s]+)\/([^\/\s]+)\/pull\/(\d+)\/?$/i;
@@ -142,7 +145,8 @@ export async function createTaskCommit(orgId: string, taskId: string, input: Cre
   }
 
   const { repo } = await resolveTaskRepository(orgId, taskId, repositoryId);
-  const url = input.url?.trim() || commitUrlFor(repo.owner, repo.name, sha);
+  // Always derive the canonical URL from trusted repo data — never store user-supplied url verbatim.
+  const url = commitUrlFor(repo.owner, repo.name, sha);
 
   try {
     const created = await prisma.taskCommit.create({
@@ -211,15 +215,15 @@ export async function createTaskPullRequest(
   taskId: string,
   input: CreatePullRequestInput,
 ) {
-  let { repositoryId, number } = input;
+  let { repositoryId, number: prNumber } = input;
 
-  if ((!repositoryId || number == null) && input.url) {
+  if ((!repositoryId || prNumber == null) && input.url) {
     const m = input.url.trim().match(PR_URL_PATTERN);
     if (!m) {
       throw new CodeLinkServiceError("INVALID_URL", "Could not parse PR URL", 400);
     }
     const [, owner, name, parsedNumber] = m;
-    number = number ?? parseInt(parsedNumber, 10);
+    prNumber = prNumber ?? parseInt(parsedNumber, 10);
     if (!repositoryId) {
       const repo = await prisma.projectRepository.findFirst({
         where: {
@@ -240,14 +244,12 @@ export async function createTaskPullRequest(
     }
   }
 
-  if (number == null || !Number.isInteger(number) || number < 1) {
+  if (prNumber == null || !Number.isInteger(prNumber) || prNumber < 1) {
     throw new CodeLinkServiceError("INVALID_NUMBER", "PR number must be a positive integer", 400);
   }
 
+  // state is validated by the route schema enum; fall back to "open" if absent/null.
   const state = (input.state ?? "open").toLowerCase();
-  if (!VALID_PR_STATES.has(state)) {
-    throw new CodeLinkServiceError("INVALID_STATE", "state must be open, closed, or merged", 400);
-  }
   const mergedAt = parseOptionalDate(input.mergedAt, "mergedAt");
 
   if (!repositoryId) {
@@ -256,14 +258,15 @@ export async function createTaskPullRequest(
   }
 
   const { repo } = await resolveTaskRepository(orgId, taskId, repositoryId);
-  const url = input.url?.trim() || prUrlFor(repo.owner, repo.name, number);
+  // Always derive the canonical URL from trusted repo data — never store user-supplied url verbatim.
+  const url = prUrlFor(repo.owner, repo.name, prNumber);
 
   try {
     const created = await prisma.taskPullRequest.create({
       data: {
         taskId,
         repositoryId,
-        number,
+        number: prNumber,
         title: input.title ?? null,
         state,
         author: input.author ?? null,
