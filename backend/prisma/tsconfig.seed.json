@@ -4,5 +4,5 @@
     "rootDir": ".",
     "outDir": "../dist/prisma"
   },
-  "include": ["seed.ts", "bootstrap.ts", "seeders/**/*.ts"]
+  "include": ["seed.ts", "bootstrap.ts", "seed-reference.ts", "seeders/**/*.ts"]
 }
