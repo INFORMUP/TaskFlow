@@ -196,4 +196,80 @@ describe("tasks list filters", () => {
       expect(titles).toEqual(["Login redirect bug"]);
     });
   });
+
+  describe("status multi-select", () => {
+    async function transitionTo(app: any, taskId: string, toStatus: string) {
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskId}/transitions`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { toStatus },
+      });
+      expect(res.statusCode).toBe(201);
+    }
+
+    it("single status param keeps working (backward compatible)", async () => {
+      const app = await buildApp();
+      await createTask(app, { title: "Triaging" });
+      const inv = await createTask(app, { title: "Investigating" });
+      await transitionTo(app, inv.json().id, "investigate");
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/v1/tasks?status=investigate",
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      const titles = res.json().data.map((t: any) => t.title);
+      expect(titles).toEqual(["Investigating"]);
+    });
+
+    it("repeated status params return tasks in any of the selected statuses", async () => {
+      const app = await buildApp();
+      await createTask(app, { title: "Triaging" });
+      const inv = await createTask(app, { title: "Investigating" });
+      await transitionTo(app, inv.json().id, "investigate");
+      const other = await createTask(app, { title: "Approving" });
+      await transitionTo(app, other.json().id, "investigate");
+      await transitionTo(app, other.json().id, "approve");
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/v1/tasks?status=triage&status=investigate",
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      const titles = res.json().data.map((t: any) => t.title).sort();
+      expect(titles).toEqual(["Investigating", "Triaging"]);
+    });
+
+    it("unknown status slug is ignored alongside known ones", async () => {
+      const app = await buildApp();
+      await createTask(app, { title: "Triaging" });
+      const inv = await createTask(app, { title: "Investigating" });
+      await transitionTo(app, inv.json().id, "investigate");
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/v1/tasks?status=triage&status=does-not-exist",
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      const titles = res.json().data.map((t: any) => t.title);
+      expect(titles).toEqual(["Triaging"]);
+    });
+
+    it("AND-combines multi-status with another filter", async () => {
+      const app = await buildApp();
+      await createTask(app, { title: "Eng triage", projectIds: [projectEngId] });
+      const e2 = await createTask(app, { title: "Eng investigate", projectIds: [projectEngId] });
+      await transitionTo(app, e2.json().id, "investigate");
+      await createTask(app, { title: "Prod triage", projectIds: [projectProdId] });
+
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/v1/tasks?status=triage&status=investigate&projectId=${projectEngId}`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      const titles = res.json().data.map((t: any) => t.title).sort();
+      expect(titles).toEqual(["Eng investigate", "Eng triage"]);
+    });
+  });
 });

@@ -43,6 +43,13 @@ onMounted(async () => {
 function update<K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) {
   setFilters({ [key]: value } as Partial<TaskFilters>);
 }
+function toggleStatus(slug: string) {
+  const current = filters.value.status;
+  const next = current.includes(slug)
+    ? current.filter((s) => s !== slug)
+    : [...current, slug];
+  update("status", next);
+}
 </script>
 
 <template>
@@ -67,16 +74,23 @@ function update<K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) {
       </option>
     </select>
 
-    <select
-      :value="filters.status"
+    <div
+      class="filter-bar__status-group"
+      role="group"
       aria-label="Filter by status"
-      @change="update('status', ($event.target as HTMLSelectElement).value)"
     >
-      <option value="">Any status</option>
-      <option v-for="s in statuses" :key="s.slug" :value="s.slug">
+      <button
+        v-for="s in statuses"
+        :key="s.slug"
+        type="button"
+        class="filter-bar__chip"
+        :class="{ 'filter-bar__chip--on': filters.status.includes(s.slug) }"
+        :aria-pressed="filters.status.includes(s.slug)"
+        @click="toggleStatus(s.slug)"
+      >
         {{ s.name }}
-      </option>
-    </select>
+      </button>
+    </div>
 
     <select
       :value="filters.priority"
@@ -160,6 +174,25 @@ function update<K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) {
   align-items: center;
   gap: 0.375rem;
   color: var(--text-secondary);
+}
+.filter-bar__status-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.filter-bar__chip {
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+.filter-bar__chip--on {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
 }
 .filter-bar__clear {
   margin-left: auto;
