@@ -11,8 +11,20 @@ export interface Transition {
   createdAt: string;
 }
 
+export interface AvailableStatus {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 export function getTransitions(taskId: string): Promise<{ data: Transition[] }> {
   return apiFetch(`/api/v1/tasks/${taskId}/transitions`);
+}
+
+export function getAvailableTransitions(
+  taskId: string
+): Promise<{ data: AvailableStatus[] }> {
+  return apiFetch(`/api/v1/tasks/${taskId}/available-transitions`);
 }
 
 export function createTransition(
