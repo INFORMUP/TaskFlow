@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { listProjects, type Project } from "@/api/projects.api";
+import { listOrgMembers, type OrgMember } from "@/api/org-members.api";
 import { useTaskFilters, type TaskFilters } from "../composables/useTaskFilters";
 
 defineProps<{
@@ -10,6 +11,7 @@ defineProps<{
 const { filters, setFilters, resetFilters } = useTaskFilters();
 
 const projects = ref<Project[]>([]);
+const members = ref<OrgMember[]>([]);
 
 // Local mirror of `q` so typing is responsive; debounce-flush to the URL.
 const qLocal = ref(filters.value.q);
@@ -30,15 +32,16 @@ onUnmounted(() => {
 });
 
 onMounted(async () => {
-  projects.value = await listProjects();
+  const [projectList, memberList] = await Promise.all([
+    listProjects(),
+    listOrgMembers(),
+  ]);
+  projects.value = projectList;
+  members.value = memberList;
 });
 
 function update<K extends keyof TaskFilters>(key: K, value: TaskFilters[K]) {
   setFilters({ [key]: value } as Partial<TaskFilters>);
-}
-
-function toggleAssignedToMe() {
-  update("assigneeUserId", filters.value.assigneeUserId === "me" ? "" : "me");
 }
 </script>
 
@@ -87,15 +90,17 @@ function toggleAssignedToMe() {
       <option value="low">Low</option>
     </select>
 
-    <button
-      type="button"
-      class="filter-bar__me"
-      :aria-pressed="filters.assigneeUserId === 'me'"
-      :class="{ 'filter-bar__me--on': filters.assigneeUserId === 'me' }"
-      @click="toggleAssignedToMe"
+    <select
+      :value="filters.assigneeUserId"
+      aria-label="Filter by assignee"
+      @change="update('assigneeUserId', ($event.target as HTMLSelectElement).value)"
     >
-      Assigned to me
-    </button>
+      <option value="">Anyone</option>
+      <option value="me">Me</option>
+      <option v-for="m in members" :key="m.id" :value="m.id">
+        {{ m.displayName }}
+      </option>
+    </select>
 
     <label class="filter-bar__date">
       Due after
@@ -155,19 +160,6 @@ function toggleAssignedToMe() {
   align-items: center;
   gap: 0.375rem;
   color: var(--text-secondary);
-}
-.filter-bar__me {
-  padding: 0.375rem 0.75rem;
-  border: 1px solid var(--border-primary);
-  border-radius: 999px;
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.8125rem;
-}
-.filter-bar__me--on {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
 }
 .filter-bar__clear {
   margin-left: auto;
