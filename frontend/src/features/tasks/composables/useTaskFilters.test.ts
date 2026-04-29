@@ -75,6 +75,7 @@ describe("useTaskFilters", () => {
     expect(toApiParams(f)).toEqual({ projectId: "abc" });
   });
 
+
   it("reads a single status from the URL as a one-element array", async () => {
     const ctx = await setupWithQuery({ status: "implement" });
     expect(ctx.filters.status).toEqual(["implement"]);

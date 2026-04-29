@@ -34,7 +34,6 @@ onMounted(() => {
 
 function applyView(view: SavedView) {
   const query: Record<string, string | string[]> = { ...view.filters };
-  // Status is persisted as a comma-joined string; expand back into repeated params.
   if (typeof view.filters.status === "string" && view.filters.status.includes(",")) {
     query.status = view.filters.status.split(",").filter(Boolean);
   }
