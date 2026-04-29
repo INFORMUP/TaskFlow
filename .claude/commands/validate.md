@@ -15,7 +15,8 @@ Pick up a task in `validate` status, review its linked PR against the design spe
 
 1. **Setup**
    - Read API token from `~/.taskflow-import-token` (chmod 600). Never log it.
-   - Base URL: `https://taskflow.informup.org`. Repo: `INFORMUP/TaskFlow`.
+   - Base URL: `https://taskflow.informup.org`.
+   - GitHub repo: derive from the linked PR's URL (authoritative); falls back to the current checkout's `origin`. Do not assume `INFORMUP/TaskFlow`.
 
 2. **Fetch task + comments + linked PR**
    - Resolve task by UUID or display ID (`FEAT`→`feature`, `BUG`→`bug`, `IMP`→`improvement`).

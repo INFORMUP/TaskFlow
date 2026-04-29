@@ -22,6 +22,13 @@ import {
   updateProject,
 } from "../services/project.service.js";
 import { CommonErrorResponses, IdParams } from "./_schemas.js";
+import { prisma } from "../prisma-client.js";
+import { enforceScope } from "../services/permission.service.js";
+import {
+  ProjectCodeActivityError,
+  listProjectCommits,
+  listProjectPullRequests,
+} from "../services/project-code-activity.service.js";
 
 const UserRef = Type.Object(
   {
@@ -629,5 +636,191 @@ export async function projectRoutes(fastify: FastifyInstance) {
         return handleError(reply, err);
       }
     }
+  );
+
+  const TaskRef = Type.Object(
+    {
+      id: Type.String({ format: "uuid" }),
+      displayId: Type.String(),
+      title: Type.String(),
+      flow: Type.Object(
+        {
+          id: Type.String({ format: "uuid" }),
+          slug: Type.String(),
+          name: Type.String(),
+        },
+        { additionalProperties: true },
+      ),
+    },
+    { additionalProperties: true },
+  );
+
+  const ActivityCommitRecord = Type.Object(
+    {
+      id: Type.String({ format: "uuid" }),
+      taskId: Type.String({ format: "uuid" }),
+      repositoryId: Type.String({ format: "uuid" }),
+      repository: Type.Optional(
+        Type.Object(
+          {
+            id: Type.String({ format: "uuid" }),
+            provider: Type.String(),
+            owner: Type.String(),
+            name: Type.String(),
+          },
+          { additionalProperties: false },
+        ),
+      ),
+      task: Type.Optional(TaskRef),
+      sha: Type.String(),
+      message: Type.Union([Type.String(), Type.Null()]),
+      author: Type.Union([Type.String(), Type.Null()]),
+      authoredAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+      url: Type.String(),
+      createdAt: Type.String({ format: "date-time" }),
+    },
+    { additionalProperties: true },
+  );
+
+  const ActivityPullRequestRecord = Type.Object(
+    {
+      id: Type.String({ format: "uuid" }),
+      taskId: Type.String({ format: "uuid" }),
+      repositoryId: Type.String({ format: "uuid" }),
+      repository: Type.Optional(
+        Type.Object(
+          {
+            id: Type.String({ format: "uuid" }),
+            provider: Type.String(),
+            owner: Type.String(),
+            name: Type.String(),
+          },
+          { additionalProperties: false },
+        ),
+      ),
+      task: Type.Optional(TaskRef),
+      number: Type.Integer(),
+      title: Type.Union([Type.String(), Type.Null()]),
+      state: Type.String(),
+      author: Type.Union([Type.String(), Type.Null()]),
+      mergedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+      url: Type.String(),
+      createdAt: Type.String({ format: "date-time" }),
+    },
+    { additionalProperties: true },
+  );
+
+  const ActivityPagination = Type.Object(
+    {
+      cursor: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+      hasMore: Type.Boolean(),
+    },
+    { additionalProperties: true },
+  );
+
+  const ListCommitsQuery = Type.Object({
+    repositoryId: Type.Optional(Type.String({ format: "uuid" })),
+    cursor: Type.Optional(Type.String()),
+    limit: Type.Optional(Type.String()),
+  });
+
+  const ListPullRequestsQuery = Type.Object({
+    repositoryId: Type.Optional(Type.String({ format: "uuid" })),
+    state: Type.Optional(Type.String({ enum: ["open", "closed", "merged"] })),
+    cursor: Type.Optional(Type.String()),
+    limit: Type.Optional(Type.String()),
+  });
+
+  function handleActivityError(reply: any, err: unknown) {
+    if (err instanceof ProjectCodeActivityError) {
+      return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+    }
+    throw err;
+  }
+
+  async function getFlowIdBySlug(orgId: string): Promise<Map<string, string>> {
+    const flows = await prisma.flow.findMany({ where: { orgId } });
+    return new Map(flows.map((f) => [f.slug, f.id]));
+  }
+
+  fastify.get<{ Params: { id: string }; Querystring: Static<typeof ListCommitsQuery> }>(
+    "/api/v1/projects/:id/commits",
+    {
+      schema: {
+        summary: "List commits across tasks in this project",
+        description:
+          "Aggregates commits linked to any task in the project, newest first. Filtered by the requester's task-view permissions. Cursor-paginated (`cursor` is a `createdAt` ISO timestamp; `limit` max 100, default 20).",
+        tags: ["projects"],
+        params: IdParams,
+        querystring: ListCommitsQuery,
+        response: {
+          200: Type.Object(
+            { data: Type.Array(ActivityCommitRecord), pagination: ActivityPagination },
+            { additionalProperties: true },
+          ),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:read")) return;
+      const { id } = request.params;
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const limit = Math.min(parseInt(request.query.limit || "20", 10) || 20, 100);
+      try {
+        return await listProjectCommits(
+          request.org.id,
+          id,
+          { repositoryId: request.query.repositoryId, cursor: request.query.cursor, limit },
+          { teamSlugs, userId: request.user.id, flowIdBySlug },
+        );
+      } catch (err) {
+        return handleActivityError(reply, err);
+      }
+    },
+  );
+
+  fastify.get<{ Params: { id: string }; Querystring: Static<typeof ListPullRequestsQuery> }>(
+    "/api/v1/projects/:id/pull-requests",
+    {
+      schema: {
+        summary: "List pull requests across tasks in this project",
+        description:
+          "Aggregates pull requests linked to any task in the project, newest first. Filter by `state` (open/closed/merged). Filtered by the requester's task-view permissions. Cursor-paginated.",
+        tags: ["projects"],
+        params: IdParams,
+        querystring: ListPullRequestsQuery,
+        response: {
+          200: Type.Object(
+            { data: Type.Array(ActivityPullRequestRecord), pagination: ActivityPagination },
+            { additionalProperties: true },
+          ),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:read")) return;
+      const { id } = request.params;
+      const flowIdBySlug = await getFlowIdBySlug(request.org.id);
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const limit = Math.min(parseInt(request.query.limit || "20", 10) || 20, 100);
+      try {
+        return await listProjectPullRequests(
+          request.org.id,
+          id,
+          {
+            repositoryId: request.query.repositoryId,
+            state: request.query.state,
+            cursor: request.query.cursor,
+            limit,
+          },
+          { teamSlugs, userId: request.user.id, flowIdBySlug },
+        );
+      } catch (err) {
+        return handleActivityError(reply, err);
+      }
+    },
   );
 }

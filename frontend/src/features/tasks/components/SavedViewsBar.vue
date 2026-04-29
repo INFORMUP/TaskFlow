@@ -19,7 +19,7 @@ const hasAnyFilter = computed(() => {
   return Boolean(
     f.projectId ||
       f.projectOwnerUserId ||
-      f.status ||
+      f.status.length > 0 ||
       f.priority ||
       f.assigneeUserId ||
       f.dueAfter ||
@@ -33,7 +33,11 @@ onMounted(() => {
 });
 
 function applyView(view: SavedView) {
-  router.replace({ query: { ...view.filters } });
+  const query: Record<string, string | string[]> = { ...view.filters };
+  if (typeof view.filters.status === "string" && view.filters.status.includes(",")) {
+    query.status = view.filters.status.split(",").filter(Boolean);
+  }
+  router.replace({ query });
 }
 
 async function handleSave() {
@@ -48,7 +52,7 @@ async function handleSave() {
     const filterPayload: Record<string, string> = {};
     if (f.projectId) filterPayload.projectId = f.projectId;
     if (f.projectOwnerUserId) filterPayload.projectOwnerUserId = f.projectOwnerUserId;
-    if (f.status) filterPayload.status = f.status;
+    if (f.status.length > 0) filterPayload.status = f.status.join(",");
     if (f.priority) filterPayload.priority = f.priority;
     if (f.assigneeUserId) filterPayload.assigneeUserId = f.assigneeUserId;
     if (f.dueAfter) filterPayload.dueAfter = f.dueAfter;

@@ -106,6 +106,15 @@ function handleAssigneeClick(e: MouseEvent) {
     <span class="card__header">
       <span class="card__id">{{ task.displayId }}</span>
       <span
+        v-if="(task.openBlockerCount ?? 0) > 0"
+        class="card__blocked-badge"
+        :title="`${task.openBlockerCount} open blocker${task.openBlockerCount === 1 ? '' : 's'}`"
+        :aria-label="`${task.openBlockerCount} open blocker${task.openBlockerCount === 1 ? '' : 's'}`"
+        data-testid="blocked-badge"
+      >
+        Blocked
+      </span>
+      <span
         class="card__priority"
         :style="{ color: priorityColors[task.priority] }"
       >
@@ -200,6 +209,19 @@ function handleAssigneeClick(e: MouseEvent) {
   font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
+}
+
+.card__blocked-badge {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.25rem;
+  background: var(--priority-high, #b54708);
+  color: #fff;
+  margin-left: auto;
+  margin-right: 0.5rem;
 }
 
 .card__title {
