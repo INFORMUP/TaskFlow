@@ -89,6 +89,10 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 - A pre-commit hook runs `tsc --noEmit` (backend) and `vue-tsc --noEmit` (frontend) automatically. If it fails, fix type errors before committing.
 - Git hooks live in `.githooks/`. After cloning, run `git config core.hooksPath .githooks` to activate them.
 
+## Validating Tests That Require a Database
+- Do not spin up a local database to run tests that need one (backend integration tests, Playwright E2E). Instead, push the branch to GitHub, open a PR into `staging`, and review the CI results there.
+- Use `gh pr checks <PR>` and `gh run view <run-id> --log-failed` to inspect CI output rather than running the DB-backed suites locally.
+
 ## PR Titles (Conventional Commits)
 - PRs into `staging` and direct hotfix PRs into `main` must have titles following Conventional Commits — e.g. `feat(api): add version endpoint`, `fix: handle null assignee`, `feat!: drop deprecated field` for breaking changes. The `commitlint` workflow enforces this.
 - Allowed types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`, `style`. Use `!` after type/scope for breaking changes.
