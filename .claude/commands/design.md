@@ -27,7 +27,7 @@ Pick up a TaskFlow task in the `design` status, produce a design spec, post it a
 
 4. **Read context**
    - Read the task description and every existing comment in full. Treat them as the source of truth — earlier discussion may already constrain the design. Note any imported-from GitHub link in the description and skim that issue too if it adds context.
-   - Skim relevant code in the worktree (`src/`, `frontend/src/`, `prisma/schema.prisma`) to ground the design in what's actually there. Do not start writing the spec without doing this.
+   - Skim relevant code in the current checkout to ground the design in what's actually there. Layout varies by repo — read the project's CLAUDE.md or top-level README for entry points (e.g. for TaskFlow itself: `backend/src/`, `frontend/src/`, `backend/prisma/schema.prisma`). Do not start writing the spec without doing this.
 
 5. **Produce the design spec** — a markdown comment with these sections (omit any that don't apply):
    - **Goal** — one or two sentences restating what this task is delivering and why.
