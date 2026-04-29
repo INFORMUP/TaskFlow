@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import ProjectForm from "@/features/projects/components/ProjectForm.vue";
 import ProjectFlowsSection from "@/features/projects/components/ProjectFlowsSection.vue";
 import ProjectRepositoriesSection from "@/features/projects/components/ProjectRepositoriesSection.vue";
+import ProjectCodeActivitySection from "@/features/projects/components/ProjectCodeActivitySection.vue";
 import ProjectStatusDefaultsSection from "@/features/projects/components/ProjectStatusDefaultsSection.vue";
 import {
   archiveProject,
@@ -115,6 +116,8 @@ async function toggleArchive() {
     />
 
     <ProjectRepositoriesSection :project-id="project.id" />
+
+    <ProjectCodeActivitySection :project-id="project.id" />
   </section>
   <p v-else>Loading…</p>
 </template>
