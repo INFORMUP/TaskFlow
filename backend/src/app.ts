@@ -24,6 +24,7 @@ import { flowRoutes } from "./routes/flows.js";
 import { organizationRoutes } from "./routes/organizations.js";
 import { feedbackRoutes } from "./routes/feedback.js";
 import { invitationRoutes } from "./routes/invitations.js";
+import { labelRoutes } from "./routes/labels.js";
 import { githubWebhookRoutes } from "./routes/webhooks-github.js";
 import { config } from "./config.js";
 import "./types/index.js";
@@ -80,6 +81,7 @@ export function createApp() {
   app.register(organizationRoutes);
   app.register(feedbackRoutes);
   app.register(invitationRoutes);
+  app.register(labelRoutes);
   app.register(githubWebhookRoutes);
 
   return app;

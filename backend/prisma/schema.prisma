@@ -23,6 +23,7 @@ model Organization {
   feedback    Feedback[]
   invitations Invitation[]
   savedViews  SavedView[]
+  labels      Label[]
 
   @@map("organizations")
 }
@@ -230,6 +231,7 @@ model Task {
   feedback      Feedback?
   commits       TaskCommit[]
   pullRequests  TaskPullRequest[]
+  labels        TaskLabel[]
   blockedBy     TaskDependency[] @relation("TaskDependencyBlocked")
   blocks        TaskDependency[] @relation("TaskDependencyBlocking")
 
@@ -528,4 +530,31 @@ model SavedView {
   @@unique([userId, name])
   @@index([orgId, userId])
   @@map("saved_views")
+}
+
+model Label {
+  id        String   @id @default(uuid()) @db.Uuid
+  orgId     String   @map("org_id") @db.Uuid
+  name      String
+  color     String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  tasks TaskLabel[]
+
+  @@unique([orgId, name])
+  @@map("labels")
+}
+
+model TaskLabel {
+  taskId    String   @map("task_id") @db.Uuid
+  labelId   String   @map("label_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId])
+  @@map("task_labels")
 }

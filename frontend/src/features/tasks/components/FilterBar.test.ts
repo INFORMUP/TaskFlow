@@ -15,6 +15,10 @@ vi.mock("@/api/org-members.api", () => ({
   ]),
 }));
 
+vi.mock("@/api/labels.api", () => ({
+  listLabels: vi.fn().mockResolvedValue([]),
+}));
+
 const Host = defineComponent({
   components: { FilterBar },
   template: '<FilterBar :statuses="[]" />',

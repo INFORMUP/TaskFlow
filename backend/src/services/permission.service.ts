@@ -183,6 +183,17 @@ export function orgRoleGrantsAll(orgRole: OrgRole | undefined): boolean {
   return orgRole === "owner" || orgRole === "admin";
 }
 
+// Org-level: can the caller manage labels (create, rename, delete)?
+// Labels are org-scoped, so we permit anyone with `edit` on at least one flow.
+// Org admins/owners always pass.
+export function canManageLabels(teamSlugs: string[], orgRole?: OrgRole): boolean {
+  if (orgRoleGrantsAll(orgRole)) return true;
+  for (const flowSlug of Object.keys(PERMISSIONS)) {
+    if (canPerformAction(teamSlugs, "edit", flowSlug)) return true;
+  }
+  return false;
+}
+
 export function canPerformAction(
   teamSlugs: string[],
   action: Action,
