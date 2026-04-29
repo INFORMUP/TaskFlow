@@ -20,7 +20,7 @@ If any of those don't hold, stop and use `/design`, `/implement`, `/transition` 
 
 ## Permission map (feature flow)
 
-The token user must be on a team allowed for *every* transition the run will perform. Check `backend/src/services/permission.service.ts` for the source of truth. Today:
+The token user must be on a team allowed for *every* transition the run will perform. The TaskFlow server is the source of truth (the permission matrix lives in its `permission.service.ts`). Today:
 
 - `feature.design` → `product`
 - `feature.prototype` → `engineer` or `agent`
@@ -33,7 +33,8 @@ If a transition 403s mid-run, **stop**. Do not roll back. Surface the failing tr
 
 1. **Setup**
    - Read API token from `~/.taskflow-import-token` (chmod 600). Never log it.
-   - Base URL: `https://taskflow.informup.org`. Repo: `INFORMUP/TaskFlow`.
+   - Base URL: `https://taskflow.informup.org`.
+   - GitHub repo: derive from the task's linked code repo if set; otherwise use the current checkout's `origin` (`git remote get-url origin`). Do not assume `INFORMUP/TaskFlow`.
 
 2. **Resolve task + sanity-check**
    - Resolve UUID or display ID (`FEAT` → `feature`). Fast-track is only for the `feature` flow — if the task is on `bug` or `improvement`, stop and tell the user to use the per-stage skills (those flows have different stages and this composition doesn't map cleanly).

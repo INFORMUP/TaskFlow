@@ -15,7 +15,8 @@ Pick up a task in `implement` status (or `resolve` on the **bug** flow — the e
 
 1. **Setup**
    - Read API token from `~/.taskflow-import-token` (chmod 600). Never log it.
-   - Base URL: `https://taskflow.informup.org`. Repo: `INFORMUP/TaskFlow`.
+   - Base URL: `https://taskflow.informup.org`.
+   - GitHub repo: derive from the task's linked code repo if set; otherwise use the current checkout's `origin` (`git remote get-url origin`). Do not assume `INFORMUP/TaskFlow`.
 
 2. **Fetch task + comments**
    - Resolve task by UUID or display ID (`FEAT`→`feature`, `BUG`→`bug`, `IMP`→`improvement`).
@@ -41,10 +42,10 @@ Pick up a task in `implement` status (or `resolve` on the **bug** flow — the e
 5. **Implement**
    - Follow red-green TDD per global instructions: failing test first, minimum impl, refactor.
    - Stay scoped to the task's acceptance criteria. Resist the urge to clean up adjacent code — open a separate task for that if it bothers you.
-   - Run the affected package's tests as you go (`npm test` in `backend/` or `frontend/`).
+   - Run the affected package's tests as you go (e.g. `npm test` in the affected package, `pytest`, `cargo test` — match the repo's stack).
 
 6. **Pre-commit check**
-   - Per CLAUDE.md, the pre-commit hook runs `tsc --noEmit` (backend) and `vue-tsc --noEmit` (frontend) — fix type errors, do not bypass with `--no-verify`.
+   - Run whatever pre-commit / typecheck hooks the repo configures (e.g. `tsc --noEmit`, `vue-tsc --noEmit`, `ruff`, `mypy`). Fix errors; do not bypass with `--no-verify`.
    - Confirm `npm test` passes in every package you touched.
 
 7. **Commit + push**

@@ -19,7 +19,8 @@ Pick up a PR with requested changes, address each comment with a code fix or a r
 
 1. **Setup**
    - Read API token from `~/.taskflow-import-token` (chmod 600). Never log it.
-   - Base URL: `https://taskflow.informup.org`. Repo: `INFORMUP/TaskFlow`.
+   - Base URL: `https://taskflow.informup.org`.
+   - GitHub repo (`<owner>/<repo>` in the examples below): derive from the task's linked code repo if set; otherwise use the current checkout's `origin` (`git remote get-url origin`). Do not assume `<owner>/<repo>`.
 
 2. **Resolve the PR**
    - If the arg looks like a PR number: use it directly.
@@ -33,8 +34,8 @@ Pick up a PR with requested changes, address each comment with a code fix or a r
 
 4. **Pull every reviewer comment**
    - Top-level review summaries: included in `gh pr view <number> --json reviews`.
-   - Inline diff comments: `gh api repos/INFORMUP/TaskFlow/pulls/<number>/comments` (REST). These have `path`, `line`, `body`, and `id`.
-   - PR-level conversation comments: `gh api repos/INFORMUP/TaskFlow/issues/<number>/comments`.
+   - Inline diff comments: `gh api repos/<owner>/<repo>/pulls/<number>/comments` (REST). These have `path`, `line`, `body`, and `id`.
+   - PR-level conversation comments: `gh api repos/<owner>/<repo>/issues/<number>/comments`.
    - Build a single ordered list of every comment, with: source (review summary / inline / conversation), file+line if any, author, and body. Don't lose any.
 
 5. **Check out the PR's head branch**
@@ -57,10 +58,10 @@ Pick up a PR with requested changes, address each comment with a code fix or a r
 7. **Make the fixes (TDD)**
    - For each `Fix` comment: write a failing test first if applicable, then the minimum change. Refactor if needed.
    - Stay scoped to what reviewers asked for. Resist drive-by cleanups.
-   - Run `npm test` in any package you touched.
+   - Run the project's test command in any package you touched (e.g. `npm test`, `pytest`, `cargo test`).
 
 8. **Pre-commit checks**
-   - Pre-commit hook runs `tsc --noEmit` (backend) and `vue-tsc --noEmit` (frontend) — fix type errors, do not bypass with `--no-verify`.
+   - Run whatever pre-commit / typecheck hooks the repo configures (e.g. `tsc --noEmit`, `vue-tsc --noEmit`, `ruff`, `mypy`). Fix errors; do not bypass with `--no-verify`.
 
 9. **Commit + push**
    - One commit per logical fix, or one squash commit if the changes are tightly related. Don't bundle unrelated fixes.
@@ -69,7 +70,7 @@ Pick up a PR with requested changes, address each comment with a code fix or a r
    - `git push origin <head-branch>`.
 
 10. **Reply to each comment**
-    - **Inline diff comments**: reply via `gh api -X POST repos/INFORMUP/TaskFlow/pulls/<number>/comments/<comment-id>/replies -f body="..."`. (GitHub also accepts POSTing to the parent `/comments` collection with `-F in_reply_to=<comment-id>`; either works, but the `/replies` sub-resource is the documented path.)
+    - **Inline diff comments**: reply via `gh api -X POST repos/<owner>/<repo>/pulls/<number>/comments/<comment-id>/replies -f body="..."`. (GitHub also accepts POSTing to the parent `/comments` collection with `-F in_reply_to=<comment-id>`; either works, but the `/replies` sub-resource is the documented path.)
     - **Review summary comments**: there's no per-summary reply API — post a single PR-level conversation comment summarizing what was addressed:
       ```bash
       gh pr comment <number> --body "$(cat <<'EOF'
@@ -86,7 +87,7 @@ Pick up a PR with requested changes, address each comment with a code fix or a r
 
 11. **Re-request review**
     - `gh pr view <number> --json reviewRequests,reviews -q '.reviews[].author.login'` to find prior reviewers.
-    - `gh api -X POST repos/INFORMUP/TaskFlow/pulls/<number>/requested_reviewers -f reviewers='["<login>"]'` for each prior reviewer.
+    - `gh api -X POST repos/<owner>/<repo>/pulls/<number>/requested_reviewers -f reviewers='["<login>"]'` for each prior reviewer.
 
 12. **Update the task**
     - If task was resolved in step 2: do **not** transition it. The task should already be in `validate` — leave it there for the reviewer to re-validate. Post a brief task comment: `Addressed review on <pr-url> — ready for re-validation.`
