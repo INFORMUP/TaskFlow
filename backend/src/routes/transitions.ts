@@ -182,6 +182,58 @@ export async function transitionRoutes(fastify: FastifyInstance) {
   );
 
   fastify.get<{ Params: { id: string } }>(
+    "/api/v1/tasks/:id/available-transitions",
+    {
+      schema: {
+        summary: "List statuses the task can transition to from its current status",
+        description:
+          "Returns the next-status options allowed by the flow's transition graph and filtered to those the requester has permission to transition to. Requires tasks:read scope.",
+        tags: ["transitions"],
+        params: IdParams,
+        response: {
+          200: Type.Object(
+            { data: Type.Array(StatusRef) },
+            { additionalProperties: true }
+          ),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:read")) return;
+      const { id } = request.params;
+
+      const task = await prisma.task.findFirst({
+        where: { id, isDeleted: false, flow: { orgId: request.org.id } },
+        include: { flow: true },
+      });
+
+      if (!task) {
+        return reply.status(404).send({
+          error: { code: "NOT_FOUND", message: "Task not found" },
+        });
+      }
+
+      const transitions = await prisma.flowTransition.findMany({
+        where: { flowId: task.flowId, fromStatusId: task.currentStatusId },
+        include: {
+          toStatus: { select: { id: true, slug: true, name: true, sortOrder: true } },
+        },
+      });
+
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const allowed = transitions
+        .filter((t) => canTransitionToStatus(teamSlugs, task.flow.slug, t.toStatus.slug))
+        .map((t) => t.toStatus)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      return {
+        data: allowed.map((s) => ({ id: s.id, slug: s.slug, name: s.name })),
+      };
+    }
+  );
+
+  fastify.get<{ Params: { id: string } }>(
     "/api/v1/tasks/:id/transitions",
     {
       schema: {

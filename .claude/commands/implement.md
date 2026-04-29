@@ -1,11 +1,11 @@
 ---
-description: Implement a TaskFlow task in `implement` status — creates a branch, makes the change, opens a PR into staging
+description: Implement a TaskFlow task in `implement` status (or `resolve` on the bug flow) — creates a branch, makes the change, opens a PR into staging
 argument-hint: "<task-id-or-display-id>"
 ---
 
 # Implement
 
-Pick up a task in `implement` status, do the work, and open a PR into `staging`. Assumes the task already has a design spec in its comments (from `/design`) and has been moved through `prototype` → `implement` by the appropriate teams.
+Pick up a task in `implement` status (or `resolve` on the **bug** flow — the equivalent stage where engineers write the fix), do the work, and open a PR into `staging`. Assumes the task already has a design spec in its comments (from `/design`) and has been moved into the implementing stage by the appropriate teams.
 
 ## Arguments
 
@@ -20,7 +20,7 @@ Pick up a task in `implement` status, do the work, and open a PR into `staging`.
 2. **Fetch task + comments**
    - Resolve task by UUID or display ID (`FEAT`→`feature`, `BUG`→`bug`, `IMP`→`improvement`).
    - `GET /api/v1/tasks/{id}` and `GET /api/v1/tasks/{id}/comments`.
-   - **Verify status: `currentStatus.slug == "implement"`.** If not, stop and tell the user. This skill does not transition tasks into implement on its own — the prototype → implement move belongs to whoever owns prototype work.
+   - **Verify status: `currentStatus.slug == "implement"` (feature/improvement flow) or `currentStatus.slug == "resolve"` (bug flow).** If not, stop and tell the user. This skill does not transition tasks into the implementing stage on its own — the prior move belongs to whoever owns the previous stage (e.g. `prototype → implement`, `approve → resolve`).
 
 3. **Read everything before touching code**
    - Read the task description in full.
@@ -87,9 +87,9 @@ Pick up a task in `implement` status, do the work, and open a PR into `staging`.
    - Do **not** also post a duplicate comment with the PR URL — the structured link is the canonical record.
 
 10. **Offer transition**
-    - Ask the user whether to transition the task to `validate` (next status after `implement` in the `feature` flow). If yes:
+    - Ask the user whether to transition the task to `validate` (the next status after both `implement` on the `feature`/`improvement` flows and `resolve` on the `bug` flow). If yes:
       - `POST /api/v1/tasks/{id}/transitions` with `{"toStatus":"validate"}`. The linked PR is already on the task — no transition note needed.
-    - If they decline, leave the task in `implement` (e.g. PR still in draft, or wants reviewer to advance it).
+    - If they decline, leave the task in its current status (e.g. PR still in draft, or wants reviewer to advance it).
 
 ## Notes
 

@@ -289,6 +289,79 @@ describe("transitions API", () => {
     });
   });
 
+  describe("GET /api/v1/tasks/:id/available-transitions", () => {
+    it("returns the allowed next statuses for the task's current status", async () => {
+      const app = await buildApp();
+      const task = await createBugTask(app, engineerToken);
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/tasks/${task.id}/available-transitions`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      const slugs = body.data.map((s: any) => s.slug).sort();
+      // From triage: investigate, closed
+      expect(slugs).toEqual(["closed", "investigate"]);
+      for (const s of body.data) {
+        expect(typeof s.id).toBe("string");
+        expect(typeof s.name).toBe("string");
+      }
+    });
+
+    it("filters out statuses the user lacks permission to transition to", async () => {
+      const app = await buildApp();
+      const task = await createBugTask(app, engineerToken);
+
+      // Move to approve so the next forward step is "resolve" (engineer-only)
+      await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${task.id}/transitions`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { toStatus: "investigate" },
+      });
+      await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${task.id}/transitions`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+        payload: { toStatus: "approve" },
+      });
+
+      // Engineer sees the full graph (resolve forward, investigate backward, closed any-to).
+      const engineerRes = await app.inject({
+        method: "GET",
+        url: `/api/v1/tasks/${task.id}/available-transitions`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      expect(engineerRes.statusCode).toBe(200);
+      const engineerSlugs = engineerRes.json().data.map((s: any) => s.slug).sort();
+      expect(engineerSlugs).toEqual(["closed", "investigate", "resolve"]);
+
+      // Agent lacks permission to resolve (engineer-only) and to close (engineer/product) — only investigate remains.
+      const agentRes = await app.inject({
+        method: "GET",
+        url: `/api/v1/tasks/${task.id}/available-transitions`,
+        headers: { authorization: `Bearer ${agentToken}` },
+      });
+      expect(agentRes.statusCode).toBe(200);
+      const agentSlugs = agentRes.json().data.map((s: any) => s.slug).sort();
+      expect(agentSlugs).not.toContain("resolve");
+      expect(agentSlugs).not.toContain("closed");
+      expect(agentSlugs).toContain("investigate");
+    });
+
+    it("returns 404 for unknown task", async () => {
+      const app = await buildApp();
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/tasks/00000000-0000-0000-0000-000000000000/available-transitions`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   describe("DELETE /api/v1/tasks/:id/assign", () => {
     it("unassigns a task", async () => {
       const app = await buildApp();
