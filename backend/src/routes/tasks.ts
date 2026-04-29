@@ -3,6 +3,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { buildTaskViewWhere, canPerformAction, enforceScope } from "../services/permission.service.js";
 import { addProjectToTask, createTask, removeProjectFromTask, taskDetailInclude, taskInclude, TaskServiceError } from "../services/task.service.js";
+import { getBlockerCounts } from "../services/task-dependency.service.js";
 import { CommonErrorResponses, IdParams, UserSummary } from "./_schemas.js";
 
 const FlowRef = Type.Object(
@@ -407,7 +408,8 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
-      return formatTask(task);
+      const counts = await getBlockerCounts(task.id);
+      return { ...formatTask(task), ...counts };
     }
   );
 

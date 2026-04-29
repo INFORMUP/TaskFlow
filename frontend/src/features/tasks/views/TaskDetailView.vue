@@ -7,6 +7,7 @@ import { getComments, createComment, deleteComment, type Comment } from "@/api/c
 import { apiFetch } from "@/api/client";
 import MarkdownView from "@/features/tasks/components/MarkdownView.vue";
 import TaskCodeLinksSection from "@/features/tasks/components/TaskCodeLinksSection.vue";
+import TaskBlockersSection from "@/features/tasks/components/TaskBlockersSection.vue";
 import ActorLabel from "@/components/ActorLabel.vue";
 
 const route = useRoute();
@@ -217,6 +218,11 @@ onMounted(async () => {
     <!-- Linked commits and pull requests -->
     <div class="detail__section">
       <TaskCodeLinksSection :task-id="task.id" />
+    </div>
+
+    <!-- Blockers / blocked-by relationships -->
+    <div class="detail__section">
+      <TaskBlockersSection :task-id="task.id" @changed="loadAll" />
     </div>
 
     <!-- Transition history -->
