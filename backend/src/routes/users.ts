@@ -1,7 +1,17 @@
 import { FastifyInstance } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
+import { enforceScope } from "../services/permission.service.js";
 import { CommonErrorResponses, ErrorResponse } from "./_schemas.js";
+
+const OrgMember = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    displayName: Type.String(),
+    actorType: Type.String(),
+  },
+  { additionalProperties: true }
+);
 
 const UserTeamMembership = Type.Object(
   {
@@ -195,6 +205,39 @@ export async function userRoutes(fastify: FastifyInstance) {
           teams: u.teams.map((ut) => ({ id: ut.team.id, slug: ut.team.slug, name: ut.team.name })),
         })),
       };
+    }
+  );
+
+  fastify.get(
+    "/api/v1/org-members",
+    {
+      schema: {
+        summary: "List active org members (minimal fields)",
+        description:
+          "Returns active members of the caller's org with `id`, `displayName`, and `actorType` only. Available to any authenticated org member with `tasks:read` — intended for assignee pickers and other non-privileged UIs that need a roster of names.",
+        tags: ["users"],
+        response: {
+          200: Type.Object(
+            { data: Type.Array(OrgMember) },
+            { additionalProperties: true }
+          ),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:read")) return;
+
+      const members = await prisma.user.findMany({
+        where: {
+          status: "active",
+          orgMemberships: { some: { orgId: request.org.id } },
+        },
+        select: { id: true, displayName: true, actorType: true },
+        orderBy: { displayName: "asc" },
+      });
+
+      return { data: members };
     }
   );
 }

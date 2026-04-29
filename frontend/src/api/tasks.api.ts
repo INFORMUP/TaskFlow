@@ -33,8 +33,23 @@ export interface Task {
   projects: TaskProjectChip[];
   spawnedFromTask?: SpawnedFromRef | null;
   spawnedTasks?: SpawnedTaskRef[];
+  blockerCount?: number;
+  openBlockerCount?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BlockerRef {
+  id: string;
+  displayId: string;
+  title: string;
+  flow: { slug: string; name: string };
+  currentStatus: { slug: string; name: string };
+}
+
+export interface TaskBlockersResponse {
+  blockers: BlockerRef[];
+  blocking: BlockerRef[];
 }
 
 export interface TaskListResponse {
@@ -106,4 +121,19 @@ export function updateTask(
 
 export function deleteTask(id: string): Promise<void> {
   return apiFetch(`/api/v1/tasks/${id}`, { method: "DELETE" });
+}
+
+export function getTaskBlockers(id: string): Promise<TaskBlockersResponse> {
+  return apiFetch(`/api/v1/tasks/${id}/blockers`);
+}
+
+export function addTaskBlocker(id: string, blockingTaskId: string): Promise<{ blocker: BlockerRef }> {
+  return apiFetch(`/api/v1/tasks/${id}/blockers`, {
+    method: "POST",
+    body: JSON.stringify({ blockingTaskId }),
+  });
+}
+
+export function removeTaskBlocker(id: string, blockingTaskId: string): Promise<void> {
+  return apiFetch(`/api/v1/tasks/${id}/blockers/${blockingTaskId}`, { method: "DELETE" });
 }
