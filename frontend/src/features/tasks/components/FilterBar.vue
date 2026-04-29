@@ -31,24 +31,6 @@ onUnmounted(() => {
   if (qTimer) clearTimeout(qTimer);
 });
 
-// Local mirror of `q` so typing is responsive; debounce-flush to the URL.
-const qLocal = ref(filters.value.q);
-let qTimer: ReturnType<typeof setTimeout> | null = null;
-watch(
-  () => filters.value.q,
-  (next) => {
-    if (next !== qLocal.value) qLocal.value = next;
-  },
-);
-function onQInput(e: Event) {
-  qLocal.value = (e.target as HTMLInputElement).value;
-  if (qTimer) clearTimeout(qTimer);
-  qTimer = setTimeout(() => update("q", qLocal.value), 300);
-}
-onUnmounted(() => {
-  if (qTimer) clearTimeout(qTimer);
-});
-
 onMounted(async () => {
   const [projectList, memberList] = await Promise.all([
     listProjects(),
