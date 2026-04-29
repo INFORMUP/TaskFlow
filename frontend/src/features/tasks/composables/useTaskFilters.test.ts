@@ -49,7 +49,7 @@ describe("useTaskFilters", () => {
     const f: TaskFilters = {
       projectId: "",
       projectOwnerUserId: "",
-      status: "",
+      status: [],
       priority: "",
       assigneeUserId: "",
       dueAfter: "",
@@ -65,7 +65,7 @@ describe("useTaskFilters", () => {
     const f: TaskFilters = {
       projectId: "abc",
       projectOwnerUserId: "",
-      status: "",
+      status: [],
       priority: "",
       assigneeUserId: "",
       dueAfter: "",
@@ -77,11 +77,65 @@ describe("useTaskFilters", () => {
     expect(toApiParams(f)).toEqual({ projectId: "abc" });
   });
 
+  it("reads a single status from the URL as a one-element array", async () => {
+    const ctx = await setupWithQuery({ status: "implement" });
+    expect(ctx.filters.status).toEqual(["implement"]);
+  });
+
+  it("reads repeated status params from the URL as an array", async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: "/", component: defineComponent({ setup() { return () => h("div"); } }) }],
+    });
+    await router.push("/?status=implement&status=validate");
+    let captured: ReturnType<typeof useTaskFilters>;
+    const Probe = defineComponent({
+      setup() {
+        captured = useTaskFilters();
+        return () => h("div");
+      },
+    });
+    router.addRoute({ path: "/probe", component: Probe });
+    await router.push("/probe?status=implement&status=validate");
+    mount(RouterView, { global: { plugins: [router] } });
+    expect(captured!.filters.value.status).toEqual(["implement", "validate"]);
+  });
+
+  it("writes a multi-status array as repeated query params", async () => {
+    const ctx = await setupWithQuery();
+    ctx.captured().setFilters({ status: ["implement", "validate"] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.router.currentRoute.value.query.status).toEqual(["implement", "validate"]);
+  });
+
+  it("clears status when set to an empty array", async () => {
+    const ctx = await setupWithQuery({ status: "implement" });
+    ctx.captured().setFilters({ status: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ctx.router.currentRoute.value.query.status).toBeUndefined();
+  });
+
+  it("toApiParams emits status as an array", () => {
+    const f: TaskFilters = {
+      projectId: "",
+      projectOwnerUserId: "",
+      status: ["implement", "validate"],
+      priority: "",
+      assigneeUserId: "",
+      dueAfter: "",
+      dueBefore: "",
+      q: "",
+      labelIds: [],
+      view: "board",
+    };
+    expect(toApiParams(f)).toEqual({ status: ["implement", "validate"] });
+  });
+
   it("toApiParams emits labelIds as comma-joined `label`", () => {
     const f: TaskFilters = {
       projectId: "",
       projectOwnerUserId: "",
-      status: "",
+      status: [],
       priority: "",
       assigneeUserId: "",
       dueAfter: "",

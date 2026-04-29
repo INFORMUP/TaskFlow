@@ -4,6 +4,7 @@ import { prisma } from "../prisma-client.js";
 import { buildTaskViewWhere, canPerformAction, enforceScope } from "../services/permission.service.js";
 import { addProjectToTask, createTask, removeProjectFromTask, taskDetailInclude, taskInclude, TaskServiceError } from "../services/task.service.js";
 import { attachLabel, detachLabel, LabelServiceError } from "../services/label.service.js";
+import { getBlockerCounts } from "../services/task-dependency.service.js";
 import { CommonErrorResponses, IdParams, UserSummary } from "./_schemas.js";
 
 const FlowRef = Type.Object(
@@ -99,7 +100,7 @@ const ProjectIdBody = Type.Object({ projectId: Type.String({ format: "uuid" }) }
 
 const ListTasksQuery = Type.Object({
   flow: Type.Optional(Type.String()),
-  status: Type.Optional(Type.String()),
+  status: Type.Optional(Type.Union([Type.String(), Type.Array(Type.String())])),
   assignee: Type.Optional(Type.String({ description: "User ID or the literal 'me'." })),
   assigneeUserId: Type.Optional(Type.String()),
   priority: Type.Optional(Type.String()),
@@ -337,8 +338,9 @@ export async function taskRoutes(fastify: FastifyInstance) {
       }
 
       if (query.status) {
+        const slugs = Array.isArray(query.status) ? query.status : [query.status];
         const statuses = await prisma.flowStatus.findMany({
-          where: { slug: query.status, flow: { orgId: request.org.id } },
+          where: { slug: { in: slugs }, flow: { orgId: request.org.id } },
         });
         if (statuses.length > 0) {
           where.currentStatusId = { in: statuses.map((s) => s.id) };
@@ -447,7 +449,8 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
-      return formatTask(task);
+      const counts = await getBlockerCounts(task.id);
+      return { ...formatTask(task), ...counts };
     }
   );
 

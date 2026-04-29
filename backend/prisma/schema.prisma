@@ -110,6 +110,7 @@ model User {
   invitationsAccepted Invitation[]      @relation("InvitationAcceptedBy")
   invitationsRevoked  Invitation[]      @relation("InvitationRevokedBy")
   savedViews          SavedView[]
+  taskDependenciesCreated TaskDependency[] @relation("TaskDependencyCreatedBy")
 
   @@map("users")
 }
@@ -231,6 +232,8 @@ model Task {
   commits       TaskCommit[]
   pullRequests  TaskPullRequest[]
   labels        TaskLabel[]
+  blockedBy     TaskDependency[] @relation("TaskDependencyBlocked")
+  blocks        TaskDependency[] @relation("TaskDependencyBlocking")
 
   @@index([flowId, currentStatusId])
   @@index([assigneeId])
@@ -260,6 +263,23 @@ model TaskTransition {
   @@index([taskId, createdAt])
   @@index([actorType, taskId])
   @@map("task_transitions")
+}
+
+model TaskDependency {
+  id             String   @id @default(uuid()) @db.Uuid
+  blockingTaskId String   @map("blocking_task_id") @db.Uuid
+  blockedTaskId  String   @map("blocked_task_id") @db.Uuid
+  createdBy      String   @map("created_by") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  blockingTask Task @relation("TaskDependencyBlocking", fields: [blockingTaskId], references: [id], onDelete: Cascade)
+  blockedTask  Task @relation("TaskDependencyBlocked", fields: [blockedTaskId], references: [id], onDelete: Cascade)
+  creator      User @relation("TaskDependencyCreatedBy", fields: [createdBy], references: [id])
+
+  @@unique([blockingTaskId, blockedTaskId])
+  @@index([blockedTaskId])
+  @@index([blockingTaskId])
+  @@map("task_dependencies")
 }
 
 model Project {

@@ -8,6 +8,7 @@ import type { Comment } from "@/api/comments.api";
 
 const getTask = vi.fn();
 const getTransitions = vi.fn();
+const getAvailableTransitions = vi.fn();
 const getComments = vi.fn();
 const apiFetch = vi.fn();
 
@@ -16,6 +17,7 @@ vi.mock("@/api/tasks.api", () => ({
 }));
 vi.mock("@/api/transitions.api", () => ({
   getTransitions: (...a: unknown[]) => getTransitions(...a),
+  getAvailableTransitions: (...a: unknown[]) => getAvailableTransitions(...a),
   createTransition: vi.fn(),
 }));
 vi.mock("@/api/comments.api", () => ({
@@ -112,12 +114,55 @@ async function mountDetail() {
 beforeEach(() => {
   getTask.mockReset();
   getTransitions.mockReset();
+  getAvailableTransitions.mockReset();
   getComments.mockReset();
   apiFetch.mockReset();
   getTask.mockResolvedValue(taskFixture());
   getTransitions.mockResolvedValue({ data: [transitionFixture()] });
+  getAvailableTransitions.mockResolvedValue({ data: [] });
   getComments.mockResolvedValue({ data: [commentFixture()] });
   apiFetch.mockResolvedValue({ data: [] });
+});
+
+describe("TaskDetailView — transition status options", () => {
+  it("renders the options returned by /available-transitions", async () => {
+    getAvailableTransitions.mockResolvedValue({
+      data: [
+        { id: "s-2", slug: "investigate", name: "Investigate" },
+        { id: "s-3", slug: "closed", name: "Closed" },
+      ],
+    });
+    const wrapper = await mountDetail();
+    const select = wrapper.find("select[aria-label='New status']");
+    const options = select.findAll("option").map((o) => ({
+      value: o.attributes("value"),
+      text: o.text(),
+    }));
+    expect(options).toEqual([
+      { value: "", text: "Select status..." },
+      { value: "investigate", text: "Investigate" },
+      { value: "closed", text: "Closed" },
+    ]);
+  });
+
+  it("does not hardcode 'Closed' as the only option", async () => {
+    getAvailableTransitions.mockResolvedValue({
+      data: [{ id: "s-9", slug: "design", name: "Design" }],
+    });
+    const wrapper = await mountDetail();
+    const select = wrapper.find("select[aria-label='New status']");
+    const slugs = select.findAll("option").map((o) => o.attributes("value"));
+    expect(slugs).toContain("design");
+    expect(slugs).not.toContain("closed");
+  });
+
+  it("disables the select with a hint when no transitions are available", async () => {
+    getAvailableTransitions.mockResolvedValue({ data: [] });
+    const wrapper = await mountDetail();
+    const select = wrapper.find("select[aria-label='New status']");
+    expect(select.attributes("disabled")).toBeDefined();
+    expect(select.text()).toContain("No transitions available");
+  });
 });
 
 describe("TaskDetailView — agent actor display", () => {

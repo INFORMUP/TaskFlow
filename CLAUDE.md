@@ -66,7 +66,7 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 | `/create-task <title>` | — | Creates a task in the Taskflow project. Defaults flow=`feature`, project=Taskflow. |
 | `/design <task>` | `design` | Reads task + comments + relevant code, posts a structured spec (goal, user stories, acceptance criteria, technical approach, out-of-scope, open questions) as a comment. Offers transition to `prototype`. |
 | `/transition <task> <status> [note]` | any | Escape hatch — moves a task to any status. Use for backward bounces (`design → discuss`), closing transitions (asks for resolution), and one-offs the workflow skills don't cover. |
-| `/implement <task>` | `implement` | Creates a worktree at `.claude/worktrees/<task-id>/` on `feat/<task-id>-<slug>` off `origin/staging`. TDD-implements, opens PR targeting `staging`, links the PR via `POST /api/v1/tasks/{id}/pull-requests`. Offers transition to `validate`. |
+| `/implement <task>` | `implement` (feature/improvement) or `resolve` (bug) | Creates a worktree at `.claude/worktrees/<task-id>/` on `feat/<task-id>-<slug>` (or `fix/...` for bug flow) off `origin/staging`. TDD-implements, opens PR targeting `staging`, links the PR via `POST /api/v1/tasks/{id}/pull-requests`. Offers transition to `validate`. |
 | `/validate <task>` | `validate` | Reviews the linked PR against the design spec's acceptance criteria. Posts an APPROVE / REQUEST_CHANGES / COMMENT review on GitHub with a criterion-by-criterion checklist. If approved, offers transition to `review`. |
 | `/address-review <task-or-PR>` | `validate` | Inverse of `/validate`. Pulls every reviewer comment (review summaries + inline + conversation), triages each as Fix/Reply/Defer, makes the fixes, replies to every comment, re-requests review. Does not transition — re-validation is `/validate` again. |
 
@@ -88,6 +88,10 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 - Run `npm test` in the affected package(s) (backend, frontend, or both) before committing.
 - A pre-commit hook runs `tsc --noEmit` (backend) and `vue-tsc --noEmit` (frontend) automatically. If it fails, fix type errors before committing.
 - Git hooks live in `.githooks/`. After cloning, run `git config core.hooksPath .githooks` to activate them.
+
+## Validating Tests That Require a Database
+- Do not spin up a local database to run tests that need one (backend integration tests, Playwright E2E). Instead, push the branch to GitHub, open a PR into `staging`, and review the CI results there.
+- Use `gh pr checks <PR>` and `gh run view <run-id> --log-failed` to inspect CI output rather than running the DB-backed suites locally.
 
 ## PR Titles (Conventional Commits)
 - PRs into `staging` and direct hotfix PRs into `main` must have titles following Conventional Commits — e.g. `feat(api): add version endpoint`, `fix: handle null assignee`, `feat!: drop deprecated field` for breaking changes. The `commitlint` workflow enforces this.

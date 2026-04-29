@@ -2,11 +2,18 @@
 import { ref, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getTask, type Task } from "@/api/tasks.api";
-import { getTransitions, createTransition, type Transition } from "@/api/transitions.api";
+import {
+  getTransitions,
+  createTransition,
+  getAvailableTransitions,
+  type Transition,
+  type AvailableStatus,
+} from "@/api/transitions.api";
 import { getComments, createComment, deleteComment, type Comment } from "@/api/comments.api";
 import { apiFetch } from "@/api/client";
 import MarkdownView from "@/features/tasks/components/MarkdownView.vue";
 import TaskCodeLinksSection from "@/features/tasks/components/TaskCodeLinksSection.vue";
+import TaskBlockersSection from "@/features/tasks/components/TaskBlockersSection.vue";
 import ActorLabel from "@/components/ActorLabel.vue";
 import LabelPicker from "@/features/labels/components/LabelPicker.vue";
 import { attachLabelToTask, detachLabelFromTask } from "@/api/labels.api";
@@ -17,6 +24,7 @@ const taskId = route.params.taskId as string;
 
 const task = ref<Task | null>(null);
 const transitions = ref<Transition[]>([]);
+const availableStatuses = ref<AvailableStatus[]>([]);
 const comments = ref<Comment[]>([]);
 const loading = ref(true);
 
@@ -42,14 +50,16 @@ const RESOLUTIONS: Record<string, string[]> = {
 async function loadAll() {
   loading.value = true;
   try {
-    const [t, tr, c] = await Promise.all([
+    const [t, tr, c, avail] = await Promise.all([
       getTask(taskId),
       getTransitions(taskId),
       getComments(taskId),
+      getAvailableTransitions(taskId).catch(() => ({ data: [] as AvailableStatus[] })),
     ]);
     task.value = t;
     transitions.value = tr.data;
     comments.value = c.data;
+    availableStatuses.value = avail.data;
   } finally {
     loading.value = false;
   }
@@ -190,9 +200,18 @@ onMounted(async () => {
         v-model="transitionStatus"
         class="detail__select"
         aria-label="New status"
+        :disabled="availableStatuses.length === 0"
       >
-        <option value="">Select status...</option>
-        <option value="closed">Closed</option>
+        <option value="">
+          {{ availableStatuses.length === 0 ? "No transitions available" : "Select status..." }}
+        </option>
+        <option
+          v-for="s in availableStatuses"
+          :key="s.id"
+          :value="s.slug"
+        >
+          {{ s.name }}
+        </option>
       </select>
       <textarea
         v-model="transitionNote"
@@ -239,6 +258,11 @@ onMounted(async () => {
     <!-- Linked commits and pull requests -->
     <div class="detail__section">
       <TaskCodeLinksSection :task-id="task.id" />
+    </div>
+
+    <!-- Blockers / blocked-by relationships -->
+    <div class="detail__section">
+      <TaskBlockersSection :task-id="task.id" @changed="loadAll" />
     </div>
 
     <!-- Transition history -->

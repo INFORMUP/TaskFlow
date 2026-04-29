@@ -40,8 +40,23 @@ export interface Task {
   labels: TaskLabel[];
   spawnedFromTask?: SpawnedFromRef | null;
   spawnedTasks?: SpawnedTaskRef[];
+  blockerCount?: number;
+  openBlockerCount?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BlockerRef {
+  id: string;
+  displayId: string;
+  title: string;
+  flow: { slug: string; name: string };
+  currentStatus: { slug: string; name: string };
+}
+
+export interface TaskBlockersResponse {
+  blockers: BlockerRef[];
+  blocking: BlockerRef[];
 }
 
 export interface TaskListResponse {
@@ -49,8 +64,18 @@ export interface TaskListResponse {
   pagination: { cursor: string | null; hasMore: boolean };
 }
 
-export function getTasks(params: Record<string, string> = {}): Promise<TaskListResponse> {
-  const query = new URLSearchParams(params).toString();
+export function getTasks(
+  params: Record<string, string | string[]> = {},
+): Promise<TaskListResponse> {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (Array.isArray(value)) {
+      for (const v of value) search.append(key, v);
+    } else {
+      search.append(key, value);
+    }
+  }
+  const query = search.toString();
   return apiFetch(`/api/v1/tasks${query ? `?${query}` : ""}`);
 }
 
@@ -103,4 +128,19 @@ export function updateTask(
 
 export function deleteTask(id: string): Promise<void> {
   return apiFetch(`/api/v1/tasks/${id}`, { method: "DELETE" });
+}
+
+export function getTaskBlockers(id: string): Promise<TaskBlockersResponse> {
+  return apiFetch(`/api/v1/tasks/${id}/blockers`);
+}
+
+export function addTaskBlocker(id: string, blockingTaskId: string): Promise<{ blocker: BlockerRef }> {
+  return apiFetch(`/api/v1/tasks/${id}/blockers`, {
+    method: "POST",
+    body: JSON.stringify({ blockingTaskId }),
+  });
+}
+
+export function removeTaskBlocker(id: string, blockingTaskId: string): Promise<void> {
+  return apiFetch(`/api/v1/tasks/${id}/blockers/${blockingTaskId}`, { method: "DELETE" });
 }
