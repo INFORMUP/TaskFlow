@@ -226,6 +226,11 @@ export const taskInclude = {
       },
     },
   },
+  labels: {
+    include: {
+      label: { select: { id: true, name: true, color: true } },
+    },
+  },
 } as const;
 
 export const taskDetailInclude = {

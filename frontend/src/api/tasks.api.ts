@@ -7,6 +7,12 @@ export interface TaskProjectChip {
   owner: { id: string; displayName: string; actorType: string };
 }
 
+export interface TaskLabel {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface SpawnedFromRef {
   id: string;
   displayId: string;
@@ -31,6 +37,7 @@ export interface Task {
   creator: { id: string; displayName: string; actorType: string };
   assignee: { id: string; displayName: string; actorType: string } | null;
   projects: TaskProjectChip[];
+  labels: TaskLabel[];
   spawnedFromTask?: SpawnedFromRef | null;
   spawnedTasks?: SpawnedTaskRef[];
   blockerCount?: number;
