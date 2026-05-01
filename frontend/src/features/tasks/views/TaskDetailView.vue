@@ -15,6 +15,8 @@ import MarkdownView from "@/features/tasks/components/MarkdownView.vue";
 import TaskCodeLinksSection from "@/features/tasks/components/TaskCodeLinksSection.vue";
 import TaskBlockersSection from "@/features/tasks/components/TaskBlockersSection.vue";
 import ActorLabel from "@/components/ActorLabel.vue";
+import LabelPicker from "@/features/labels/components/LabelPicker.vue";
+import { attachLabelToTask, detachLabelFromTask } from "@/api/labels.api";
 
 const route = useRoute();
 const router = useRouter();
@@ -84,6 +86,18 @@ async function handleTransition() {
   } catch (e: any) {
     transitionError.value = e?.error?.message || "Transition failed";
   }
+}
+
+async function handleAttachLabel(labelId: string) {
+  if (!task.value) return;
+  await attachLabelToTask(task.value.id, labelId);
+  task.value = await getTask(taskId);
+}
+
+async function handleDetachLabel(labelId: string) {
+  if (!task.value) return;
+  await detachLabelFromTask(task.value.id, labelId);
+  task.value = await getTask(taskId);
 }
 
 async function handleAddComment() {
@@ -162,6 +176,14 @@ onMounted(async () => {
       </div>
       <div v-if="task.dueDate">Due: {{ new Date(task.dueDate).toLocaleDateString() }}</div>
       <div v-if="task.resolution">Resolution: {{ task.resolution }}</div>
+      <div class="detail__labels">
+        <span class="detail__labels-title">Labels:</span>
+        <LabelPicker
+          :model-value="task.labels"
+          @attach="handleAttachLabel"
+          @detach="handleDetachLabel"
+        />
+      </div>
     </div>
 
     <!-- Transition form -->

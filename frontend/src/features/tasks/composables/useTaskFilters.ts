@@ -10,6 +10,7 @@ export interface TaskFilters {
   dueAfter: string;
   dueBefore: string;
   q: string;
+  labelIds: string[];
   view: "board" | "list";
 }
 
@@ -22,6 +23,7 @@ const FILTER_KEYS: (keyof TaskFilters)[] = [
   "dueAfter",
   "dueBefore",
   "q",
+  "labelIds",
   "view",
 ];
 
@@ -32,7 +34,7 @@ function asString(v: unknown): string {
 
 function asStringArray(v: unknown): string[] {
   if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string" && x.length > 0);
-  if (typeof v === "string" && v.length > 0) return [v];
+  if (typeof v === "string") return v ? v.split(",").filter(Boolean) : [];
   return [];
 }
 
@@ -51,6 +53,7 @@ export function useTaskFilters() {
     dueAfter: asString(route.query.dueAfter),
     dueBefore: asString(route.query.dueBefore),
     q: asString(route.query.q),
+    labelIds: asStringArray(route.query.label),
     view: (asString(route.query.view) === "list" ? "list" : "board"),
   }));
 
@@ -59,7 +62,10 @@ export function useTaskFilters() {
     for (const key of FILTER_KEYS) {
       if (key in patch) {
         const v = patch[key];
-        if (key === "status") {
+        if (key === "labelIds") {
+          const arr = (v as string[] | undefined) ?? [];
+          next.label = arr.length > 0 ? arr : undefined;
+        } else if (key === "status") {
           const arr = (v as string[] | undefined) ?? [];
           next.status = arr.length > 0 ? arr : undefined;
         } else {
@@ -72,7 +78,14 @@ export function useTaskFilters() {
 
   function resetFilters() {
     const next: Record<string, QueryValue> = { ...(route.query as Record<string, QueryValue>) };
-    for (const key of FILTER_KEYS) if (key !== "view") next[key] = undefined;
+    for (const key of FILTER_KEYS) {
+      if (key === "view") continue;
+      if (key === "labelIds") {
+        next.label = undefined;
+      } else {
+        next[key] = undefined;
+      }
+    }
     router.replace({ query: cleanQuery(next) });
   }
 
@@ -84,7 +97,8 @@ function cleanQuery(q: Record<string, QueryValue>): Record<string, string | stri
   for (const [k, v] of Object.entries(q)) {
     if (v === undefined) continue;
     if (Array.isArray(v)) {
-      if (v.length > 0) out[k] = v;
+      const filtered = v.filter((x) => x !== "");
+      if (filtered.length > 0) out[k] = filtered;
     } else if (v !== "") {
       out[k] = v;
     }
@@ -106,5 +120,6 @@ export function toApiParams(
   if (f.dueAfter) params.dueAfter = f.dueAfter;
   if (f.dueBefore) params.dueBefore = f.dueBefore;
   if (f.q) params.q = f.q;
+  if (f.labelIds && f.labelIds.length > 0) params.label = f.labelIds.join(",");
   return params;
 }

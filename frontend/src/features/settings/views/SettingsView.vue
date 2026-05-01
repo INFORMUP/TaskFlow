@@ -174,6 +174,10 @@ onBeforeUnmount(() => {
   <div class="settings" data-testid="settings-view">
     <h1 class="settings__title">Settings</h1>
 
+    <nav class="settings__nav">
+      <a href="/settings/labels">Labels →</a>
+    </nav>
+
     <section class="settings__section">
       <h2 class="settings__heading">API Tokens</h2>
       <p class="settings__subheading">
@@ -413,6 +417,20 @@ onBeforeUnmount(() => {
 .settings__title {
   font-size: 1.5rem;
   margin-bottom: 1.5rem;
+}
+
+.settings__nav {
+  margin-bottom: 1rem;
+}
+
+.settings__nav a {
+  font-size: 0.875rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.settings__nav a:hover {
+  text-decoration: underline;
 }
 
 .settings__section {
