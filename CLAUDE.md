@@ -69,6 +69,7 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 | `/implement <task>` | `implement` (feature/improvement) or `resolve` (bug) | Creates a worktree at `.claude/worktrees/<task-id>/` on `feat/<task-id>-<slug>` (or `fix/...` for bug flow) off `origin/staging`. TDD-implements, opens PR targeting `staging`, links the PR via `POST /api/v1/tasks/{id}/pull-requests`. Offers transition to `validate`. |
 | `/validate <task>` | `validate` | Reviews the linked PR against the design spec's acceptance criteria. Posts an APPROVE / REQUEST_CHANGES / COMMENT review on GitHub with a criterion-by-criterion checklist. If approved, offers transition to `review`. |
 | `/address-review <task-or-PR>` | `validate` | Inverse of `/validate`. Pulls every reviewer comment (review summaries + inline + conversation), triages each as Fix/Reply/Defer, makes the fixes, replies to every comment, re-requests review. Does not transition — re-validation is `/validate` again. |
+| `/walk <task>` | any | Generic stage-by-stage driver. Picks the task up at its current status (any flow), does that stage's work, and **prompts before every transition**. Careful counterpart to `/fast-track`: same per-stage automation, but a human "yes" gates each forward move. |
 
 ### Workflow guardrails encoded by these skills
 - **No skill auto-advances tasks it doesn't own.** `/design` won't push to prototype without asking; `/implement` refuses to start unless the task is already in `implement`. The human review points stay intact.

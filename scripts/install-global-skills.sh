@@ -2,7 +2,7 @@
 # Install TaskFlow workflow skills into the global Claude Code commands
 # directory under the `taskflow:` namespace.
 #
-# After running, the seven workflow skills are invokable from any repo as:
+# After running, the workflow skills are invokable from any repo as:
 #   /taskflow:create-task
 #   /taskflow:design
 #   /taskflow:implement
@@ -10,6 +10,7 @@
 #   /taskflow:address-review
 #   /taskflow:transition
 #   /taskflow:fast-track
+#   /taskflow:walk
 #
 # Skills are symlinked (not copied) so edits in this repo go live immediately.
 # Re-run safely; existing symlinks are refreshed, existing non-symlink files
