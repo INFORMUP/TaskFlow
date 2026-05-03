@@ -22,11 +22,6 @@ describe("Visual customization (IMP-17)", () => {
     memberToken = mintTestToken(TEST_ENGINEER_ID, { orgRole: "member" });
     adminToken = mintTestToken(TEST_ENGINEER_ID, { orgRole: "admin" });
 
-    const project = await prisma.project.findFirst({
-      where: { orgId: DEFAULT_ORG_ID, key: "TF" },
-    });
-    projectId = project!.id;
-
     const flow = await prisma.flow.findFirst({
       where: { orgId: DEFAULT_ORG_ID, slug: "improvement" },
     });
@@ -36,6 +31,21 @@ describe("Visual customization (IMP-17)", () => {
       where: { flowId, slug: "implement" },
     });
     statusId = status!.id;
+
+    // Other test files delete all projects in their teardown, so seed-time
+    // projects can be gone by the time we run. Upsert our own.
+    const project = await prisma.project.upsert({
+      where: { orgId_key: { orgId: DEFAULT_ORG_ID, key: "VISTEST" } },
+      update: { color: "#a855f7" },
+      create: {
+        orgId: DEFAULT_ORG_ID,
+        key: "VISTEST",
+        name: "Visual Test Project",
+        ownerUserId: TEST_ENGINEER_ID,
+        color: "#a855f7",
+      },
+    });
+    projectId = project.id;
   });
 
   beforeEach(async () => {
@@ -202,8 +212,8 @@ describe("Visual customization (IMP-17)", () => {
       });
       expect(res.statusCode).toBe(200);
       const projects = res.json().data;
-      const tf = projects.find((p: any) => p.key === "TF");
-      expect(tf.color).toBe("#a855f7");
+      const target = projects.find((p: any) => p.key === "VISTEST");
+      expect(target.color).toBe("#a855f7");
     });
   });
 });
