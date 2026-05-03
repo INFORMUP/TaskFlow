@@ -258,7 +258,7 @@ onMounted(load);
             :data-testid="`my-work-card-${t.displayId}`"
             @click="onCardClick(t)"
           >
-            <TaskCard :task="t" />
+            <TaskCard :task="t" hide-projects />
             <div class="my-work__meta" data-testid="my-work-meta">
               <ProjectChip
                 v-for="p in t.projects"

@@ -51,4 +51,16 @@ describe("TaskCard project chip", () => {
     const wrapper = mount(TaskCard, { props: { task: makeTask({ projects: [] }) } });
     expect(wrapper.find('[data-testid="project-chip"]').exists()).toBe(false);
   });
+
+  it("renders no project chips when hideProjects is set, even if the task has projects", () => {
+    const wrapper = mount(TaskCard, {
+      props: {
+        task: makeTask({
+          projects: [{ id: "p1", key: "TASKFLOW", name: "Taskflow" }] as Task["projects"],
+        }),
+        hideProjects: true,
+      },
+    });
+    expect(wrapper.find('[data-testid="project-chip"]').exists()).toBe(false);
+  });
 });
