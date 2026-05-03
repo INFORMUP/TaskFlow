@@ -1,6 +1,6 @@
 ---
 description: Create a new task in TaskFlow (taskflow.informup.org) — not a GitHub issue
-argument-hint: "<task title>"
+argument-hint: "<task title or prompt>"
 ---
 
 # Create Task
@@ -9,13 +9,16 @@ Create a new task in TaskFlow at taskflow.informup.org. **Do not** create a GitH
 
 ## Arguments
 
-- `$ARGUMENTS` — the task title. If omitted, ask the user for one.
+- `$ARGUMENTS` — either a literal task title OR a freeform prompt describing the task to create (e.g. "investigate the flaky login test", "the bug we just hit with stale cache"). If omitted, ask the user.
 
 ## Instructions
 
-1. **Title**: use `$ARGUMENTS` verbatim if non-empty; otherwise ask the user.
+1. **Title**: decide whether `$ARGUMENTS` reads like a self-contained title or like a prompt/instruction/reference to prior context.
+   - **Self-contained title** (e.g. "Add dark mode toggle", "Fix 500 on /api/v1/tasks export"): use it verbatim.
+   - **Prompt-like** (sentence fragment, instruction, references "this"/"the bug we just hit"/"that thing"): synthesize a proper title and a draft description from the surrounding conversation context. Show both to the user for confirmation before creating.
+   - If `$ARGUMENTS` is empty, ask the user.
 
-2. **Description**: ask the user for a description (problem / proposal / acceptance, freeform). If they say "skip" or give nothing, create with title only.
+2. **Description**: if you didn't already synthesize one in step 1, ask the user for a description (problem / proposal / acceptance, freeform). If they say "skip" or give nothing, create with title only.
 
 3. **Flow**: default to `feature`. If the title clearly suggests otherwise (`bug`, `improvement`), confirm with the user before switching. Available slugs: `feature`, `bug`, `improvement` (and others — list via `GET /api/v1/flows` if needed).
 
