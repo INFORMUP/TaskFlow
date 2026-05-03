@@ -220,6 +220,7 @@ model Task {
   spawnedFromTaskId String? @map("spawned_from_task_id") @db.Uuid
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+  searchVector    Unsupported("tsvector")? @map("search_vector")
 
   flow          Flow             @relation(fields: [flowId], references: [id])
   currentStatus FlowStatus       @relation(fields: [currentStatusId], references: [id])
@@ -242,6 +243,7 @@ model Task {
   @@index([createdBy])
   @@index([dueDate])
   @@index([spawnedFromTaskId])
+  @@index([searchVector], type: Gin)
   @@map("tasks")
 }
 
@@ -295,6 +297,7 @@ model Project {
   color                 String?
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   archivedAt            DateTime? @map("archived_at") @db.Timestamptz()
+  searchVector         Unsupported("tsvector")? @map("search_vector")
 
   org             Organization                   @relation(fields: [orgId], references: [id])
   owner           User                           @relation("ProjectOwner", fields: [ownerUserId], references: [id])
@@ -309,6 +312,7 @@ model Project {
   @@unique([orgId, key])
   @@index([ownerUserId])
   @@index([archivedAt])
+  @@index([searchVector], type: Gin)
   @@map("projects")
 }
 
