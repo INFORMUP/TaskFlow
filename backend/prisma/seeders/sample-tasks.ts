@@ -36,6 +36,7 @@ interface TaskDef {
   resolution?: string;
   createdBy?: string;
   assigneeId?: string;
+  spawnedFromKey?: string;
 }
 
 const BUGS: TaskDef[] = [
@@ -56,6 +57,21 @@ const FEATURES: TaskDef[] = [
   { key: "feat-4", title: "Dashboard with team workload metrics", priority: "medium", status: "implement", description: "A dashboard showing tasks per team member, average time in each status, and throughput over the last 30 days." },
   { key: "feat-5", title: "Webhook integrations for Slack and Discord", priority: "low", status: "discuss", description: "Fire webhooks on task events so teams can get notifications in their preferred chat platform.", createdBy: USER_ID_SAM },
   { key: "feat-6", title: "Custom flow builder UI", priority: "high", status: "design", description: "Allow product managers to visually create and edit flows, statuses, and transitions without touching the database.", createdBy: USER_ID_PRIYA },
+
+  // Demo cluster: spawn tree to exercise the per-task graph view (FEAT-38).
+  // Three levels: epic → 2 children → 2 grandchildren.
+  { key: "graph-epic", title: "Demo: graph view spawn-tree epic", priority: "medium", status: "design", description: "Root of a seeded multi-level spawn tree used by the per-task graph view to render a non-trivial visualization on staging.", createdBy: USER_ID_PRIYA },
+  { key: "graph-child-a", title: "Demo: graph spawn-tree child A", priority: "medium", status: "implement", description: "Child of `graph-epic` in the seeded spawn tree.", spawnedFromKey: "graph-epic" },
+  { key: "graph-child-b", title: "Demo: graph spawn-tree child B", priority: "medium", status: "discuss", description: "Sibling of `graph-child-a` under `graph-epic`.", spawnedFromKey: "graph-epic" },
+  { key: "graph-grandchild-a", title: "Demo: graph spawn-tree grandchild A", priority: "low", status: "implement", description: "Grandchild under `graph-child-a`.", spawnedFromKey: "graph-child-a" },
+  { key: "graph-grandchild-b", title: "Demo: graph spawn-tree grandchild B", priority: "low", status: "closed", description: "Closed grandchild under `graph-child-b` — exercises the closed-node visual treatment in the graph view.", resolution: "completed", spawnedFromKey: "graph-child-b" },
+
+  // Demo cluster: branching blocker chain. A blocks B and C; B blocks D.
+  // Wired up below in `seedDependencies`.
+  { key: "graph-block-a", title: "Demo: graph blocker root A", priority: "high", status: "implement", description: "Source of the seeded blocker chain (A blocks B and C)." },
+  { key: "graph-block-b", title: "Demo: graph blocker B", priority: "medium", status: "discuss", description: "Blocked by A; blocks D." },
+  { key: "graph-block-c", title: "Demo: graph blocker C", priority: "medium", status: "design", description: "Blocked by A." },
+  { key: "graph-block-d", title: "Demo: graph blocker leaf D", priority: "low", status: "discuss", description: "Blocked by B (transitively by A)." },
 ];
 
 const IMPROVEMENTS: TaskDef[] = [
@@ -151,6 +167,7 @@ async function seedFlowTasks(
         resolution: task.resolution ?? null,
         createdBy: task.createdBy ?? USER_ID_MAX,
         assigneeId: task.assigneeId ?? null,
+        spawnedFromTaskId: task.spawnedFromKey ? seedUuid("task", task.spawnedFromKey) : null,
       },
     });
     result.created++;
@@ -174,6 +191,44 @@ const COMMENTS: CommentDef[] = [
   { key: "feat-4-priya-design", taskKey: "feat-4", authorId: USER_ID_PRIYA, body: "Design mockups are in Figma. The main question is whether we aggregate in real-time or use materialized views. Open to recommendations from the engineering side." },
   { key: "imp-1-max-security", taskKey: "imp-1", authorId: USER_ID_MAX, body: "This is a security priority. We should also add CSRF protection when we switch to cookies." },
 ];
+
+interface DependencyDef {
+  blockedKey: string;
+  blockingKey: string;
+}
+
+const DEPENDENCIES: DependencyDef[] = [
+  // Branching blocker chain rooted at graph-block-a.
+  { blockingKey: "graph-block-a", blockedKey: "graph-block-b" },
+  { blockingKey: "graph-block-a", blockedKey: "graph-block-c" },
+  { blockingKey: "graph-block-b", blockedKey: "graph-block-d" },
+];
+
+async function seedDependencies(prisma: PrismaClient, result: SeederResult) {
+  for (const d of DEPENDENCIES) {
+    const blockingTaskId = seedUuid("task", d.blockingKey);
+    const blockedTaskId = seedUuid("task", d.blockedKey);
+    const [blocking, blocked] = await Promise.all([
+      prisma.task.findUnique({ where: { id: blockingTaskId } }),
+      prisma.task.findUnique({ where: { id: blockedTaskId } }),
+    ]);
+    if (!blocking || !blocked) {
+      result.skipped++;
+      continue;
+    }
+    const existing = await prisma.taskDependency.findUnique({
+      where: { blockingTaskId_blockedTaskId: { blockingTaskId, blockedTaskId } },
+    });
+    if (existing) {
+      result.skipped++;
+      continue;
+    }
+    await prisma.taskDependency.create({
+      data: { blockingTaskId, blockedTaskId, createdBy: USER_ID_MAX },
+    });
+    result.created++;
+  }
+}
 
 async function seedComments(prisma: PrismaClient, result: SeederResult) {
   for (const c of COMMENTS) {
@@ -211,8 +266,11 @@ export async function seedSampleTasks(
   await seedFlowTasks(prisma, "feature", FEATURES, featResult);
   await seedFlowTasks(prisma, "improvement", IMPROVEMENTS, impResult);
 
+  const depResult = makeResult("sample_dependencies");
+  await seedDependencies(prisma, depResult);
+
   const commentResult = makeResult("sample_comments");
   await seedComments(prisma, commentResult);
 
-  return [bugResult, featResult, impResult, commentResult];
+  return [bugResult, featResult, impResult, depResult, commentResult];
 }

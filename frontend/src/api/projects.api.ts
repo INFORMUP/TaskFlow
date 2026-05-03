@@ -26,6 +26,7 @@ export interface Project {
   defaultAssignee: ProjectUser | null;
   defaultFlow: ProjectFlow | null;
   teams: ProjectTeam[];
+  color: string | null;
   createdAt: string;
   archivedAt: string | null;
 }
@@ -44,6 +45,7 @@ export interface UpdateProjectPayload {
   ownerUserId?: string;
   defaultAssigneeUserId?: string | null;
   defaultFlowId?: string | null;
+  color?: string | null;
 }
 
 export async function listProjects(opts: { archived?: boolean } = {}): Promise<Project[]> {

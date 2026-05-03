@@ -40,10 +40,10 @@ function task(overrides: Partial<Task> = {}): Task {
 }
 
 const featureStatuses: FlowStatus[] = [
-  { id: "s-discuss", slug: "discuss", name: "Discuss", description: null, sortOrder: 1 },
-  { id: "s-design", slug: "design", name: "Design", description: null, sortOrder: 2 },
-  { id: "s-implement", slug: "implement", name: "Implement", description: null, sortOrder: 3 },
-  { id: "s-closed", slug: "closed", name: "Closed", description: null, sortOrder: 4 },
+  { id: "s-discuss", slug: "discuss", name: "Discuss", description: null, sortOrder: 1, color: null },
+  { id: "s-design", slug: "design", name: "Design", description: null, sortOrder: 2, color: null },
+  { id: "s-implement", slug: "implement", name: "Implement", description: null, sortOrder: 3, color: null },
+  { id: "s-closed", slug: "closed", name: "Closed", description: null, sortOrder: 4, color: null },
 ];
 
 const flows: Flow[] = [
@@ -52,6 +52,7 @@ const flows: Flow[] = [
     slug: "feature",
     name: "Feature",
     description: null,
+    icon: null,
     stats: { openCount: 0, assignedToMeCount: 0 },
   },
 ];
@@ -184,6 +185,32 @@ describe("MyWorkView", () => {
     await flushPromises();
 
     expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders Project chip, Flow icon, and Stage badge as three distinct visual treatments per row (IMP-17)", async () => {
+    getTasks.mockResolvedValue({
+      data: [
+        task({
+          id: "t-x",
+          displayId: "FEAT-X",
+          flow: { id: "f-feature", slug: "feature", name: "Feature", icon: "sparkles" },
+          currentStatus: { id: "s-design", slug: "design", name: "Design", color: "#3b82f6" },
+          projects: [{ id: "p-tf", key: "TF", name: "TaskFlow", owner: HUMAN, color: "#a855f7" }],
+        }),
+      ],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper } = await mountView();
+
+    const meta = wrapper.find("[data-testid='my-work-meta']");
+    expect(meta.exists()).toBe(true);
+    // Project chip carries the project key.
+    expect(meta.find(".project-chip").text()).toBe("TF");
+    // Flow icon renders as an SVG (sparkles is in the curated set).
+    expect(meta.find(".flow-icon svg").exists()).toBe(true);
+    // Stage badge carries the stage name.
+    expect(meta.find(".stage-badge").text()).toBe("Design");
   });
 
   it("renders a 'View all' link in the Done section for each unique flow", async () => {

@@ -14,6 +14,7 @@ import { userRoutes } from "./routes/users.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { taskCodeLinkRoutes } from "./routes/task-code-links.js";
 import { taskBlockerRoutes } from "./routes/task-blockers.js";
+import { taskGraphRoutes } from "./routes/task-graph.js";
 import { transitionRoutes } from "./routes/transitions.js";
 import { assignmentRoutes } from "./routes/assignments.js";
 import { commentRoutes } from "./routes/comments.js";
@@ -71,6 +72,7 @@ export function createApp() {
   app.register(taskRoutes);
   app.register(taskCodeLinkRoutes);
   app.register(taskBlockerRoutes);
+  app.register(taskGraphRoutes);
   app.register(transitionRoutes);
   app.register(assignmentRoutes);
   app.register(commentRoutes);

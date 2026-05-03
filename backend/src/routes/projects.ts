@@ -66,6 +66,7 @@ const ProjectRecord = Type.Object(
     defaultAssignee: Type.Union([UserRef, Type.Null()]),
     defaultFlow: Type.Union([FlowRef, Type.Null()]),
     teams: Type.Array(TeamRef),
+    color: Type.Union([Type.String(), Type.Null()]),
     createdAt: Type.String({ format: "date-time" }),
     archivedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
   },
@@ -97,6 +98,7 @@ const UpdateProjectBody = Type.Object({
   ownerUserId: Type.Optional(Type.String({ format: "uuid" })),
   defaultAssigneeUserId: Type.Optional(Type.Union([Type.String({ format: "uuid" }), Type.Null()])),
   defaultFlowId: Type.Optional(Type.Union([Type.String({ format: "uuid" }), Type.Null()])),
+  color: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 });
 
 const TeamIdBody = Type.Object({ teamId: Type.String({ format: "uuid" }) });

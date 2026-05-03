@@ -36,6 +36,12 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: "app" },
   },
   {
+    path: "/tasks/:flow/:taskId/graph",
+    name: "task-graph",
+    component: () => import("@/features/tasks/views/TaskGraphView.vue"),
+    meta: { layout: "app" },
+  },
+  {
     path: "/projects",
     name: "project-list",
     component: () => import("@/features/projects/views/ProjectListView.vue"),
@@ -81,6 +87,12 @@ const routes: RouteRecordRaw[] = [
     path: "/settings/labels",
     name: "settings-labels",
     component: () => import("@/features/labels/views/LabelsSettingsView.vue"),
+    meta: { layout: "app" },
+  },
+  {
+    path: "/settings/visuals",
+    name: "settings-visuals",
+    component: () => import("@/features/settings/views/VisualsSettingsView.vue"),
     meta: { layout: "app" },
   },
 ];

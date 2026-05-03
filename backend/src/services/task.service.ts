@@ -220,6 +220,7 @@ export const taskInclude = {
           id: true,
           key: true,
           name: true,
+          color: true,
           ownerUserId: true,
           owner: { select: { id: true, displayName: true, actorType: true } },
         },

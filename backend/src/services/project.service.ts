@@ -1,6 +1,7 @@
 import { Prisma, RepoProvider } from "@prisma/client";
 import { prisma } from "../prisma-client.js";
 import { orgScopedWhere } from "./org-scope.js";
+import { assertHexColorOrNull, VisualCustomizationError } from "./visual-customization.js";
 
 export interface CreateProjectInput {
   orgId: string;
@@ -17,6 +18,7 @@ export interface UpdateProjectInput {
   ownerUserId?: string;
   defaultAssigneeUserId?: string | null;
   defaultFlowId?: string | null;
+  color?: string | null;
 }
 
 export class ProjectServiceError extends Error {
@@ -63,6 +65,7 @@ export function formatProject(project: any) {
     defaultAssignee: project.defaultAssignee,
     defaultFlow: project.defaultFlow,
     teams: project.teams.map((pt: any) => pt.team),
+    color: project.color ?? null,
     createdAt: project.createdAt,
     archivedAt: project.archivedAt,
   };
@@ -145,6 +148,16 @@ export async function updateProject(orgId: string, id: string, patch: UpdateProj
   if (patch.defaultAssigneeUserId) {
     await assertActiveUser(patch.defaultAssigneeUserId, "Default assignee");
   }
+  if (patch.color !== undefined) {
+    try {
+      assertHexColorOrNull(patch.color, "Project color");
+    } catch (err) {
+      if (err instanceof VisualCustomizationError) {
+        throw new ProjectServiceError(err.code, err.message, err.status);
+      }
+      throw err;
+    }
+  }
   if (patch.defaultFlowId) {
     const flow = await prisma.flow.findFirst({ where: { id: patch.defaultFlowId, orgId } });
     if (!flow) throw new ProjectServiceError("INVALID_FLOW", "Default flow not found", 422);
@@ -167,6 +180,7 @@ export async function updateProject(orgId: string, id: string, patch: UpdateProj
       ...(patch.ownerUserId && { ownerUserId: patch.ownerUserId }),
       ...(patch.defaultAssigneeUserId !== undefined && { defaultAssigneeUserId: patch.defaultAssigneeUserId }),
       ...(patch.defaultFlowId !== undefined && { defaultFlowId: patch.defaultFlowId }),
+      ...(patch.color !== undefined && { color: patch.color }),
     },
     include: projectInclude,
   });

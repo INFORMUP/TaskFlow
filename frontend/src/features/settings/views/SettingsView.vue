@@ -176,6 +176,7 @@ onBeforeUnmount(() => {
 
     <nav class="settings__nav">
       <a href="/settings/labels">Labels →</a>
+      <a href="/settings/visuals" data-testid="settings-nav-visuals">Visuals →</a>
     </nav>
 
     <section class="settings__section">

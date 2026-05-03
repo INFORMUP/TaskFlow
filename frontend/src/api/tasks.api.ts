@@ -5,6 +5,7 @@ export interface TaskProjectChip {
   key: string;
   name: string;
   owner: { id: string; displayName: string; actorType: string };
+  color?: string | null;
 }
 
 export interface TaskLabel {
@@ -32,8 +33,8 @@ export interface Task {
   priority: string;
   resolution: string | null;
   dueDate: string | null;
-  flow: { id: string; slug: string; name: string };
-  currentStatus: { id: string; slug: string; name: string };
+  flow: { id: string; slug: string; name: string; icon?: string | null };
+  currentStatus: { id: string; slug: string; name: string; color?: string | null };
   creator: { id: string; displayName: string; actorType: string };
   assignee: { id: string; displayName: string; actorType: string } | null;
   projects: TaskProjectChip[];
@@ -143,4 +144,29 @@ export function addTaskBlocker(id: string, blockingTaskId: string): Promise<{ bl
 
 export function removeTaskBlocker(id: string, blockingTaskId: string): Promise<void> {
   return apiFetch(`/api/v1/tasks/${id}/blockers/${blockingTaskId}`, { method: "DELETE" });
+}
+
+export interface TaskGraphNode {
+  id: string;
+  displayId: string;
+  title: string;
+  flow: { slug: string; name: string };
+  currentStatus: { slug: string; name: string };
+  isRoot: boolean;
+}
+
+export interface TaskGraphEdge {
+  from: string;
+  to: string;
+  type: "spawn" | "blocker";
+}
+
+export interface TaskGraphResponse {
+  nodes: TaskGraphNode[];
+  edges: TaskGraphEdge[];
+  truncated?: boolean;
+}
+
+export function getTaskGraph(id: string): Promise<TaskGraphResponse> {
+  return apiFetch(`/api/v1/tasks/${id}/graph`);
 }
