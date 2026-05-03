@@ -213,6 +213,66 @@ describe("MyWorkView", () => {
     expect(meta.find(".stage-badge").text()).toBe("Design");
   });
 
+  it("defaults to status grouping and exposes a toggle to switch to project grouping", async () => {
+    getTasks.mockResolvedValue({
+      data: [
+        task({ id: "t-prog", displayId: "FEAT-3", currentStatus: { id: "s-design", slug: "design", name: "Design" } }),
+      ],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper } = await mountView();
+
+    const toggle = wrapper.find("[data-testid='my-work-group-toggle']");
+    expect(toggle.exists()).toBe(true);
+    const statusBtn = wrapper.find("[data-testid='my-work-toggle-status']");
+    const projectBtn = wrapper.find("[data-testid='my-work-toggle-project']");
+    expect(statusBtn.exists()).toBe(true);
+    expect(projectBtn.exists()).toBe(true);
+    // Default selection is status — its aria-pressed reflects the active state.
+    expect(statusBtn.attributes("aria-pressed")).toBe("true");
+    expect(projectBtn.attributes("aria-pressed")).toBe("false");
+    // Status group headings are rendered.
+    expect(wrapper.find("[data-testid='my-work-group-heading-in_progress']").exists()).toBe(true);
+  });
+
+  it("groups tasks by project when project mode is active, including a 'No project' group for orphans", async () => {
+    const tf = { id: "p-tf", key: "TF", name: "TaskFlow", owner: HUMAN, color: "#a855f7" };
+    const ops = { id: "p-ops", key: "OPS", name: "Ops", owner: HUMAN, color: "#10b981" };
+    getTasks.mockResolvedValue({
+      data: [
+        task({ id: "t-1", displayId: "FEAT-1", projects: [tf] }),
+        task({ id: "t-2", displayId: "FEAT-2", projects: [ops] }),
+        task({ id: "t-3", displayId: "FEAT-3", projects: [] }),
+      ],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper } = await mountView();
+    await wrapper.find("[data-testid='my-work-toggle-project']").trigger("click");
+
+    expect(wrapper.find("[data-testid='my-work-project-group-TF']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='my-work-project-group-OPS']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='my-work-project-group-none']").exists()).toBe(true);
+    // Status group headings should be gone.
+    expect(wrapper.find("[data-testid='my-work-group-heading-in_progress']").exists()).toBe(false);
+  });
+
+  it("shows a multi-project task under each of its projects in project mode", async () => {
+    const tf = { id: "p-tf", key: "TF", name: "TaskFlow", owner: HUMAN, color: "#a855f7" };
+    const ops = { id: "p-ops", key: "OPS", name: "Ops", owner: HUMAN, color: "#10b981" };
+    getTasks.mockResolvedValue({
+      data: [task({ id: "t-1", displayId: "FEAT-1", projects: [tf, ops] })],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper } = await mountView();
+    await wrapper.find("[data-testid='my-work-toggle-project']").trigger("click");
+
+    expect(wrapper.find("[data-testid='my-work-card-TF-FEAT-1']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='my-work-card-OPS-FEAT-1']").exists()).toBe(true);
+  });
+
   it("renders a 'View all' link in the Done section for each unique flow", async () => {
     const featureDone = task({
       id: "t-done-1",

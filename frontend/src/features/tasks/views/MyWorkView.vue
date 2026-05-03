@@ -9,6 +9,7 @@ import FlowIcon from "@/components/visual/FlowIcon.vue";
 import StageBadge from "@/components/visual/StageBadge.vue";
 
 type GroupKey = "in_progress" | "todo" | "done";
+type GroupBy = "status" | "project";
 
 interface FlowRef {
   id: string;
@@ -23,11 +24,19 @@ interface Group {
   flows?: FlowRef[];
 }
 
+interface ProjectGroup {
+  key: string;
+  name: string;
+  color: string | null;
+  tasks: Task[];
+}
+
 const router = useRouter();
 const tasks = ref<Task[]>([]);
 const flowInitialStatusSlug = ref<Record<string, string>>({});
 const loading = ref(true);
 const error = ref<string | null>(null);
+const groupBy = ref<GroupBy>("status");
 
 const DONE_CAP = 20;
 const DONE_WINDOW_DAYS = 14;
@@ -72,7 +81,50 @@ const groups = computed<Group[]>(() => {
   return out;
 });
 
-const isEmpty = computed(() => !loading.value && !error.value && groups.value.length === 0);
+function lifecycleRank(t: Task): number {
+  if (t.resolution !== null) return 2;
+  const initial = flowInitialStatusSlug.value[t.flow.id];
+  if (initial && t.currentStatus.slug === initial) return 1;
+  return 0;
+}
+
+const projectGroups = computed<ProjectGroup[]>(() => {
+  const map = new Map<string, ProjectGroup>();
+  const order: string[] = [];
+  const orphan: ProjectGroup = { key: "none", name: "No project", color: null, tasks: [] };
+
+  for (const t of tasks.value) {
+    if (!t.projects.length) {
+      orphan.tasks.push(t);
+      continue;
+    }
+    for (const p of t.projects) {
+      let g = map.get(p.key);
+      if (!g) {
+        g = { key: p.key, name: p.name, color: p.color ?? null, tasks: [] };
+        map.set(p.key, g);
+        order.push(p.key);
+      }
+      g.tasks.push(t);
+    }
+  }
+
+  const out = order.map((k) => map.get(k)!);
+  for (const g of out) g.tasks.sort((a, b) => lifecycleRank(a) - lifecycleRank(b));
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  if (orphan.tasks.length) {
+    orphan.tasks.sort((a, b) => lifecycleRank(a) - lifecycleRank(b));
+    out.push(orphan);
+  }
+  return out;
+});
+
+const isEmpty = computed(() => {
+  if (loading.value || error.value) return false;
+  return groupBy.value === "status"
+    ? groups.value.length === 0
+    : projectGroups.value.length === 0;
+});
 
 function dueLabel(t: Task): string | null {
   if (!t.dueDate) return null;
@@ -121,15 +173,44 @@ onMounted(load);
   <section class="my-work">
     <header class="my-work__header">
       <h1>My Work</h1>
-      <button
-        type="button"
-        class="my-work__refresh"
-        :disabled="loading"
-        @click="load"
-        data-testid="my-work-refresh"
-      >
-        Refresh
-      </button>
+      <div class="my-work__header-actions">
+        <div
+          class="my-work__toggle"
+          role="group"
+          aria-label="Group tasks by"
+          data-testid="my-work-group-toggle"
+        >
+          <button
+            type="button"
+            class="my-work__toggle-btn"
+            :class="{ 'my-work__toggle-btn--active': groupBy === 'status' }"
+            :aria-pressed="groupBy === 'status' ? 'true' : 'false'"
+            data-testid="my-work-toggle-status"
+            @click="groupBy = 'status'"
+          >
+            Status
+          </button>
+          <button
+            type="button"
+            class="my-work__toggle-btn"
+            :class="{ 'my-work__toggle-btn--active': groupBy === 'project' }"
+            :aria-pressed="groupBy === 'project' ? 'true' : 'false'"
+            data-testid="my-work-toggle-project"
+            @click="groupBy = 'project'"
+          >
+            Project
+          </button>
+        </div>
+        <button
+          type="button"
+          class="my-work__refresh"
+          :disabled="loading"
+          @click="load"
+          data-testid="my-work-refresh"
+        >
+          Refresh
+        </button>
+      </div>
     </header>
 
     <p v-if="loading" class="my-work__status">Loading…</p>
@@ -147,7 +228,7 @@ onMounted(load);
       </p>
     </div>
 
-    <div v-else class="my-work__groups">
+    <div v-else-if="groupBy === 'status'" class="my-work__groups">
       <section
         v-for="g in groups"
         :key="g.key"
@@ -197,6 +278,48 @@ onMounted(load);
         </ul>
       </section>
     </div>
+
+    <div v-else class="my-work__groups">
+      <section
+        v-for="pg in projectGroups"
+        :key="pg.key"
+        class="my-work__group"
+        :data-testid="`my-work-project-group-${pg.key}`"
+      >
+        <h2
+          :data-testid="`my-work-project-heading-${pg.key}`"
+          class="my-work__group-heading my-work__group-heading--project"
+        >
+          <span
+            v-if="pg.color"
+            class="my-work__project-swatch"
+            :style="{ background: pg.color }"
+            aria-hidden="true"
+          />
+          {{ pg.name }}
+          <span class="my-work__count">{{ pg.tasks.length }}</span>
+        </h2>
+        <ul class="my-work__list">
+          <li
+            v-for="t in pg.tasks"
+            :key="`${pg.key}-${t.id}`"
+            class="my-work__item"
+            :data-testid="`my-work-card-${pg.key}-${t.displayId}`"
+            @click="onCardClick(t)"
+          >
+            <TaskCard :task="t" />
+            <div class="my-work__meta" data-testid="my-work-meta">
+              <span class="my-work__flow" data-testid="my-work-flow">
+                <FlowIcon :icon="t.flow.icon" :flow-name="t.flow.name" />
+                <span class="my-work__flow-name">{{ t.flow.name }}</span>
+              </span>
+              <StageBadge :name="t.currentStatus.name" :color="t.currentStatus.color" />
+              <span v-if="dueLabel(t)" class="my-work__chip my-work__chip--due">Due {{ dueLabel(t) }}</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -216,6 +339,52 @@ onMounted(load);
 .my-work__header h1 {
   font-size: 1.25rem;
   font-weight: 600;
+}
+
+.my-work__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.my-work__toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.my-work__toggle-btn {
+  padding: 0.375rem 0.75rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.my-work__toggle-btn + .my-work__toggle-btn {
+  border-left: 1px solid var(--border-primary);
+}
+
+.my-work__toggle-btn--active {
+  background: var(--bg-secondary, rgba(0, 0, 0, 0.06));
+  color: var(--text-primary, inherit);
+  font-weight: 600;
+}
+
+.my-work__group-heading--project {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.95rem;
+  color: var(--text-primary, inherit);
+}
+
+.my-work__project-swatch {
+  display: inline-block;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 2px;
 }
 
 .my-work__refresh {

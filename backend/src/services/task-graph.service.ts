@@ -13,7 +13,7 @@ export interface GraphNode {
   displayId: string;
   title: string;
   flow: { slug: string; name: string };
-  currentStatus: { slug: string; name: string };
+  currentStatus: { slug: string; name: string; color: string | null };
   isRoot: boolean;
 }
 
@@ -37,7 +37,7 @@ const nodeSelect = {
   title: true,
   spawnedFromTaskId: true,
   flow: { select: { slug: true, name: true } },
-  currentStatus: { select: { slug: true, name: true } },
+  currentStatus: { select: { slug: true, name: true, color: true } },
 } as const;
 
 export async function buildTaskGraph(input: {
