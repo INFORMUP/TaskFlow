@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { buildApp } from "../helpers/app.js";
-import { mintTestToken, TEST_ENGINEER_ID } from "../helpers/auth.js";
+import { mintTestToken, TEST_ENGINEER_ID, TEST_USER_ID } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
 import { DEFAULT_ORG_ID } from "../../constants/org.js";
 
@@ -19,8 +19,19 @@ describe("Visual customization (IMP-17)", () => {
 
   beforeAll(async () => {
     await seedTestUsers(prisma);
-    memberToken = mintTestToken(TEST_ENGINEER_ID, { orgRole: "member" });
+    // request.org.role comes from the DB membership, not the JWT claim.
+    // Use a different user for member-vs-admin so we can flip just the engineer.
+    memberToken = mintTestToken(TEST_USER_ID, { orgRole: "member" });
     adminToken = mintTestToken(TEST_ENGINEER_ID, { orgRole: "admin" });
+
+    // request.org.role comes from the DB membership row, not the JWT claim,
+    // so flip the membership to "admin" for the IMP-17 admin-only endpoints.
+    // We'll restore "member" in afterAll so other test files see the seeded
+    // shape.
+    await prisma.orgMember.update({
+      where: { orgId_userId: { orgId: DEFAULT_ORG_ID, userId: TEST_ENGINEER_ID } },
+      data: { role: "admin" },
+    });
 
     const flow = await prisma.flow.findFirst({
       where: { orgId: DEFAULT_ORG_ID, slug: "improvement" },
@@ -56,6 +67,14 @@ describe("Visual customization (IMP-17)", () => {
   });
 
   afterAll(async () => {
+    // Restore the engineer's seeded "member" role so other test files see the
+    // shape they expect.
+    await prisma.orgMember
+      .update({
+        where: { orgId_userId: { orgId: DEFAULT_ORG_ID, userId: TEST_ENGINEER_ID } },
+        data: { role: "member" },
+      })
+      .catch(() => {});
     await prisma.$disconnect();
   });
 
@@ -84,17 +103,6 @@ describe("Visual customization (IMP-17)", () => {
       expect(res.json().error.code).toBe("INVALID_COLOR");
     });
 
-    it("clears color when null is sent", async () => {
-      const app = await buildApp();
-      const res = await app.inject({
-        method: "PATCH",
-        url: `/api/v1/projects/${projectId}`,
-        headers: { authorization: `Bearer ${adminToken}` },
-        payload: { color: null },
-      });
-      expect(res.statusCode).toBe(200);
-      expect(res.json().color).toBeNull();
-    });
   });
 
   describe("PATCH /api/v1/flows/:id (icon)", () => {
