@@ -6,6 +6,7 @@ import { useCurrentUser, type TeamSelection } from "@/composables/useCurrentUser
 import { useOrg } from "@/composables/useOrg";
 import TeamPickerModal from "@/features/auth/components/TeamPickerModal.vue";
 import OrgSwitcher from "@/components/OrgSwitcher.vue";
+import GlobalSearch from "@/features/search/components/GlobalSearch.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -90,6 +91,7 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
       </router-link>
     </div>
     <div class="navbar__user">
+      <GlobalSearch />
       <OrgSwitcher />
       <button
         v-if="user && user.teams.length > 0"
