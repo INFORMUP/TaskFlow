@@ -5,6 +5,7 @@ export interface TaskProjectChip {
   key: string;
   name: string;
   owner: { id: string; displayName: string; actorType: string };
+  color?: string | null;
 }
 
 export interface TaskLabel {
@@ -32,8 +33,8 @@ export interface Task {
   priority: string;
   resolution: string | null;
   dueDate: string | null;
-  flow: { id: string; slug: string; name: string };
-  currentStatus: { id: string; slug: string; name: string };
+  flow: { id: string; slug: string; name: string; icon?: string | null };
+  currentStatus: { id: string; slug: string; name: string; color?: string | null };
   creator: { id: string; displayName: string; actorType: string };
   assignee: { id: string; displayName: string; actorType: string } | null;
   projects: TaskProjectChip[];

@@ -152,6 +152,7 @@ model Flow {
   slug        String
   name        String
   description String?
+  icon        String?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   org               Organization     @relation(fields: [orgId], references: [id])
@@ -173,6 +174,7 @@ model FlowStatus {
   name        String
   description String?
   sortOrder   Int      @map("sort_order")
+  color       String?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   flow            Flow                           @relation(fields: [flowId], references: [id])
@@ -290,6 +292,7 @@ model Project {
   ownerUserId           String    @map("owner_user_id") @db.Uuid
   defaultAssigneeUserId String?   @map("default_assignee_user_id") @db.Uuid
   defaultFlowId         String?   @map("default_flow_id") @db.Uuid
+  color                 String?
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   archivedAt            DateTime? @map("archived_at") @db.Timestamptz()
 
