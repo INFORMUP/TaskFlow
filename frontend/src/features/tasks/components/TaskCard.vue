@@ -11,8 +11,9 @@ const props = withDefaults(
   defineProps<{
     task: Task;
     interactive?: boolean;
+    hideProjects?: boolean;
   }>(),
-  { interactive: false }
+  { interactive: false, hideProjects: false }
 );
 
 const emit = defineEmits<{
@@ -145,7 +146,7 @@ function handleAssigneeClick(e: MouseEvent) {
     >
       {{ task.title }}
     </span>
-    <span v-if="task.projects && task.projects.length > 0" class="card__projects">
+    <span v-if="!hideProjects && task.projects && task.projects.length > 0" class="card__projects">
       <ProjectChip
         v-for="p in task.projects"
         :key="p.id"
