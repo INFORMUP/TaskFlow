@@ -3,6 +3,7 @@ import { ref, nextTick } from "vue";
 import type { Task } from "@/api/tasks.api";
 import ActorLabel from "@/components/ActorLabel.vue";
 import LabelChip from "@/features/labels/components/LabelChip.vue";
+import ProjectChip from "@/components/visual/ProjectChip.vue";
 
 const MAX_VISIBLE_LABELS = 3;
 
@@ -145,15 +146,14 @@ function handleAssigneeClick(e: MouseEvent) {
       {{ task.title }}
     </span>
     <span v-if="task.projects && task.projects.length > 0" class="card__projects">
-      <span
+      <ProjectChip
         v-for="p in task.projects"
         :key="p.id"
-        class="card__project-chip"
         data-testid="project-chip"
-        :title="p.name"
-      >
-        {{ p.key }}
-      </span>
+        :project-key="p.key"
+        :name="p.name"
+        :color="p.color"
+      />
     </span>
     <span v-if="task.labels && task.labels.length > 0" class="card__labels">
       <LabelChip
@@ -290,19 +290,6 @@ function handleAssigneeClick(e: MouseEvent) {
   flex-wrap: wrap;
   gap: 0.25rem;
   margin-top: 0.375rem;
-}
-
-.card__project-chip {
-  font-size: 0.625rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  padding: 0.05rem 0.4rem;
-  border-radius: 0.25rem;
-  background: var(--bg-secondary, #f3f4f6);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-soft);
-  line-height: 1.3;
 }
 
 .card__labels-overflow {

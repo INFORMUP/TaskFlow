@@ -674,8 +674,8 @@ function formatTask(task: any) {
     isDeleted: task.isDeleted,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
-    flow: { id: task.flow.id, slug: task.flow.slug, name: task.flow.name },
-    currentStatus: { id: task.currentStatus.id, slug: task.currentStatus.slug, name: task.currentStatus.name },
+    flow: { id: task.flow.id, slug: task.flow.slug, name: task.flow.name, icon: task.flow.icon ?? null },
+    currentStatus: { id: task.currentStatus.id, slug: task.currentStatus.slug, name: task.currentStatus.name, color: task.currentStatus.color ?? null },
     creator: task.creator,
     assignee: task.assignee,
     projects: (task.projects ?? []).map((tp: any) => ({
@@ -683,6 +683,7 @@ function formatTask(task: any) {
       key: tp.project.key,
       name: tp.project.name,
       owner: tp.project.owner,
+      color: tp.project.color ?? null,
     })),
     labels: (task.labels ?? []).map((tl: any) => ({
       id: tl.label.id,

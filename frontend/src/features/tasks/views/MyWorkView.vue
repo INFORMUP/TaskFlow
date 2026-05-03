@@ -4,6 +4,9 @@ import { useRouter } from "vue-router";
 import { getTasks, type Task } from "@/api/tasks.api";
 import { listFlows, listFlowStatuses, type FlowStatus } from "@/api/flows.api";
 import TaskCard from "../components/TaskCard.vue";
+import ProjectChip from "@/components/visual/ProjectChip.vue";
+import FlowIcon from "@/components/visual/FlowIcon.vue";
+import StageBadge from "@/components/visual/StageBadge.vue";
 
 type GroupKey = "in_progress" | "todo" | "done";
 
@@ -70,10 +73,6 @@ const groups = computed<Group[]>(() => {
 });
 
 const isEmpty = computed(() => !loading.value && !error.value && groups.value.length === 0);
-
-function projectKeys(t: Task): string {
-  return t.projects.map((p) => p.key).join(", ");
-}
 
 function dueLabel(t: Task): string | null {
   if (!t.dueDate) return null;
@@ -179,10 +178,19 @@ onMounted(load);
             @click="onCardClick(t)"
           >
             <TaskCard :task="t" />
-            <div class="my-work__meta">
-              <span class="my-work__chip">{{ t.flow.name }}</span>
-              <span class="my-work__chip">{{ t.currentStatus.name }}</span>
-              <span v-if="projectKeys(t)" class="my-work__chip">{{ projectKeys(t) }}</span>
+            <div class="my-work__meta" data-testid="my-work-meta">
+              <ProjectChip
+                v-for="p in t.projects"
+                :key="p.id"
+                :project-key="p.key"
+                :name="p.name"
+                :color="p.color"
+              />
+              <span class="my-work__flow" data-testid="my-work-flow">
+                <FlowIcon :icon="t.flow.icon" :flow-name="t.flow.name" />
+                <span class="my-work__flow-name">{{ t.flow.name }}</span>
+              </span>
+              <StageBadge :name="t.currentStatus.name" :color="t.currentStatus.color" />
               <span v-if="dueLabel(t)" class="my-work__chip my-work__chip--due">Due {{ dueLabel(t) }}</span>
             </div>
           </li>
@@ -300,8 +308,21 @@ onMounted(load);
 .my-work__meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.375rem;
   padding: 0 0.25rem;
+}
+
+.my-work__flow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+}
+
+.my-work__flow-name {
+  font-weight: 500;
 }
 
 .my-work__chip {

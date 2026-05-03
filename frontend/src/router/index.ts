@@ -89,6 +89,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/features/labels/views/LabelsSettingsView.vue"),
     meta: { layout: "app" },
   },
+  {
+    path: "/settings/visuals",
+    name: "settings-visuals",
+    component: () => import("@/features/settings/views/VisualsSettingsView.vue"),
+    meta: { layout: "app" },
+  },
 ];
 
 const router = createRouter({

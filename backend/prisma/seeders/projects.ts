@@ -13,17 +13,18 @@ interface ProjectDef {
   defaultFlowSlug: string;
   teamSlugs: string[];
   flowSlugs: string[];
+  color: string;
 }
 
 const ENGINEERING_FLOWS = ["bug", "feature", "improvement"] as const;
 const FUNDRAISING_FLOWS = ["grant-application", "donor-outreach", "event"] as const;
 
 const PROJECTS: ProjectDef[] = [
-  { key: "REP", name: "Reportal", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "bug", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS] },
-  { key: "WEB", name: "Website", ownerId: USER_ID_PRIYA, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "feature", teamSlugs: ["engineer", "product"], flowSlugs: [...ENGINEERING_FLOWS] },
-  { key: "DASH", name: "Dashboard", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "feature", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS] },
-  { key: "TF", name: "TaskFlow", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "improvement", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS] },
-  { key: "FUND", name: "Fundraising", ownerId: USER_ID_PRIYA, defaultAssigneeId: USER_ID_PRIYA, defaultFlowSlug: "grant-application", teamSlugs: ["product"], flowSlugs: [...FUNDRAISING_FLOWS] },
+  { key: "REP", name: "Reportal", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "bug", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS], color: "#0ea5e9" },
+  { key: "WEB", name: "Website", ownerId: USER_ID_PRIYA, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "feature", teamSlugs: ["engineer", "product"], flowSlugs: [...ENGINEERING_FLOWS], color: "#ec4899" },
+  { key: "DASH", name: "Dashboard", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "feature", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS], color: "#84cc16" },
+  { key: "TF", name: "TaskFlow", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "improvement", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS], color: "#a855f7" },
+  { key: "FUND", name: "Fundraising", ownerId: USER_ID_PRIYA, defaultAssigneeId: USER_ID_PRIYA, defaultFlowSlug: "grant-application", teamSlugs: ["product"], flowSlugs: [...FUNDRAISING_FLOWS], color: "#f97316" },
 ];
 
 const TEAM_SLUGS = ["engineer", "product", "user", "agent"] as const;
@@ -64,6 +65,7 @@ export async function seedProjects(
           ownerUserId: def.ownerId,
           defaultAssigneeUserId: def.defaultAssigneeId,
           defaultFlowId: flow?.id ?? null,
+          color: def.color,
           teams: {
             create: def.teamSlugs.map((slug) => ({ teamId: seedUuid("team", slug) })),
           },
