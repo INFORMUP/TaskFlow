@@ -5,6 +5,7 @@ export const MIN_QUERY_LENGTH = 2;
 export const DEFAULT_LIMIT = 10;
 export const MAX_LIMIT = 25;
 const HEADLINE_OPTS = "StartSel=<mark>,StopSel=</mark>,MaxWords=20,MinWords=5";
+const DISPLAY_ID_RE = /^[A-Z]+-\d+$/;
 
 export interface SearchTaskResult {
   id: string;
@@ -156,6 +157,38 @@ export async function globalSearch(input: GlobalSearchInput): Promise<SearchResu
       currentStatus: { slug: r.status_slug, name: r.status_name },
       createdAt: r.created_at.toISOString(),
     }));
+
+  // If the query is exactly a display ID (e.g. "BUG-9"), the tsvector won't
+  // match — `display_id` isn't in the indexed text. Look it up directly and
+  // prepend so users can navigate to a task by its identifier.
+  const upper = q.toUpperCase();
+  if (DISPLAY_ID_RE.test(upper) && !tasks.some((t) => t.displayId === upper)) {
+    const viewWhere = buildTaskViewWhere(input.teamSlugs, input.userId, input.flowIdBySlug);
+    const exact = await prisma.task.findFirst({
+      where: {
+        displayId: upper,
+        isDeleted: false,
+        flow: { orgId: input.orgId },
+        ...viewWhere,
+      },
+      include: {
+        flow: { select: { slug: true, name: true } },
+        currentStatus: { select: { slug: true, name: true } },
+      },
+    });
+    if (exact) {
+      tasks.unshift({
+        id: exact.id,
+        displayId: exact.displayId,
+        title: exact.title,
+        snippet: exact.title,
+        flow: { slug: exact.flow.slug, name: exact.flow.name },
+        currentStatus: { slug: exact.currentStatus.slug, name: exact.currentStatus.name },
+        createdAt: exact.createdAt.toISOString(),
+      });
+      if (tasks.length > limit) tasks.length = limit;
+    }
+  }
 
   const projects: SearchProjectResult[] = projectRows.map((r) => ({
     id: r.id,

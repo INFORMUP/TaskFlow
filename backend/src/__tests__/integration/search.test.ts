@@ -273,6 +273,35 @@ describe("global search", () => {
     expect(res.statusCode).toBe(401);
   });
 
+  it("matches a task by its display ID even when not in the indexed text", async () => {
+    const app = await buildApp();
+    const create = await createTask(app, { title: "Wholly unrelated subject" });
+    const displayId = create.json().displayId;
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/search?q=${displayId}`,
+      headers: { authorization: `Bearer ${engineerToken}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const ids = res.json().tasks.map((t: any) => t.displayId);
+    expect(ids[0]).toBe(displayId);
+  });
+
+  it("display-id lookup is case-insensitive", async () => {
+    const app = await buildApp();
+    const create = await createTask(app, { title: "Anything" });
+    const displayId: string = create.json().displayId;
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/search?q=${displayId.toLowerCase()}`,
+      headers: { authorization: `Bearer ${engineerToken}` },
+    });
+    const ids = res.json().tasks.map((t: any) => t.displayId);
+    expect(ids).toContain(displayId);
+  });
+
   it("respects limit param per group", async () => {
     const app = await buildApp();
     for (let i = 0; i < 5; i++) {
