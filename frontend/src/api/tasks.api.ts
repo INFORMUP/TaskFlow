@@ -151,7 +151,7 @@ export interface TaskGraphNode {
   displayId: string;
   title: string;
   flow: { slug: string; name: string };
-  currentStatus: { slug: string; name: string };
+  currentStatus: { slug: string; name: string; color?: string | null };
   isRoot: boolean;
 }
 
