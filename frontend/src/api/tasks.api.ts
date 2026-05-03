@@ -144,3 +144,28 @@ export function addTaskBlocker(id: string, blockingTaskId: string): Promise<{ bl
 export function removeTaskBlocker(id: string, blockingTaskId: string): Promise<void> {
   return apiFetch(`/api/v1/tasks/${id}/blockers/${blockingTaskId}`, { method: "DELETE" });
 }
+
+export interface TaskGraphNode {
+  id: string;
+  displayId: string;
+  title: string;
+  flow: { slug: string; name: string };
+  currentStatus: { slug: string; name: string };
+  isRoot: boolean;
+}
+
+export interface TaskGraphEdge {
+  from: string;
+  to: string;
+  type: "spawn" | "blocker";
+}
+
+export interface TaskGraphResponse {
+  nodes: TaskGraphNode[];
+  edges: TaskGraphEdge[];
+  truncated?: boolean;
+}
+
+export function getTaskGraph(id: string): Promise<TaskGraphResponse> {
+  return apiFetch(`/api/v1/tasks/${id}/graph`);
+}

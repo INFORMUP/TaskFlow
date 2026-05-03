@@ -36,6 +36,12 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: "app" },
   },
   {
+    path: "/tasks/:flow/:taskId/graph",
+    name: "task-graph",
+    component: () => import("@/features/tasks/views/TaskGraphView.vue"),
+    meta: { layout: "app" },
+  },
+  {
     path: "/projects",
     name: "project-list",
     component: () => import("@/features/projects/views/ProjectListView.vue"),
