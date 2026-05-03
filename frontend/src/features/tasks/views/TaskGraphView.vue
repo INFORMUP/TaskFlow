@@ -21,7 +21,8 @@ const error = ref<string | null>(null);
 const loading = ref(true);
 
 const NODE_WIDTH = 220;
-const NODE_HEIGHT = 64;
+const NODE_HEIGHT = 80;
+const DEFAULT_STATUS_COLOR = "#9ca3af";
 
 function layout(graph: TaskGraphResponse): { nodes: Node[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph();
@@ -40,20 +41,27 @@ function layout(graph: TaskGraphResponse): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = graph.nodes.map((n) => {
     const pos = g.node(n.id);
     const closed = n.currentStatus.slug === "closed";
+    const statusColor = n.currentStatus.color || DEFAULT_STATUS_COLOR;
+    const sideBorder = n.isRoot
+      ? "2px solid var(--color-link, #2563eb)"
+      : "1px solid #999";
     return {
       id: n.id,
       position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 },
       data: { node: n },
       type: "default",
-      label: `${n.displayId}\n${n.title}`,
+      label: `${n.displayId}\n${n.title}\n${n.currentStatus.name}`,
       style: {
         width: `${NODE_WIDTH}px`,
         minHeight: `${NODE_HEIGHT}px`,
         fontSize: "0.8rem",
         textAlign: "left",
         whiteSpace: "pre-wrap",
-        padding: "0.5rem",
-        border: n.isRoot ? "2px solid var(--color-link, #2563eb)" : "1px solid #999",
+        padding: "0.5rem 0.5rem 0.5rem 0.75rem",
+        borderTop: sideBorder,
+        borderRight: sideBorder,
+        borderBottom: sideBorder,
+        borderLeft: `6px solid ${statusColor}`,
         opacity: closed ? 0.55 : 1,
         fontStyle: closed ? "italic" : "normal",
         background: n.isRoot ? "#eff6ff" : "#fff",
@@ -137,6 +145,7 @@ onMounted(load);
         <li><span class="legend__swatch legend__swatch--blocker"></span>Blocks</li>
         <li><span class="legend__swatch legend__swatch--root"></span>Root</li>
         <li><span class="legend__swatch legend__swatch--closed"></span>Closed</li>
+        <li><span class="legend__swatch legend__swatch--status"></span>Status (left edge)</li>
       </ul>
     </header>
 
@@ -226,6 +235,10 @@ onMounted(load);
 .legend__swatch--closed {
   background: #ddd;
   opacity: 0.55;
+}
+.legend__swatch--status {
+  width: 0.4rem;
+  background: linear-gradient(to bottom, #f59e0b 0 33%, #10b981 33% 66%, #6b7280 66%);
 }
 .graph-view__canvas {
   flex: 1;

@@ -48,7 +48,7 @@ const ROOT = {
   displayId: "FEAT-1",
   title: "Root",
   flow: { slug: "feature", name: "Feature" },
-  currentStatus: { slug: "implement", name: "Implement" },
+  currentStatus: { slug: "implement", name: "Implement", color: "#f59e0b" },
   isRoot: true,
 };
 const CHILD = {
@@ -56,7 +56,7 @@ const CHILD = {
   displayId: "FEAT-2",
   title: "Child",
   flow: { slug: "feature", name: "Feature" },
-  currentStatus: { slug: "closed", name: "Closed" },
+  currentStatus: { slug: "closed", name: "Closed", color: "#6b7280" },
   isRoot: false,
 };
 
@@ -106,13 +106,20 @@ describe("TaskGraphView", () => {
     expect(lastFlowProps.value!.nodes).toHaveLength(2);
     expect(lastFlowProps.value!.edges).toHaveLength(1);
 
-    // Root node visually distinguished.
+    // Root node visually distinguished by a thicker top/right/bottom border.
     const rootNode = lastFlowProps.value!.nodes.find((n) => n.id === ROOT.id)!;
-    expect(rootNode.style.border).toContain("2px");
+    expect(rootNode.style.borderTop).toContain("2px");
 
     // Closed node dimmed.
     const childNode = lastFlowProps.value!.nodes.find((n) => n.id === CHILD.id)!;
     expect(childNode.style.opacity).toBeLessThan(1);
+
+    // Status color rendered as a left-edge stripe on each node.
+    expect(rootNode.style.borderLeft).toContain("#f59e0b");
+    expect(childNode.style.borderLeft).toContain("#6b7280");
+    // Status name surfaced in the node label so users can read it.
+    expect(rootNode.label).toContain("Implement");
+    expect(childNode.label).toContain("Closed");
 
     // Spawn edge styled with the spawn color (green); blocker would be red dashed.
     const edge = lastFlowProps.value!.edges[0];

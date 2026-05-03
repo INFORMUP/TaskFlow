@@ -103,6 +103,12 @@ describe("task graph", () => {
     );
 
     expect(body.edges.filter((e: any) => e.type === "blocker")).toEqual([]);
+
+    for (const node of body.nodes) {
+      expect(node.currentStatus).toHaveProperty("slug");
+      expect(node.currentStatus).toHaveProperty("name");
+      expect(node.currentStatus).toHaveProperty("color");
+    }
   });
 
   it("returns transitive blockers in both directions", async () => {
