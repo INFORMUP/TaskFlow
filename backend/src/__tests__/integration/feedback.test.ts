@@ -702,22 +702,20 @@ describe("feedback API: product-task wiring", () => {
         where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
         data: { role: "admin" },
       });
-      // Seed a task to play the role of the orphan.
-      const flow = await prisma.flow.findFirstOrThrow({
-        where: { orgId: DEFAULT_ORG_ID, slug: "bug" },
+      // Seed an orphan task via the service so displayId/transitions are set up
+      // correctly. ensureFeedbackBot user upsert is handled by the service.
+      const { createTask } = await import("../../services/task.service.js");
+      const orphan = await createTask({
+        orgId: DEFAULT_ORG_ID,
+        flowSlug: "bug",
+        title: "orphan",
+        priority: "medium",
+        createdBy: TEST_ENGINEER_ID,
+        actorType: "human",
+        assigneeUserId: null,
+        projectIds: [PRODUCT_PROJECT_ID],
       });
-      const initialStatus = await prisma.flowStatus.findFirstOrThrow({
-        where: { flowId: flow.id, slug: "triage" },
-      });
-      const orphan = await prisma.task.create({
-        data: {
-          orgId: DEFAULT_ORG_ID,
-          flowId: flow.id,
-          currentStatusId: initialStatus.id,
-          title: "orphan",
-          createdBy: FEEDBACK_BOT_USER_ID,
-        },
-      });
+      if (!orphan) throw new Error("failed to seed orphan task");
       createdTaskIds.push(orphan.id);
 
       const fb = await prisma.feedback.create({
