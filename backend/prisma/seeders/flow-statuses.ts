@@ -30,7 +30,7 @@ const FEATURE_STATUSES: StatusDef[] = [
   { slug: "prototype", name: "Prototype", description: "Build working prototype for product review", color: "#f59e0b" },
   { slug: "implement", name: "Implement", description: "Build production implementation via TDD", color: "#f59e0b" },
   { slug: "validate", name: "Validate", description: "Confirm implementation meets acceptance criteria", color: "#14b8a6" },
-  { slug: "review", name: "Staging", description: "Feature is staged for release", color: "#22c55e" },
+  { slug: "staging", name: "Staging", description: "Feature is staged for release", color: "#22c55e" },
   { slug: "closed", name: "Closed", description: "Task resolved with resolution", color: "#6b7280" },
 ];
 
