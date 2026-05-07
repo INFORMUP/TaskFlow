@@ -706,7 +706,7 @@ describe("feedback API: product-task wiring", () => {
       const flow = await prisma.flow.findFirstOrThrow({
         where: { orgId: DEFAULT_ORG_ID, slug: "bug" },
       });
-      const initialStatus = await prisma.status.findFirstOrThrow({
+      const initialStatus = await prisma.flowStatus.findFirstOrThrow({
         where: { flowId: flow.id, slug: "triage" },
       });
       const orphan = await prisma.task.create({

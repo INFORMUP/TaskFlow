@@ -3,7 +3,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { CommonErrorResponses, ErrorResponse, IdParams } from "./_schemas.js";
 import { config } from "../config.js";
-import { createTask } from "../services/task.service.js";
+import { createTask, TaskServiceError } from "../services/task.service.js";
 import {
   FEEDBACK_BOT_DISPLAY_NAME,
   FEEDBACK_BOT_USER_ID,
@@ -224,6 +224,16 @@ async function createProductTaskOnly(input: AttemptInput): Promise<{
     return { taskId: task.id, status: "linked", error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Flow exists in the org but the product project doesn't have it attached
+    // — this is a misconfiguration rather than an unexpected error, so admins
+    // see it as a `skipped_no_flow` rather than `failed_create`.
+    if (err instanceof TaskServiceError && err.code === "FLOW_NOT_IN_PROJECTS") {
+      input.log.warn(
+        { flowSlug, projectId: project.id },
+        "feedback: flow not attached to product project; skipping task creation",
+      );
+      return { taskId: null, status: "skipped_no_flow", error: null };
+    }
     input.log.error(
       { err, flowSlug, projectId: project.id },
       "feedback: failed to create product task",
