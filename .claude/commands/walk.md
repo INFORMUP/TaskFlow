@@ -42,7 +42,7 @@ This is the careful counterpart to `/fast-track`. Fast-track skips the per-stage
         - `prototype` — by default this skill treats the design spec as sufficient and does no extra work here, same as fast-track. If the user wants a real spike, they'll say so at the prompt — leave the task in `prototype` and stop the walk so they can do it manually.
         - `implement` — do the full `/implement` work: worktree at `.claude/worktrees/<display-id-lower>/`, branch `feat/<display-id-lower>-<slug>` off `origin/staging`, red-green TDD, `npm test` in touched packages, no `--no-verify`, commit by file, push, open PR into `staging`, link via `POST /api/v1/tasks/{id}/pull-requests`.
         - `validate` — do the full `/validate` work: review the linked PR against the design spec's acceptance criteria, post an APPROVE / REQUEST_CHANGES / COMMENT review on GitHub with a criterion-by-criterion checklist. If the review is REQUEST_CHANGES, stop the walk — the next move is `/address-review`, not a forward transition.
-        - `review` — human merge gate. Print the PR URL and stop the walk; merge is never an agent action.
+        - `staging` — human merge gate. Print the PR URL and stop the walk; merge is never an agent action.
 
       - **`bug` flow**
         - `triage` — read description, classify (severity, repro steps present?), and post a triage comment. Ask the user whether the bug is real / actionable before offering the move to `investigate`.

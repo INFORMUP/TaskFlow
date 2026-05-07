@@ -64,7 +64,7 @@ export const emptyStateContent: Record<
       heading: "Nothing to validate",
       description: "Implemented features wait here for QA and acceptance.",
     },
-    review: {
+    staging: {
       heading: "Nothing in staging",
       description: "Validated features wait here, staged for release.",
     },

@@ -67,7 +67,7 @@ describe("seed data", () => {
     });
     expect(statuses).toHaveLength(7);
     expect(statuses.map((s) => s.slug)).toEqual([
-      "discuss", "design", "prototype", "implement", "validate", "review", "closed",
+      "discuss", "design", "prototype", "implement", "validate", "staging", "closed",
     ]);
   });
 
