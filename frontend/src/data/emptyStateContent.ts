@@ -65,12 +65,12 @@ export const emptyStateContent: Record<
       description: "Implemented features wait here for QA and acceptance.",
     },
     review: {
-      heading: "Nothing in review",
-      description: "Validated features await a final review before closing.",
+      heading: "Nothing in staging",
+      description: "Validated features wait here, staged for release.",
     },
     closed: {
       heading: "No shipped features",
-      description: "Reviewed features end up here once released.",
+      description: "Staged features end up here once released.",
     },
   },
   improvement: {
