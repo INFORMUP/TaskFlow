@@ -22,7 +22,17 @@ Create a new task in TaskFlow at taskflow.informup.org. **Do not** create a GitH
 
 3. **Flow**: default to `feature`. If the title clearly suggests otherwise (`bug`, `improvement`), confirm with the user before switching. Available slugs: `feature`, `bug`, `improvement` (and others — list via `GET /api/v1/flows` if needed).
 
-4. **Project**: default to the Taskflow project. Resolve its UUID at runtime via `GET /api/v1/projects?slug=taskflow` and read `data[0].id` — don't hardcode the UUID, since reseeds can change it. If the lookup returns zero results, stop and surface the error.
+4. **Project**: default to the Taskflow project, but honor an explicit project hint in `$ARGUMENTS` (e.g. a leading line like `Project: Reportal`). Resolve the UUID at runtime — **do not hardcode**, since reseeds can change it.
+
+   `GET /api/v1/projects` does **not** support filtering by slug, name, or key. Its only query parameter is `?archived=true`. Passing `?slug=...` is silently ignored and returns the full list, so `data[0]` is whatever happened to come first — not your project. Instead: fetch the full list, then match locally on `key` (case-insensitive — e.g. `TASKFLOW`, `REPORTAL`, `DASHBOARD`). If no match, stop and surface the error.
+
+   ```bash
+   curl -sS "https://taskflow.informup.org/api/v1/projects" \
+     -H "Authorization: Bearer $(cat ~/.taskflow-import-token)" \
+   | python3 -c "import sys,json,os; key=os.environ['KEY'].upper(); d=json.load(sys.stdin); m=[p for p in d['data'] if p.get('key','').upper()==key]; print(m[0]['id'] if m else '', file=sys.stdout)"
+   ```
+
+   If you created the task on the wrong project, fix it without recreating: `POST /api/v1/tasks/:id/projects` with `{"projectId":"<correct-uuid>"}` to add, then `DELETE /api/v1/tasks/:id/projects/:wrongProjectId` to remove the original. (Direct `PATCH` of `projectIds` on the task is silently ignored.)
 
 5. **Token**: read from `~/.taskflow-import-token` (chmod 600). Do not log the token.
 
