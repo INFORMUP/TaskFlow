@@ -496,6 +496,8 @@ model Feedback {
   adminNotes String?   @map("admin_notes") @db.Text
   archivedAt DateTime? @map("archived_at") @db.Timestamptz()
   taskId     String?   @unique @map("task_id") @db.Uuid
+  taskLinkStatus String  @default("pending") @map("task_link_status")
+  taskLinkError  String? @map("task_link_error") @db.Text
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
 
   org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -503,6 +505,7 @@ model Feedback {
   task Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([orgId, createdAt])
+  @@index([orgId, taskLinkStatus])
   @@map("feedback")
 }
 

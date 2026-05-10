@@ -72,6 +72,13 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: "app" },
   },
   {
+    path: "/organization/feedback",
+    name: "organization-feedback",
+    component: () =>
+      import("@/features/feedback-admin/views/FeedbackAdminView.vue"),
+    meta: { layout: "app" },
+  },
+  {
     path: "/organization/new",
     name: "organization-new",
     component: () => import("@/features/organization/views/CreateOrgView.vue"),

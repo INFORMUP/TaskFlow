@@ -570,6 +570,8 @@ describe("feedback API: product-task wiring", () => {
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.taskId).toBeNull();
+    expect(body.taskLinkStatus).toBe("skipped_no_config");
+    expect(body.taskLinkError).toBeNull();
   });
 
   it("succeeds (without task) when product project is misconfigured", async () => {
@@ -578,6 +580,246 @@ describe("feedback API: product-task wiring", () => {
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.taskId).toBeNull();
+    expect(body.taskLinkStatus).toBe("skipped_no_project");
+    expect(body.taskLinkError).toBeNull();
+  });
+
+  it("happy-path response includes taskLinkStatus=linked", async () => {
+    const res = await postFeedback("BUG", "linked happy path");
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    createdTaskIds.push(body.taskId);
+    expect(body.taskLinkStatus).toBe("linked");
+    expect(body.taskLinkError).toBeNull();
+  });
+
+  it("returns skipped_no_flow when the product project has no matching flow attached", async () => {
+    // Detach the bug flow from the product project for this test only.
+    const bugFlow = await prisma.flow.findFirst({
+      where: { orgId: DEFAULT_ORG_ID, slug: "bug" },
+    });
+    expect(bugFlow).not.toBeNull();
+    await prisma.projectFlow.delete({
+      where: {
+        projectId_flowId: { projectId: PRODUCT_PROJECT_ID, flowId: bugFlow!.id },
+      },
+    });
+    try {
+      const res = await postFeedback("BUG", "no flow attached");
+      expect(res.statusCode).toBe(201);
+      const body = res.json();
+      expect(body.taskId).toBeNull();
+      expect(body.taskLinkStatus).toBe("skipped_no_flow");
+      expect(body.taskLinkError).toBeNull();
+    } finally {
+      // Re-attach so subsequent tests aren't affected.
+      await prisma.projectFlow.create({
+        data: { projectId: PRODUCT_PROJECT_ID, flowId: bugFlow!.id },
+      });
+    }
+  });
+
+  describe("POST /api/v1/feedback/:id/retry-link", () => {
+    it("returns 403 for a member", async () => {
+      const fb = await prisma.feedback.create({
+        data: {
+          orgId: ORG_C_ID,
+          userId: TEST_USER_ID,
+          type: "BUG",
+          message: "x",
+          taskLinkStatus: "failed_create",
+          taskLinkError: "boom",
+        },
+      });
+      const app = await buildApp();
+      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/feedback/${fb.id}/retry-link`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it("returns 409 INVALID_STATE for a row already linked", async () => {
+      // Promote test user to admin so they can hit the admin endpoint here.
+      await prisma.orgMember.update({
+        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
+        data: { role: "admin" },
+      });
+      const fb = await prisma.feedback.create({
+        data: {
+          orgId: ORG_C_ID,
+          userId: TEST_USER_ID,
+          type: "BUG",
+          message: "already linked",
+          taskLinkStatus: "linked",
+        },
+      });
+      const app = await buildApp();
+      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/feedback/${fb.id}/retry-link`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json().error.code).toBe("INVALID_STATE");
+    });
+
+    it("re-runs task creation for failed_create rows and links them", async () => {
+      await prisma.orgMember.update({
+        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
+        data: { role: "admin" },
+      });
+      const fb = await prisma.feedback.create({
+        data: {
+          orgId: ORG_C_ID,
+          userId: TEST_USER_ID,
+          type: "FEATURE",
+          message: "retry me",
+          taskLinkStatus: "failed_create",
+          taskLinkError: "previous failure",
+        },
+      });
+      const app = await buildApp();
+      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/feedback/${fb.id}/retry-link`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.taskLinkStatus).toBe("linked");
+      expect(body.taskLinkError).toBeNull();
+      expect(body.taskId).toBeTruthy();
+      createdTaskIds.push(body.taskId);
+    });
+
+    it("relinks failed_link rows without creating a new task", async () => {
+      await prisma.orgMember.update({
+        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
+        data: { role: "admin" },
+      });
+      // Seed an orphan task via the service so displayId/transitions are set up
+      // correctly. ensureFeedbackBot user upsert is handled by the service.
+      const { createTask } = await import("../../services/task.service.js");
+      const orphan = await createTask({
+        orgId: DEFAULT_ORG_ID,
+        flowSlug: "bug",
+        title: "orphan",
+        priority: "medium",
+        createdBy: TEST_ENGINEER_ID,
+        actorType: "human",
+        assigneeUserId: null,
+        projectIds: [PRODUCT_PROJECT_ID],
+      });
+      if (!orphan) throw new Error("failed to seed orphan task");
+      createdTaskIds.push(orphan.id);
+
+      const fb = await prisma.feedback.create({
+        data: {
+          orgId: ORG_C_ID,
+          userId: TEST_USER_ID,
+          type: "BUG",
+          message: "had an orphan",
+          taskId: orphan.id,
+          taskLinkStatus: "failed_link",
+          taskLinkError: "linker exploded",
+        },
+      });
+      const app = await buildApp();
+      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/feedback/${fb.id}/retry-link`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.taskLinkStatus).toBe("linked");
+      expect(body.taskLinkError).toBeNull();
+      expect(body.taskId).toBe(orphan.id);
+
+      // No new task created — count should still be one (the orphan).
+      const count = await prisma.task.count({ where: { id: orphan.id } });
+      expect(count).toBe(1);
+    });
+
+    it("retry on failed_create when still misconfigured remains failed/skipped", async () => {
+      await prisma.orgMember.update({
+        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
+        data: { role: "admin" },
+      });
+      delete process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
+      const fb = await prisma.feedback.create({
+        data: {
+          orgId: ORG_C_ID,
+          userId: TEST_USER_ID,
+          type: "BUG",
+          message: "still broken",
+          taskLinkStatus: "failed_create",
+          taskLinkError: "old failure",
+        },
+      });
+      const app = await buildApp();
+      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/feedback/${fb.id}/retry-link`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.taskId).toBeNull();
+      expect(body.taskLinkStatus).toBe("skipped_no_config");
+    });
+  });
+
+  describe("GET /api/v1/feedback?taskLinkStatus=", () => {
+    it("filters by taskLinkStatus", async () => {
+      await prisma.orgMember.update({
+        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
+        data: { role: "admin" },
+      });
+      await prisma.feedback.createMany({
+        data: [
+          {
+            orgId: ORG_C_ID,
+            userId: TEST_USER_ID,
+            type: "BUG",
+            message: "a",
+            taskLinkStatus: "failed_create",
+          },
+          {
+            orgId: ORG_C_ID,
+            userId: TEST_USER_ID,
+            type: "BUG",
+            message: "b",
+            taskLinkStatus: "linked",
+          },
+          {
+            orgId: ORG_C_ID,
+            userId: TEST_USER_ID,
+            type: "BUG",
+            message: "c",
+            taskLinkStatus: "failed_create",
+          },
+        ],
+      });
+      const app = await buildApp();
+      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/v1/feedback?taskLinkStatus=failed_create",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.total).toBe(2);
+      expect(body.data.every((f: any) => f.taskLinkStatus === "failed_create")).toBe(true);
+    });
   });
 
   it("creates exactly one task per submission and links via Feedback.taskId", async () => {
