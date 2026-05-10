@@ -55,6 +55,7 @@ async function mountNav(role: OrgRole | null) {
       { path: "/organization", component: { template: "<div />" } },
       { path: "/organization/feedback", component: { template: "<div />" } },
       { path: "/settings", component: { template: "<div />" } },
+      { path: "/tasks/new", name: "task-new", component: { template: "<div />" } },
     ],
   });
   await router.push("/");
@@ -86,5 +87,14 @@ describe("NavBar feedback link visibility", () => {
   it("hides the Feedback link when there is no active org", async () => {
     const w = await mountNav(null);
     expect(w.find("[data-testid='navbar-feedback-link']").exists()).toBe(false);
+  });
+});
+
+describe("NavBar — Add Task button", () => {
+  it("renders a link to /tasks/new with an accessible label", async () => {
+    const w = await mountNav(null);
+    const link = w.get('[data-testid="navbar-add-task-link"]');
+    expect(link.attributes("href")).toBe("/tasks/new");
+    expect(link.text()).toMatch(/add task/i);
   });
 });

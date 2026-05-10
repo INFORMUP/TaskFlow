@@ -18,6 +18,12 @@ const routes: RouteRecordRaw[] = [
     redirect: "/flows",
   },
   {
+    path: "/tasks/new",
+    name: "task-new",
+    component: () => import("@/features/tasks/views/TaskNewView.vue"),
+    meta: { layout: "app" },
+  },
+  {
     path: "/flows",
     name: "flow-list",
     component: () => import("@/features/flows/views/FlowListView.vue"),
