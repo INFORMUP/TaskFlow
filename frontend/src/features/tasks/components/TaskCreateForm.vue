@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { createTask } from "@/api/tasks.api";
+import { createTask, type Task } from "@/api/tasks.api";
 import { listProjects, listProjectFlows, type AttachedFlow, type Project } from "@/api/projects.api";
+import { listFlowStatuses, type FlowStatus } from "@/api/flows.api";
+import { listLabels, attachLabelToTask, type Label } from "@/api/labels.api";
+import { createTransition } from "@/api/transitions.api";
 import { apiFetch } from "@/api/client";
 
 const props = defineProps<{
-  flow: string;
+  flow?: string;
 }>();
 
 const emit = defineEmits<{
-  created: [];
+  created: [task: Task];
   cancel: [];
 }>();
 
@@ -20,12 +23,17 @@ const dueDate = ref("");
 const selectedProjectIds = ref<string[]>([]);
 const assigneeUserId = ref("");
 const assigneeTouched = ref(false);
-const selectedFlowSlug = ref(props.flow);
+const selectedFlowSlug = ref(props.flow ?? "");
+const selectedStatusSlug = ref("");
+const selectedLabelIds = ref<string[]>([]);
 
 const projects = ref<Project[]>([]);
 const users = ref<{ id: string; displayName: string }[]>([]);
+const labels = ref<Label[]>([]);
 // Flows attached per project, loaded lazily on selection.
 const flowsByProject = ref<Record<string, AttachedFlow[]>>({});
+// Statuses per flow slug, loaded lazily once a flow is chosen.
+const statusesByFlow = ref<Record<string, FlowStatus[]>>({});
 
 const submitting = ref(false);
 const error = ref("");
@@ -33,9 +41,14 @@ const error = ref("");
 onMounted(async () => {
   projects.value = await listProjects();
   try {
-    users.value = (await apiFetch<{ data: any[] }>("/api/v1/users")).data;
+    users.value = (await apiFetch<{ data: { id: string; displayName: string }[] }>("/api/v1/users")).data;
   } catch {
     users.value = [];
+  }
+  try {
+    labels.value = await listLabels();
+  } catch {
+    labels.value = [];
   }
 });
 
@@ -93,11 +106,60 @@ watch(availableFlows, (flows) => {
   }
 });
 
+// Load statuses for the chosen flow. Resets the selected status to the flow's
+// first status (lowest sortOrder) — that's the API's default landing status,
+// so no transition is needed. Re-fires when `availableFlows` updates so a
+// preset `flow` prop can resolve once the user picks a project.
+watch(
+  [selectedFlowSlug, availableFlows],
+  async ([slug, flows]) => {
+    if (!slug) {
+      selectedStatusSlug.value = "";
+      return;
+    }
+    const flow = flows.find((f) => f.slug === slug);
+    if (!flow) return;
+    await loadStatuses(flow.id, slug);
+  },
+  { immediate: true },
+);
+
+async function loadStatuses(flowId: string, flowSlug: string) {
+  if (!statusesByFlow.value[flowSlug]) {
+    try {
+      const list = await listFlowStatuses(flowId);
+      statusesByFlow.value[flowSlug] = [...list].sort((a, b) => a.sortOrder - b.sortOrder);
+    } catch {
+      statusesByFlow.value[flowSlug] = [];
+    }
+  }
+  const first = statusesByFlow.value[flowSlug][0];
+  selectedStatusSlug.value = first?.slug ?? "";
+}
+
+const availableStatuses = computed<FlowStatus[]>(
+  () => statusesByFlow.value[selectedFlowSlug.value] ?? [],
+);
+
+const defaultStatusSlug = computed(() => availableStatuses.value[0]?.slug ?? "");
+
 function toggleProject(id: string) {
   const idx = selectedProjectIds.value.indexOf(id);
   if (idx >= 0) selectedProjectIds.value.splice(idx, 1);
   else selectedProjectIds.value.push(id);
 }
+
+function toggleLabel(id: string) {
+  const idx = selectedLabelIds.value.indexOf(id);
+  if (idx >= 0) selectedLabelIds.value.splice(idx, 1);
+  else selectedLabelIds.value.push(id);
+}
+
+const heading = computed(() => {
+  if (!selectedFlowSlug.value) return "New Task";
+  const name = selectedFlowSlug.value.charAt(0).toUpperCase() + selectedFlowSlug.value.slice(1);
+  return `New ${name} Task`;
+});
 
 const canSubmit = computed(
   () =>
@@ -115,7 +177,7 @@ async function handleSubmit() {
   submitting.value = true;
   error.value = "";
   try {
-    await createTask({
+    const task = await createTask({
       flow: selectedFlowSlug.value,
       title: title.value,
       description: description.value || undefined,
@@ -124,7 +186,33 @@ async function handleSubmit() {
       assigneeUserId: assigneeUserId.value,
       dueDate: dueDate.value || null,
     });
-    emit("created");
+
+    const postCreateErrors: string[] = [];
+    for (const labelId of selectedLabelIds.value) {
+      try {
+        await attachLabelToTask(task.id, labelId);
+      } catch (e: any) {
+        postCreateErrors.push(e?.error?.message || `Failed to attach label ${labelId}`);
+      }
+    }
+
+    if (
+      selectedStatusSlug.value &&
+      selectedStatusSlug.value !== defaultStatusSlug.value
+    ) {
+      try {
+        await createTransition(task.id, { toStatus: selectedStatusSlug.value, note: "" });
+      } catch (e: any) {
+        postCreateErrors.push(
+          e?.error?.message || `Failed to set status to ${selectedStatusSlug.value}`,
+        );
+      }
+    }
+
+    if (postCreateErrors.length > 0) {
+      error.value = `Task created, but: ${postCreateErrors.join("; ")}`;
+    }
+    emit("created", task);
   } catch (e: any) {
     error.value = e?.error?.message || "Failed to create task";
   } finally {
@@ -135,7 +223,7 @@ async function handleSubmit() {
 
 <template>
   <div class="create-form">
-    <h3>New {{ flow.charAt(0).toUpperCase() + flow.slice(1) }} Task</h3>
+    <h3>{{ heading }}</h3>
     <div v-if="error" class="create-form__error">{{ error }}</div>
 
     <label class="create-form__label">Title *</label>
@@ -174,6 +262,31 @@ async function handleSubmit() {
       Default for this project: {{ defaultFlowHint.name }}
     </p>
 
+    <label class="create-form__label">Initial status</label>
+    <select
+      v-model="selectedStatusSlug"
+      class="create-form__select"
+      data-testid="task-create-status"
+      :disabled="availableStatuses.length === 0"
+    >
+      <option v-if="availableStatuses.length === 0" value="">
+        — pick a flow first —
+      </option>
+      <option v-for="s in availableStatuses" :key="s.id" :value="s.slug">
+        {{ s.name }}
+      </option>
+    </select>
+    <p
+      v-if="
+        selectedStatusSlug &&
+        defaultStatusSlug &&
+        selectedStatusSlug !== defaultStatusSlug
+      "
+      class="create-form__hint"
+    >
+      Task will be created at "{{ availableStatuses[0]?.name }}" then transitioned.
+    </p>
+
     <label class="create-form__label">Assignee *</label>
     <select
       v-model="assigneeUserId"
@@ -185,6 +298,23 @@ async function handleSubmit() {
         {{ u.displayName }}
       </option>
     </select>
+
+    <label class="create-form__label">Tags</label>
+    <div class="create-form__labels" data-testid="task-create-labels">
+      <span v-if="labels.length === 0" class="create-form__hint">No tags available</span>
+      <label v-for="l in labels" :key="l.id" class="create-form__label-chip">
+        <input
+          type="checkbox"
+          :checked="selectedLabelIds.includes(l.id)"
+          @change="toggleLabel(l.id)"
+        />
+        <span
+          class="create-form__label-swatch"
+          :style="{ background: l.color }"
+        />
+        {{ l.name }}
+      </label>
+    </div>
 
     <label class="create-form__label">Description (optional)</label>
     <textarea
@@ -318,5 +448,33 @@ async function handleSubmit() {
   color: var(--text-secondary);
   margin-top: -0.25rem;
   margin-bottom: 0.5rem;
+}
+
+.create-form__labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  max-height: 10rem;
+  overflow-y: auto;
+}
+
+.create-form__label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.create-form__label-swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-primary);
 }
 </style>
