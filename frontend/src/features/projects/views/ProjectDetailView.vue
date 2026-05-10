@@ -14,6 +14,7 @@ import {
   type Project,
 } from "@/api/projects.api";
 import { fetchTeams, type Team } from "@/api/teams.api";
+import { listOrgMembers, type OrgMember } from "@/api/org-members.api";
 import { apiFetch } from "@/api/client";
 
 const route = useRoute();
@@ -22,7 +23,7 @@ const router = useRouter();
 const project = ref<Project | null>(null);
 const teams = ref<Team[]>([]);
 const flows = ref<{ id: string; slug: string; name: string }[]>([]);
-const users = ref<{ id: string; displayName: string }[]>([]);
+const users = ref<OrgMember[]>([]);
 const submitting = ref(false);
 const error = ref<string | null>(null);
 
@@ -39,7 +40,7 @@ onMounted(async () => {
     flows.value = [];
   }
   try {
-    users.value = (await apiFetch<{ data: any[] }>("/api/v1/users")).data;
+    users.value = await listOrgMembers();
   } catch {
     users.value = [];
   }
