@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getTask, type Task } from "@/api/tasks.api";
+import { getTask, updateTask, type Task } from "@/api/tasks.api";
 import {
   getTransitions,
   createTransition,
@@ -15,6 +15,7 @@ import MarkdownView from "@/features/tasks/components/MarkdownView.vue";
 import TaskCodeLinksSection from "@/features/tasks/components/TaskCodeLinksSection.vue";
 import TaskBlockersSection from "@/features/tasks/components/TaskBlockersSection.vue";
 import ActorLabel from "@/components/ActorLabel.vue";
+import AssigneePicker from "@/features/tasks/components/AssigneePicker.vue";
 import LabelPicker from "@/features/labels/components/LabelPicker.vue";
 import { attachLabelToTask, detachLabelFromTask } from "@/api/labels.api";
 
@@ -38,8 +39,12 @@ const transitionError = ref("");
 // Comment form state
 const newComment = ref("");
 
-// Users (for reassign dropdown)
-const users = ref<{ id: string; displayName: string }[]>([]);
+// Users (for reassign dropdown and standalone picker)
+const users = ref<{ id: string; displayName: string; actorType: string }[]>([]);
+
+// Standalone assignee picker state
+const showAssigneePicker = ref(false);
+const assigneeError = ref("");
 
 const RESOLUTIONS: Record<string, string[]> = {
   bug: ["fixed", "invalid", "duplicate", "wont_fix", "cannot_reproduce"],
@@ -114,6 +119,26 @@ async function handleDeleteComment(commentId: string) {
   comments.value = c.data;
 }
 
+function openAssigneePicker() {
+  assigneeError.value = "";
+  showAssigneePicker.value = true;
+}
+
+function closeAssigneePicker() {
+  showAssigneePicker.value = false;
+}
+
+async function handleAssigneeSelect(userId: string | null) {
+  closeAssigneePicker();
+  try {
+    const updated = await updateTask(taskId, { assigneeUserId: userId });
+    task.value = updated;
+  } catch (e: any) {
+    assigneeError.value =
+      e?.error?.message || e?.message || "Could not update assignee";
+  }
+}
+
 function goBack() {
   router.push(`/tasks/${route.params.flow}`);
 }
@@ -171,8 +196,34 @@ onMounted(async () => {
 
     <div class="detail__meta">
       <div>Created by: <ActorLabel :actor="task.creator" /></div>
-      <div v-if="task.assignee">
-        Assigned to: <ActorLabel :actor="task.assignee" />
+      <div class="detail__assignee-wrap">
+        <span>Assigned to:</span>
+        <button
+          type="button"
+          class="detail__assignee-btn"
+          data-testid="detail-assignee-btn"
+          :aria-label="task.assignee ? `Reassign — currently ${task.assignee.displayName}` : 'Assign'"
+          @click="openAssigneePicker"
+        >
+          <ActorLabel v-if="task.assignee" :actor="task.assignee" />
+          <span v-else class="detail__assignee-empty">Unassigned</span>
+        </button>
+        <AssigneePicker
+          v-if="showAssigneePicker"
+          :users="users"
+          :selected-id="task.assignee?.id ?? null"
+          class="detail__assignee-picker"
+          @select="handleAssigneeSelect"
+          @close="closeAssigneePicker"
+        />
+      </div>
+      <div
+        v-if="assigneeError"
+        class="detail__error"
+        role="alert"
+        data-testid="detail-assignee-error"
+      >
+        {{ assigneeError }}
       </div>
       <div v-if="task.dueDate">Due: {{ new Date(task.dueDate).toLocaleDateString() }}</div>
       <div v-if="task.resolution">Resolution: {{ task.resolution }}</div>
@@ -465,7 +516,47 @@ onMounted(async () => {
   color: var(--text-secondary);
   margin-bottom: 1.5rem;
   display: flex;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  align-items: center;
+}
+
+.detail__assignee-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.detail__assignee-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.125rem 0.375rem;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.detail__assignee-btn:hover,
+.detail__assignee-btn:focus-visible {
+  border-color: var(--border-primary);
+  background: var(--bg-secondary, rgba(0, 0, 0, 0.04));
+  outline: none;
+}
+
+.detail__assignee-empty {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.detail__assignee-picker {
+  top: 100%;
+  left: 0;
+  margin-top: 0.25rem;
 }
 
 .detail__section {

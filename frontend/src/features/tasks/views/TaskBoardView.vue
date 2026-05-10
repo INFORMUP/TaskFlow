@@ -301,6 +301,7 @@ onMounted(async () => {
       v-else-if="filters.view === 'list'"
       :tasks="tasks"
       :flow="flowSlug"
+      @request-assignee-pick="handleAssigneePick"
     />
     <div v-else class="board__columns">
       <TaskColumn

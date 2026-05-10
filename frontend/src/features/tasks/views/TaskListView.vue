@@ -4,6 +4,9 @@ import { useRouter } from "vue-router";
 import type { Task } from "@/api/tasks.api";
 
 const props = defineProps<{ tasks: Task[]; flow: string }>();
+const emit = defineEmits<{
+  "request-assignee-pick": [task: Task, anchor: HTMLElement];
+}>();
 const router = useRouter();
 
 type SortKey = "title" | "priority" | "status" | "assignee" | "dueDate" | "updatedAt";
@@ -54,6 +57,10 @@ function ariaSort(key: SortKey): "ascending" | "descending" | "none" {
 
 function openTask(task: Task) {
   router.push(`/tasks/${props.flow}/${task.id}`);
+}
+
+function handleAssigneeClick(task: Task, event: MouseEvent) {
+  emit("request-assignee-pick", task, event.currentTarget as HTMLElement);
 }
 </script>
 
@@ -121,7 +128,18 @@ function openTask(task: Task) {
             {{ p.key }}
           </span>
         </td>
-        <td>{{ t.assignee?.displayName ?? "—" }}</td>
+        <td>
+          <button
+            type="button"
+            class="task-list__assignee-btn"
+            data-testid="list-assignee-btn"
+            :aria-label="t.assignee ? `Reassign — currently ${t.assignee.displayName}` : 'Assign'"
+            @click="handleAssigneeClick(t, $event)"
+          >
+            <span v-if="t.assignee">{{ t.assignee.displayName }}</span>
+            <span v-else class="task-list__assignee-empty">Unassigned</span>
+          </button>
+        </td>
         <td>{{ t.currentStatus.name }}</td>
         <td :class="`priority--${t.priority}`">{{ t.priority }}</td>
         <td>{{ t.dueDate ? new Date(t.dueDate).toLocaleDateString() : "—" }}</td>
@@ -179,6 +197,27 @@ function openTask(task: Task) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--text-secondary);
   font-size: 0.8125rem;
+}
+.task-list__assignee-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.125rem 0.375rem;
+  margin: -0.125rem -0.375rem;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.task-list__assignee-btn:hover,
+.task-list__assignee-btn:focus-visible {
+  border-color: var(--border-primary);
+  background: var(--bg-secondary, rgba(0, 0, 0, 0.03));
+  outline: none;
+}
+.task-list__assignee-empty {
+  color: var(--text-secondary);
+  font-style: italic;
 }
 .task-list__chip {
   display: inline-block;
