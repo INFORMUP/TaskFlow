@@ -5,7 +5,7 @@ import { listProjects, listProjectFlows, type AttachedFlow, type Project } from 
 import { listFlowStatuses, type FlowStatus } from "@/api/flows.api";
 import { listLabels, attachLabelToTask, type Label } from "@/api/labels.api";
 import { createTransition } from "@/api/transitions.api";
-import { apiFetch } from "@/api/client";
+import { listOrgMembers, type OrgMember } from "@/api/org-members.api";
 
 const props = defineProps<{
   flow?: string;
@@ -28,7 +28,7 @@ const selectedStatusSlug = ref("");
 const selectedLabelIds = ref<string[]>([]);
 
 const projects = ref<Project[]>([]);
-const users = ref<{ id: string; displayName: string }[]>([]);
+const users = ref<OrgMember[]>([]);
 const labels = ref<Label[]>([]);
 // Flows attached per project, loaded lazily on selection.
 const flowsByProject = ref<Record<string, AttachedFlow[]>>({});
@@ -41,7 +41,7 @@ const error = ref("");
 onMounted(async () => {
   projects.value = await listProjects();
   try {
-    users.value = (await apiFetch<{ data: { id: string; displayName: string }[] }>("/api/v1/users")).data;
+    users.value = await listOrgMembers();
   } catch {
     users.value = [];
   }
@@ -291,6 +291,7 @@ async function handleSubmit() {
     <select
       v-model="assigneeUserId"
       class="create-form__select"
+      data-testid="task-create-assignee"
       @change="assigneeTouched = true"
     >
       <option value="">— select —</option>

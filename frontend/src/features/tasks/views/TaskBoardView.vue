@@ -3,6 +3,7 @@ import { ref, watch, onMounted, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getTasks, updateTask, type Task } from "@/api/tasks.api";
 import { createTransition } from "@/api/transitions.api";
+import { listOrgMembers, type OrgMember } from "@/api/org-members.api";
 import { apiFetch } from "@/api/client";
 import TaskColumn from "../components/TaskColumn.vue";
 import TaskCreateForm from "../components/TaskCreateForm.vue";
@@ -36,13 +37,7 @@ interface FlowStatus {
   sortOrder: number;
 }
 
-interface UserSummary {
-  id: string;
-  displayName: string;
-  actorType: string;
-}
-
-const users = ref<UserSummary[]>([]);
+const users = ref<OrgMember[]>([]);
 const errorBanner = ref<string | null>(null);
 let errorTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -115,7 +110,7 @@ async function loadTasks() {
 
 async function loadUsers() {
   try {
-    users.value = (await apiFetch<{ data: UserSummary[] }>("/api/v1/users")).data;
+    users.value = await listOrgMembers();
   } catch {
     users.value = [];
   }

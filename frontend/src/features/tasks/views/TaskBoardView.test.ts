@@ -7,6 +7,7 @@ import type { Task } from "@/api/tasks.api";
 const getTasks = vi.fn();
 const updateTask = vi.fn();
 const createTransition = vi.fn();
+const listOrgMembers = vi.fn();
 const apiFetch = vi.fn();
 
 vi.mock("@/api/tasks.api", () => ({
@@ -15,6 +16,9 @@ vi.mock("@/api/tasks.api", () => ({
 }));
 vi.mock("@/api/transitions.api", () => ({
   createTransition: (...a: unknown[]) => createTransition(...a),
+}));
+vi.mock("@/api/org-members.api", () => ({
+  listOrgMembers: (...a: unknown[]) => listOrgMembers(...a),
 }));
 vi.mock("@/api/client", () => ({
   apiFetch: (...a: unknown[]) => apiFetch(...a),
@@ -73,10 +77,11 @@ beforeEach(() => {
   getTasks.mockReset();
   updateTask.mockReset();
   createTransition.mockReset();
+  listOrgMembers.mockReset();
   apiFetch.mockReset();
+  listOrgMembers.mockResolvedValue([ALICE, BOB]);
   apiFetch.mockImplementation((url: string) => {
     if (url === "/api/v1/teams") return Promise.resolve({ data: [] });
-    if (url === "/api/v1/users") return Promise.resolve({ data: [ALICE, BOB] });
     return Promise.resolve({ data: [] });
   });
 });
