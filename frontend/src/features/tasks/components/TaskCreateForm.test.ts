@@ -10,6 +10,7 @@ const listFlowStatuses = vi.fn();
 const listLabels = vi.fn();
 const attachLabelToTask = vi.fn();
 const createTransition = vi.fn();
+const listOrgMembers = vi.fn();
 const apiFetch = vi.fn();
 
 vi.mock("@/api/tasks.api", () => ({
@@ -29,6 +30,9 @@ vi.mock("@/api/labels.api", () => ({
 }));
 vi.mock("@/api/transitions.api", () => ({
   createTransition: (...a: unknown[]) => createTransition(...a),
+}));
+vi.mock("@/api/org-members.api", () => ({
+  listOrgMembers: (...a: unknown[]) => listOrgMembers(...a),
 }));
 vi.mock("@/api/client", () => ({
   apiFetch: (...a: unknown[]) => apiFetch(...a),
@@ -63,6 +67,7 @@ beforeEach(() => {
   listLabels.mockReset();
   attachLabelToTask.mockReset();
   createTransition.mockReset();
+  listOrgMembers.mockReset();
   apiFetch.mockReset();
 
   listProjects.mockResolvedValue([PROJECT]);
@@ -72,10 +77,8 @@ beforeEach(() => {
   listLabels.mockResolvedValue([LABEL_BUG, LABEL_UX]);
   attachLabelToTask.mockResolvedValue(undefined);
   createTransition.mockResolvedValue({ success: true });
-  apiFetch.mockImplementation((url: string) => {
-    if (url === "/api/v1/users") return Promise.resolve({ data: [ALICE] });
-    return Promise.resolve({ data: [] });
-  });
+  listOrgMembers.mockResolvedValue([ALICE]);
+  apiFetch.mockResolvedValue({ data: [] });
   createTask.mockResolvedValue({
     id: "t-99",
     displayId: "TF-1",
@@ -191,6 +194,24 @@ describe("TaskCreateForm — no preset flow", () => {
     const options = flowSelect.findAll("option").map((o) => o.attributes("value"));
     expect(options).toContain("feature");
     expect(options).toContain("bug");
+  });
+});
+
+describe("TaskCreateForm — assignee picker (BUG-18)", () => {
+  it("populates the assignee dropdown from listOrgMembers, so org Owners (who 403 on /api/v1/users) can still pick assignees", async () => {
+    const BOB = { id: "u-2", displayName: "Bob", actorType: "human" };
+    listOrgMembers.mockResolvedValue([ALICE, BOB]);
+    apiFetch.mockRejectedValue(
+      Object.assign(new Error("Forbidden"), { status: 403 }),
+    );
+
+    const wrapper = await mountForm({ flow: "feature" });
+    await pickFirstProject(wrapper);
+
+    const select = wrapper.get('select[data-testid="task-create-assignee"]');
+    const optionTexts = select.findAll("option").map((o) => o.text());
+    expect(optionTexts).toContain("Alice");
+    expect(optionTexts).toContain("Bob");
   });
 });
 

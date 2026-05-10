@@ -4,13 +4,14 @@ import { useRouter } from "vue-router";
 import ProjectForm from "@/features/projects/components/ProjectForm.vue";
 import { createProject } from "@/api/projects.api";
 import { fetchTeams, type Team } from "@/api/teams.api";
+import { listOrgMembers, type OrgMember } from "@/api/org-members.api";
 import { apiFetch } from "@/api/client";
 
 const router = useRouter();
 
 const teams = ref<Team[]>([]);
 const flows = ref<{ id: string; slug: string; name: string }[]>([]);
-const users = ref<{ id: string; displayName: string }[]>([]);
+const users = ref<OrgMember[]>([]);
 const submitting = ref(false);
 const error = ref<string | null>(null);
 
@@ -25,8 +26,7 @@ onMounted(async () => {
     flows.value = [];
   }
   try {
-    const res = await apiFetch<{ data: { id: string; displayName: string }[] }>("/api/v1/users");
-    users.value = res.data;
+    users.value = await listOrgMembers();
   } catch {
     users.value = [];
   }

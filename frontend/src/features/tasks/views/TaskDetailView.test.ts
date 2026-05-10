@@ -11,7 +11,7 @@ const updateTask = vi.fn();
 const getTransitions = vi.fn();
 const getAvailableTransitions = vi.fn();
 const getComments = vi.fn();
-const apiFetch = vi.fn();
+const listOrgMembers = vi.fn();
 
 vi.mock("@/api/tasks.api", () => ({
   getTask: (...a: unknown[]) => getTask(...a),
@@ -27,8 +27,8 @@ vi.mock("@/api/comments.api", () => ({
   createComment: vi.fn(),
   deleteComment: vi.fn(),
 }));
-vi.mock("@/api/client", () => ({
-  apiFetch: (...a: unknown[]) => apiFetch(...a),
+vi.mock("@/api/org-members.api", () => ({
+  listOrgMembers: (...a: unknown[]) => listOrgMembers(...a),
 }));
 vi.mock("@/api/labels.api", () => ({
   listLabels: vi.fn().mockResolvedValue([]),
@@ -119,12 +119,12 @@ beforeEach(() => {
   getTransitions.mockReset();
   getAvailableTransitions.mockReset();
   getComments.mockReset();
-  apiFetch.mockReset();
+  listOrgMembers.mockReset();
   getTask.mockResolvedValue(taskFixture());
   getTransitions.mockResolvedValue({ data: [transitionFixture()] });
   getAvailableTransitions.mockResolvedValue({ data: [] });
   getComments.mockResolvedValue({ data: [commentFixture()] });
-  apiFetch.mockResolvedValue({ data: [] });
+  listOrgMembers.mockResolvedValue([]);
 });
 
 describe("TaskDetailView — transition status options", () => {
@@ -273,11 +273,7 @@ describe("TaskDetailView — agent actor display", () => {
 
 describe("TaskDetailView — standalone reassignment", () => {
   function mockUsers() {
-    apiFetch.mockImplementation((url: string) => {
-      if (url === "/api/v1/users")
-        return Promise.resolve({ data: [HUMAN, AGENT] });
-      return Promise.resolve({ data: [] });
-    });
+    listOrgMembers.mockResolvedValue([HUMAN, AGENT]);
   }
 
   it("renders a clickable assignee chip showing the current assignee", async () => {

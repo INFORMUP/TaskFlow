@@ -10,7 +10,7 @@ import {
   type AvailableStatus,
 } from "@/api/transitions.api";
 import { getComments, createComment, deleteComment, type Comment } from "@/api/comments.api";
-import { apiFetch } from "@/api/client";
+import { listOrgMembers, type OrgMember } from "@/api/org-members.api";
 import MarkdownView from "@/features/tasks/components/MarkdownView.vue";
 import TaskCodeLinksSection from "@/features/tasks/components/TaskCodeLinksSection.vue";
 import TaskBlockersSection from "@/features/tasks/components/TaskBlockersSection.vue";
@@ -40,7 +40,7 @@ const transitionError = ref("");
 const newComment = ref("");
 
 // Users (for reassign dropdown and standalone picker)
-const users = ref<{ id: string; displayName: string; actorType: string }[]>([]);
+const users = ref<OrgMember[]>([]);
 
 // Standalone assignee picker state
 const showAssigneePicker = ref(false);
@@ -146,7 +146,7 @@ function goBack() {
 onMounted(async () => {
   await loadAll();
   try {
-    users.value = (await apiFetch<{ data: any[] }>("/api/v1/users")).data;
+    users.value = await listOrgMembers();
   } catch {
     users.value = [];
   }
