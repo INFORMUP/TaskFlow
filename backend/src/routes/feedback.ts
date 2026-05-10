@@ -3,7 +3,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { CommonErrorResponses, ErrorResponse, IdParams } from "./_schemas.js";
 import { config } from "../config.js";
-import { createTask } from "../services/task.service.js";
+import { createTask, TaskServiceError } from "../services/task.service.js";
 import {
   FEEDBACK_BOT_DISPLAY_NAME,
   FEEDBACK_BOT_USER_ID,
@@ -20,6 +20,27 @@ const FEEDBACK_TYPE_TO_FLOW_SLUG: Record<string, string> = {
   FEATURE: "feature",
   IMPROVEMENT: "improvement",
 };
+
+const TASK_LINK_STATUSES = [
+  "pending",
+  "linked",
+  "skipped_no_config",
+  "skipped_no_project",
+  "skipped_no_flow",
+  "failed_create",
+  "failed_link",
+] as const;
+type TaskLinkStatus = (typeof TASK_LINK_STATUSES)[number];
+
+const TaskLinkStatusSchema = Type.Union(
+  TASK_LINK_STATUSES.map((s) => Type.Literal(s)),
+);
+
+const ERROR_MAX_LEN = 1000;
+function truncateError(message: string): string {
+  if (message.length <= ERROR_MAX_LEN) return message;
+  return message.slice(0, ERROR_MAX_LEN - 1) + "…";
+}
 
 function truncateTitle(message: string, max = 80): string {
   const oneLine = message.replace(/\s+/g, " ").trim();
@@ -38,6 +59,8 @@ const FeedbackRecord = Type.Object(
     adminNotes: Type.Union([Type.String(), Type.Null()]),
     archivedAt: Type.Union([Type.String(), Type.Null()]),
     taskId: Type.Union([Type.String(), Type.Null()]),
+    taskLinkStatus: TaskLinkStatusSchema,
+    taskLinkError: Type.Union([Type.String(), Type.Null()]),
     createdAt: Type.String(),
   },
   { additionalProperties: true },
@@ -77,6 +100,7 @@ const ListQuery = Type.Object({
   page: Type.Optional(Type.Integer({ minimum: 1 })),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
   archived: Type.Optional(Type.Boolean()),
+  taskLinkStatus: Type.Optional(TaskLinkStatusSchema),
 });
 
 const ListResponse = Type.Object(
@@ -118,16 +142,13 @@ function csvEscape(value: unknown): string {
   return s;
 }
 
-interface TryCreateProductTaskInput {
+interface AttemptInput {
   feedbackType: "BUG" | "FEATURE" | "IMPROVEMENT";
   message: string;
   page: string | null;
   log: FastifyRequest["log"];
 }
 
-// Cache the upsert per process so we don't write on every feedback POST.
-// The seeder also creates this user; the upsert is defense-in-depth for
-// environments where the seed hasn't been re-run after this change shipped.
 let feedbackBotEnsured: Promise<void> | null = null;
 function ensureFeedbackBotUser(): Promise<void> {
   if (!feedbackBotEnsured) {
@@ -152,11 +173,15 @@ function ensureFeedbackBotUser(): Promise<void> {
   return feedbackBotEnsured;
 }
 
-async function tryCreateProductTask(
-  input: TryCreateProductTaskInput,
-): Promise<string | null> {
+async function createProductTaskOnly(input: AttemptInput): Promise<{
+  taskId: string | null;
+  status: TaskLinkStatus;
+  error: string | null;
+}> {
   const { productProjectOrgId, productProjectKey } = config;
-  if (!productProjectOrgId) return null;
+  if (!productProjectOrgId) {
+    return { taskId: null, status: "skipped_no_config", error: null };
+  }
 
   const project = await prisma.project.findFirst({
     where: { orgId: productProjectOrgId, key: productProjectKey },
@@ -167,14 +192,10 @@ async function tryCreateProductTask(
       { productProjectOrgId, productProjectKey },
       "feedback: product project not found; skipping task creation",
     );
-    return null;
+    return { taskId: null, status: "skipped_no_project", error: null };
   }
 
   const flowSlug = FEEDBACK_TYPE_TO_FLOW_SLUG[input.feedbackType];
-  // Submitter attribution intentionally omitted from the task description —
-  // the Feedback row (orgId, userId, taskId) is the structured admin-only
-  // surface for that. Keeping it out of description avoids leaking submitter
-  // identity to product-org members who can read the task.
   const description =
     `${input.message}\n\n` +
     `---\nSubmitted via in-app feedback bubble.` +
@@ -198,15 +219,51 @@ async function tryCreateProductTask(
         { productProjectOrgId, productProjectKey, flowSlug, projectId: project.id },
         "feedback: flow not found in product org; skipping task creation",
       );
-      return null;
+      return { taskId: null, status: "skipped_no_flow", error: null };
     }
-    return task.id;
+    return { taskId: task.id, status: "linked", error: null };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Flow exists in the org but the product project doesn't have it attached
+    // — this is a misconfiguration rather than an unexpected error, so admins
+    // see it as a `skipped_no_flow` rather than `failed_create`.
+    if (err instanceof TaskServiceError && err.code === "FLOW_NOT_IN_PROJECTS") {
+      input.log.warn(
+        { flowSlug, projectId: project.id },
+        "feedback: flow not attached to product project; skipping task creation",
+      );
+      return { taskId: null, status: "skipped_no_flow", error: null };
+    }
     input.log.error(
       { err, flowSlug, projectId: project.id },
       "feedback: failed to create product task",
     );
-    return null;
+    return {
+      taskId: null,
+      status: "failed_create",
+      error: truncateError(message),
+    };
+  }
+}
+
+async function attemptLink(
+  feedbackId: string,
+  taskId: string,
+  log: FastifyRequest["log"],
+): Promise<{ status: TaskLinkStatus; error: string | null }> {
+  try {
+    await prisma.feedback.update({
+      where: { id: feedbackId },
+      data: { taskId, taskLinkStatus: "linked", taskLinkError: null },
+    });
+    return { status: "linked", error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error(
+      { err, feedbackId, taskId },
+      "feedback: created task but failed to link it to feedback row (orphan task)",
+    );
+    return { status: "failed_link", error: truncateError(message) };
   }
 }
 
@@ -236,9 +293,6 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           },
         });
       }
-      // Insert the feedback row first so a task-creation failure can't
-      // produce an orphan task with no feedback link. Then create the task,
-      // then update the row with the resulting taskId.
       const created = await prisma.feedback.create({
         data: {
           orgId: request.org.id,
@@ -248,27 +302,33 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           page: page ?? null,
         },
       });
-      const taskId = await tryCreateProductTask({
+      const attempt = await createProductTaskOnly({
         feedbackType: type,
         message: trimmed,
         page: page ?? null,
         log: request.log,
       });
-      if (taskId) {
-        try {
-          const updated = await prisma.feedback.update({
+
+      if (attempt.taskId) {
+        const link = await attemptLink(created.id, attempt.taskId, request.log);
+        if (link.status === "linked") {
+          const updated = await prisma.feedback.findUnique({
             where: { id: created.id },
-            data: { taskId },
           });
           return reply.status(201).send(updated);
-        } catch (err) {
-          request.log.error(
-            { err, feedbackId: created.id, taskId },
-            "feedback: created task but failed to link it to feedback row (orphan task)",
-          );
         }
+        const updated = await prisma.feedback.update({
+          where: { id: created.id },
+          data: { taskLinkStatus: "failed_link", taskLinkError: link.error },
+        });
+        return reply.status(201).send(updated);
       }
-      return reply.status(201).send(created);
+
+      const updated = await prisma.feedback.update({
+        where: { id: created.id },
+        data: { taskLinkStatus: attempt.status, taskLinkError: attempt.error },
+      });
+      return reply.status(201).send(updated);
     },
   );
 
@@ -290,10 +350,12 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
       const page = request.query.page ?? 1;
       const limit = request.query.limit ?? 20;
       const archived = request.query.archived ?? false;
+      const taskLinkStatus = request.query.taskLinkStatus;
 
       const where = {
         orgId: request.org.id,
         archivedAt: archived ? { not: null } : null,
+        ...(taskLinkStatus ? { taskLinkStatus } : {}),
       };
 
       const [rows, total] = await Promise.all([
@@ -425,6 +487,85 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
       const updated = await prisma.feedback.update({
         where: { id },
         data: { archivedAt: request.body.archived ? new Date() : null },
+      });
+      return updated;
+    },
+  );
+
+  fastify.post<{ Params: Static<typeof IdParams> }>(
+    "/api/v1/feedback/:id/retry-link",
+    {
+      schema: {
+        summary: "Retry task creation/linking on a failed feedback row (admin)",
+        tags: ["feedback"],
+        params: IdParams,
+        response: {
+          200: FeedbackRecord,
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!requireAdmin(request, reply)) return;
+      const { id } = request.params;
+      const existing = await prisma.feedback.findFirst({
+        where: { id, orgId: request.org.id },
+      });
+      if (!existing) return sendNotFound(reply);
+
+      if (
+        existing.taskLinkStatus !== "failed_create" &&
+        existing.taskLinkStatus !== "failed_link"
+      ) {
+        return reply.status(409).send({
+          error: {
+            code: "INVALID_STATE",
+            message: `Cannot retry from status '${existing.taskLinkStatus}'`,
+          },
+        });
+      }
+
+      if (existing.taskLinkStatus === "failed_link" && existing.taskId) {
+        const link = await attemptLink(id, existing.taskId, request.log);
+        const updated = await prisma.feedback.update({
+          where: { id },
+          data: {
+            taskLinkStatus: link.status,
+            taskLinkError: link.error,
+          },
+        });
+        return updated;
+      }
+
+      const attempt = await createProductTaskOnly({
+        feedbackType: existing.type as "BUG" | "FEATURE" | "IMPROVEMENT",
+        message: existing.message,
+        page: existing.page,
+        log: request.log,
+      });
+
+      if (attempt.taskId) {
+        const link = await attemptLink(id, attempt.taskId, request.log);
+        if (link.status === "linked") {
+          const updated = await prisma.feedback.findUnique({ where: { id } });
+          return updated;
+        }
+        const updated = await prisma.feedback.update({
+          where: { id },
+          data: {
+            taskLinkStatus: "failed_link",
+            taskLinkError: link.error,
+          },
+        });
+        return updated;
+      }
+
+      const updated = await prisma.feedback.update({
+        where: { id },
+        data: {
+          taskLinkStatus: attempt.status,
+          taskLinkError: attempt.error,
+        },
       });
       return updated;
     },

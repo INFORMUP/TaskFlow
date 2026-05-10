@@ -7,6 +7,7 @@ import type { Transition } from "@/api/transitions.api";
 import type { Comment } from "@/api/comments.api";
 
 const getTask = vi.fn();
+const updateTask = vi.fn();
 const getTransitions = vi.fn();
 const getAvailableTransitions = vi.fn();
 const getComments = vi.fn();
@@ -14,6 +15,7 @@ const apiFetch = vi.fn();
 
 vi.mock("@/api/tasks.api", () => ({
   getTask: (...a: unknown[]) => getTask(...a),
+  updateTask: (...a: unknown[]) => updateTask(...a),
 }));
 vi.mock("@/api/transitions.api", () => ({
   getTransitions: (...a: unknown[]) => getTransitions(...a),
@@ -113,6 +115,7 @@ async function mountDetail() {
 
 beforeEach(() => {
   getTask.mockReset();
+  updateTask.mockReset();
   getTransitions.mockReset();
   getAvailableTransitions.mockReset();
   getComments.mockReset();
@@ -265,5 +268,101 @@ describe("TaskDetailView — agent actor display", () => {
     expect(wrapper.find("[data-testid='actor-agent-badge']").exists()).toBe(
       false
     );
+  });
+});
+
+describe("TaskDetailView — standalone reassignment", () => {
+  function mockUsers() {
+    apiFetch.mockImplementation((url: string) => {
+      if (url === "/api/v1/users")
+        return Promise.resolve({ data: [HUMAN, AGENT] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  it("renders a clickable assignee chip showing the current assignee", async () => {
+    const wrapper = await mountDetail();
+    const btn = wrapper.find("[data-testid='detail-assignee-btn']");
+    expect(btn.exists()).toBe(true);
+    expect(btn.text()).toContain("Agent-42");
+    expect(btn.attributes("aria-label")).toContain("Reassign");
+  });
+
+  it("shows 'Unassigned' when task has no assignee", async () => {
+    getTask.mockResolvedValue(taskFixture({ assignee: null }));
+    const wrapper = await mountDetail();
+    const btn = wrapper.find("[data-testid='detail-assignee-btn']");
+    expect(btn.exists()).toBe(true);
+    expect(btn.text()).toContain("Unassigned");
+    expect(btn.attributes("aria-label")).toBe("Assign");
+  });
+
+  it("opens the AssigneePicker when the assignee chip is clicked", async () => {
+    mockUsers();
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-assignee-btn']").trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".picker").exists()).toBe(true);
+  });
+
+  it("PATCHes assigneeUserId when a user is picked", async () => {
+    mockUsers();
+    updateTask.mockResolvedValue(taskFixture({ assignee: HUMAN }));
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-assignee-btn']").trigger("click");
+    await flushPromises();
+    const aliceOption = wrapper
+      .findAll(".picker__option")
+      .find((o) => o.text().includes("Alice"));
+    expect(aliceOption).toBeTruthy();
+    await aliceOption!.trigger("click");
+    await flushPromises();
+    expect(updateTask).toHaveBeenCalledWith("t-1", { assigneeUserId: "u-human" });
+  });
+
+  it("PATCHes assigneeUserId=null when 'Unassigned' is picked", async () => {
+    mockUsers();
+    updateTask.mockResolvedValue(taskFixture({ assignee: null }));
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-assignee-btn']").trigger("click");
+    await flushPromises();
+    const unassignedOption = wrapper
+      .findAll(".picker__option")
+      .find((o) => o.text().trim() === "Unassigned");
+    expect(unassignedOption).toBeTruthy();
+    await unassignedOption!.trigger("click");
+    await flushPromises();
+    expect(updateTask).toHaveBeenCalledWith("t-1", { assigneeUserId: null });
+  });
+
+  it("updates the displayed assignee after a successful reassignment", async () => {
+    mockUsers();
+    updateTask.mockResolvedValue(taskFixture({ assignee: HUMAN }));
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-assignee-btn']").trigger("click");
+    await flushPromises();
+    const aliceOption = wrapper
+      .findAll(".picker__option")
+      .find((o) => o.text().includes("Alice"))!;
+    await aliceOption.trigger("click");
+    await flushPromises();
+    const btn = wrapper.find("[data-testid='detail-assignee-btn']");
+    expect(btn.text()).toContain("Alice");
+  });
+
+  it("shows an error message when reassignment fails", async () => {
+    mockUsers();
+    updateTask.mockRejectedValue({ error: { message: "Forbidden" } });
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-assignee-btn']").trigger("click");
+    await flushPromises();
+    const aliceOption = wrapper
+      .findAll(".picker__option")
+      .find((o) => o.text().includes("Alice"))!;
+    await aliceOption.trigger("click");
+    await flushPromises();
+    const err = wrapper.find("[data-testid='detail-assignee-error']");
+    expect(err.exists()).toBe(true);
+    expect(err.text()).toContain("Forbidden");
   });
 });

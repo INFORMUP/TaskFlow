@@ -18,6 +18,12 @@ const routes: RouteRecordRaw[] = [
     redirect: "/flows",
   },
   {
+    path: "/tasks/new",
+    name: "task-new",
+    component: () => import("@/features/tasks/views/TaskNewView.vue"),
+    meta: { layout: "app" },
+  },
+  {
     path: "/flows",
     name: "flow-list",
     component: () => import("@/features/flows/views/FlowListView.vue"),
@@ -63,6 +69,13 @@ const routes: RouteRecordRaw[] = [
     path: "/organization",
     name: "organization",
     component: () => import("@/features/organization/views/OrganizationView.vue"),
+    meta: { layout: "app" },
+  },
+  {
+    path: "/organization/feedback",
+    name: "organization-feedback",
+    component: () =>
+      import("@/features/feedback-admin/views/FeedbackAdminView.vue"),
     meta: { layout: "app" },
   },
   {

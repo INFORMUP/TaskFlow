@@ -59,7 +59,7 @@ With either unset, feedback persists without an associated task.
 
 ## TaskFlow Workflow Skills
 
-The `feature` flow runs `discuss → design → prototype → implement → validate → review → closed`. Each stage has a slash command that wraps the API and enforces the right guardrails. Skills live in `.claude/commands/` and are scoped to this repo.
+The `feature` flow runs `discuss → design → prototype → implement → validate → staging → closed`. Each stage has a slash command that wraps the API and enforces the right guardrails. Skills live in `.claude/commands/` and are scoped to this repo.
 
 | Skill | Stage | What it does |
 |---|---|---|
@@ -67,7 +67,7 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 | `/design <task>` | `design` | Reads task + comments + relevant code, posts a structured spec (goal, user stories, acceptance criteria, technical approach, out-of-scope, open questions) as a comment. Offers transition to `prototype`. |
 | `/transition <task> <status> [note]` | any | Escape hatch — moves a task to any status. Use for backward bounces (`design → discuss`), closing transitions (asks for resolution), and one-offs the workflow skills don't cover. |
 | `/implement <task>` | `implement` (feature/improvement) or `resolve` (bug) | Creates a worktree at `.claude/worktrees/<task-id>/` on `feat/<task-id>-<slug>` (or `fix/...` for bug flow) off `origin/staging`. TDD-implements, opens PR targeting `staging`, links the PR via `POST /api/v1/tasks/{id}/pull-requests`. Offers transition to `validate`. |
-| `/validate <task>` | `validate` | Reviews the linked PR against the design spec's acceptance criteria. Posts an APPROVE / REQUEST_CHANGES / COMMENT review on GitHub with a criterion-by-criterion checklist. If approved, offers transition to `review`. |
+| `/validate <task>` | `validate` | Reviews the linked PR against the design spec's acceptance criteria. Posts an APPROVE / REQUEST_CHANGES / COMMENT review on GitHub with a criterion-by-criterion checklist. If approved, offers transition to `staging`. |
 | `/address-review <task-or-PR>` | `validate` | Inverse of `/validate`. Pulls every reviewer comment (review summaries + inline + conversation), triages each as Fix/Reply/Defer, makes the fixes, replies to every comment, re-requests review. Does not transition — re-validation is `/validate` again. |
 | `/walk <task>` | any | Generic stage-by-stage driver. Picks the task up at its current status (any flow), does that stage's work, and **prompts before every transition**. Careful counterpart to `/fast-track`: same per-stage automation, but a human "yes" gates each forward move. |
 | `/taskflow-query <question>` | — | Read-only query over TaskFlow. List/filter tasks, look up projects, count work in a status, etc. Never mutates — refuses action verbs and points at the right action skill. |
@@ -80,9 +80,9 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 - **Permission matrix matters.** Skills surface 403s without retrying. Examples encoded in `backend/src/services/permission.service.ts`:
   - `feature.design` requires `product` team
   - `feature.prototype` / `feature.implement` / `feature.validate` requires `engineer` or `agent`
-  - `feature.review` requires `engineer` or `product`
+  - `feature.staging` requires `engineer` or `product`
 - **Transition notes are optional.** The server accepts transitions without a `note`. Skills should include one only when context genuinely matters (backward bounces, closing transitions); routine forward moves can omit it.
-- **`closed` is terminal.** There is intentionally no `verify`/`monitor` stage between `review` and `closed`. Prod regressions are tracked as fresh `BUG` tasks, not as a per-task verification gate. Revisit only when a real prod miss creates the need.
+- **`closed` is terminal.** There is intentionally no `verify`/`monitor` stage between `staging` and `closed`. Prod regressions are tracked as fresh `BUG` tasks, not as a per-task verification gate. Revisit only when a real prod miss creates the need.
 
 ## API Tokens (local scripts)
 - Personal API tokens for taskflow.informup.org used by local scripts (e.g. issue importers) live at `~/.taskflow-import-token` (chmod 600). Read via `process.env` after sourcing, or `fs.readFileSync` directly. Do not commit tokens to the repo or place them in `backend/.env`.

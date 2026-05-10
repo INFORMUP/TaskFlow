@@ -28,21 +28,21 @@ const BUG_TRANSITIONS: TransitionDef[] = [
   { from: "resolve", to: "closed" },
 ];
 
-// Feature: Discuss → Design → Prototype → Implement → Validate → Review → Closed
+// Feature: Discuss → Design → Prototype → Implement → Validate → Staging → Closed
 const FEATURE_TRANSITIONS: TransitionDef[] = [
   // Forward
   { from: "discuss", to: "design" },
   { from: "design", to: "prototype" },
   { from: "prototype", to: "implement" },
   { from: "implement", to: "validate" },
-  { from: "validate", to: "review" },
-  { from: "review", to: "closed" },
+  { from: "validate", to: "staging" },
+  { from: "staging", to: "closed" },
   // Backward
   { from: "design", to: "discuss" },
   { from: "prototype", to: "design" },
   { from: "implement", to: "design" },
   { from: "validate", to: "implement" },
-  { from: "review", to: "implement" },
+  { from: "staging", to: "implement" },
   // Any-to-Closed
   { from: "discuss", to: "closed" },
   { from: "design", to: "closed" },

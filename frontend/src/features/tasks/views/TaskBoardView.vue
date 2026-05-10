@@ -80,7 +80,7 @@ async function loadStatuses() {
       { id: "3", slug: "prototype", name: "Prototype", sortOrder: 3 },
       { id: "4", slug: "implement", name: "Implement", sortOrder: 4 },
       { id: "5", slug: "validate", name: "Validate", sortOrder: 5 },
-      { id: "6", slug: "review", name: "Review", sortOrder: 6 },
+      { id: "6", slug: "staging", name: "Staging", sortOrder: 6 },
       { id: "7", slug: "closed", name: "Closed", sortOrder: 7 },
     ],
     improvement: [
@@ -301,6 +301,7 @@ onMounted(async () => {
       v-else-if="filters.view === 'list'"
       :tasks="tasks"
       :flow="flowSlug"
+      @request-assignee-pick="handleAssigneePick"
     />
     <div v-else class="board__columns">
       <TaskColumn
