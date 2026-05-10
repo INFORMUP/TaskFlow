@@ -140,7 +140,7 @@ const TRANSITION_PERMISSIONS: Record<string, Record<string, string[]>> = {
     prototype: ["engineer", "agent"],
     implement: ["engineer", "agent"],
     validate:  ["engineer", "agent"],
-    review:    ["engineer", "product"],
+    staging:   ["engineer", "product"],
     closed:    ["product", "engineer"],
   },
   improvement: {

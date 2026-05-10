@@ -39,7 +39,7 @@ describe("seeded sample task visibility", () => {
   });
 
   describe("what each seeded persona sees (demo content delivery)", () => {
-    it("Max (engineer) sees all 19 seeded tasks", async () => {
+    it("Max (engineer) sees all 28 seeded tasks", async () => {
       const app = await buildApp();
       const response = await app.inject({
         method: "GET",
@@ -47,10 +47,10 @@ describe("seeded sample task visibility", () => {
         headers: { authorization: `Bearer ${mintTestToken(USER_ID_MAX)}` },
       });
       expect(response.statusCode).toBe(200);
-      expect(response.json().data).toHaveLength(19);
+      expect(response.json().data).toHaveLength(28);
     });
 
-    it("Priya (product) sees all 19 seeded tasks", async () => {
+    it("Priya (product) sees all 28 seeded tasks", async () => {
       // Product has view:all on every flow — the 'comment only' restriction
       // on improvements is an action permission, not a view scope.
       const app = await buildApp();
@@ -60,7 +60,7 @@ describe("seeded sample task visibility", () => {
         headers: { authorization: `Bearer ${mintTestToken(USER_ID_PRIYA)}` },
       });
       expect(response.statusCode).toBe(200);
-      expect(response.json().data).toHaveLength(19);
+      expect(response.json().data).toHaveLength(28);
     });
 
     it("Sam (user team) sees exactly the 5 tasks they created", async () => {
@@ -99,24 +99,24 @@ describe("seeded sample task visibility", () => {
   });
 
   describe("what a freshly OAuth'd user on team X sees (view scope enforcement)", () => {
-    it("fresh engineer-team user sees all 19 seeded tasks", async () => {
+    it("fresh engineer-team user sees all 28 seeded tasks", async () => {
       const app = await buildApp();
       const response = await app.inject({
         method: "GET",
         url: "/api/v1/tasks?limit=100",
         headers: { authorization: `Bearer ${mintTestToken(TEST_ENGINEER_ID)}` },
       });
-      expect(response.json().data).toHaveLength(19);
+      expect(response.json().data).toHaveLength(28);
     });
 
-    it("fresh product-team user sees all 19 seeded tasks", async () => {
+    it("fresh product-team user sees all 28 seeded tasks", async () => {
       const app = await buildApp();
       const response = await app.inject({
         method: "GET",
         url: "/api/v1/tasks?limit=100",
         headers: { authorization: `Bearer ${mintTestToken(TEST_PRODUCT_ID)}` },
       });
-      expect(response.json().data).toHaveLength(19);
+      expect(response.json().data).toHaveLength(28);
     });
 
     it("fresh user-team user sees 0 seeded tasks (own_public scope)", async () => {

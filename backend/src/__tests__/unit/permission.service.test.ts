@@ -153,10 +153,10 @@ describe("permission.service", () => {
       expect(canTransitionToStatus(["engineer"], "feature", "validate")).toBe(true);
     });
 
-    it("product can transition feature to discuss, design, review, closed", () => {
+    it("product can transition feature to discuss, design, staging, closed", () => {
       expect(canTransitionToStatus(["product"], "feature", "discuss")).toBe(true);
       expect(canTransitionToStatus(["product"], "feature", "design")).toBe(true);
-      expect(canTransitionToStatus(["product"], "feature", "review")).toBe(true);
+      expect(canTransitionToStatus(["product"], "feature", "staging")).toBe(true);
       expect(canTransitionToStatus(["product"], "feature", "closed")).toBe(true);
     });
 

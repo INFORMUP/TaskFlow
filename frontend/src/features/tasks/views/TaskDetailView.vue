@@ -263,6 +263,13 @@ onMounted(async () => {
     <!-- Blockers / blocked-by relationships -->
     <div class="detail__section">
       <TaskBlockersSection :task-id="task.id" @changed="loadAll" />
+      <router-link
+        class="detail__graph-link"
+        :to="`/tasks/${task.flow.slug}/${task.id}/graph`"
+        data-testid="task-graph-link"
+      >
+        Open graph view →
+      </router-link>
     </div>
 
     <!-- Transition history -->
@@ -470,6 +477,17 @@ onMounted(async () => {
 .detail__section h3 {
   margin-bottom: 0.75rem;
   font-size: 1rem;
+}
+
+.detail__graph-link {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-link, #2563eb);
+  text-decoration: none;
+}
+.detail__graph-link:hover {
+  text-decoration: underline;
 }
 
 .detail__error {
