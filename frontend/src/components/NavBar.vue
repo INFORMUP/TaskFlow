@@ -18,6 +18,11 @@ const canManageOrg = computed(
   () => org.activeOrg.value !== null && org.activeOrg.value.role !== "member"
 );
 
+const canViewFeedback = computed(() => {
+  const role = org.activeOrg.value?.role;
+  return role === "owner" || role === "admin";
+});
+
 const showTeamPicker = ref(false);
 
 const primaryTeamName = computed(() => {
@@ -74,11 +79,21 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
         v-if="canManageOrg"
         to="/organization"
         class="navbar__tab"
-        :class="{ 'navbar__tab--active': route.path.startsWith('/organization') }"
-        :aria-current="route.path.startsWith('/organization') ? 'page' : undefined"
+        :class="{ 'navbar__tab--active': route.path === '/organization' || route.path.startsWith('/organization/new') }"
+        :aria-current="route.path === '/organization' || route.path.startsWith('/organization/new') ? 'page' : undefined"
         data-testid="navbar-organization-link"
       >
         Organization
+      </router-link>
+      <router-link
+        v-if="canViewFeedback"
+        to="/organization/feedback"
+        class="navbar__tab"
+        :class="{ 'navbar__tab--active': route.path.startsWith('/organization/feedback') }"
+        :aria-current="route.path.startsWith('/organization/feedback') ? 'page' : undefined"
+        data-testid="navbar-feedback-link"
+      >
+        Feedback
       </router-link>
       <router-link
         to="/settings"
