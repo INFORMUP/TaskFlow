@@ -10,6 +10,7 @@ import {
 } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
 import { seedTestProjects, TEST_PROJECT_ID } from "../helpers/seed-test-projects.js";
+import { generateDisplayId } from "../../services/task.service.js";
 
 const prisma = new PrismaClient();
 
@@ -640,6 +641,50 @@ describe("tasks API", () => {
         payload: {},
       });
       expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe("generateDisplayId", () => {
+    it("returns the next number after the highest existing numeric suffix, regardless of createdAt order", async () => {
+      const bugFlow = await prisma.flow.findFirstOrThrow({ where: { slug: "bug" } });
+      const status = await prisma.flowStatus.findFirstOrThrow({
+        where: { flowId: bugFlow.id },
+        orderBy: { sortOrder: "asc" },
+      });
+
+      // Insert BUG-30 with an old createdAt and BUG-9 with a newer createdAt.
+      // The old (broken) implementation picked BUG-9 (most recent) → BUG-10
+      // which collides with already-existing BUG-10..BUG-30 in real data.
+      await prisma.task.create({
+        data: {
+          displayId: "BUG-30",
+          flowId: bugFlow.id,
+          currentStatusId: status.id,
+          title: "older but higher number",
+          priority: "low",
+          createdBy: TEST_ENGINEER_ID,
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+        },
+      });
+      await prisma.task.create({
+        data: {
+          displayId: "BUG-9",
+          flowId: bugFlow.id,
+          currentStatusId: status.id,
+          title: "newer but lower number",
+          priority: "low",
+          createdBy: TEST_ENGINEER_ID,
+          createdAt: new Date("2026-05-01T00:00:00Z"),
+        },
+      });
+
+      const next = await generateDisplayId("bug");
+      expect(next).toBe("BUG-31");
+    });
+
+    it("returns BUG-1 when no tasks exist for that flow", async () => {
+      const next = await generateDisplayId("bug");
+      expect(next).toBe("BUG-1");
     });
   });
 });

@@ -19,19 +19,21 @@ export async function generateDisplayId(flowSlug: string): Promise<string> {
   const flow = await prisma.flow.findFirst({ where: { slug: flowSlug } });
   if (!flow) throw new Error(`Flow not found: ${flowSlug}`);
 
-  // Find highest existing display_id number for this flow
-  const lastTask = await prisma.task.findFirst({
+  // Ordering by createdAt doesn't track the highest numeric suffix once tasks
+  // have been imported out of chronological order (e.g. GitHub-issue migration).
+  // Scan the column and take the numeric max.
+  const existing = await prisma.task.findMany({
     where: { displayId: { startsWith: `${prefix}-` } },
-    orderBy: { createdAt: "desc" },
+    select: { displayId: true },
   });
 
-  let nextNum = 1;
-  if (lastTask) {
-    const parts = lastTask.displayId.split("-");
-    nextNum = parseInt(parts[1], 10) + 1;
+  let maxNum = 0;
+  for (const t of existing) {
+    const n = parseInt(t.displayId.slice(prefix.length + 1), 10);
+    if (Number.isFinite(n) && n > maxNum) maxNum = n;
   }
 
-  return `${prefix}-${nextNum}`;
+  return `${prefix}-${maxNum + 1}`;
 }
 
 export async function getInitialStatus(flowId: string) {
