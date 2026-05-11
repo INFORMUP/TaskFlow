@@ -432,6 +432,19 @@ describe("feedback API: promote-to-task", () => {
 
   async function clearOrgFixtures() {
     await prisma.feedback.deleteMany({ where: { orgId: ORG_C_ID } });
+    // Deleting projects cascade-cleans projectFlows.
+    await prisma.project.deleteMany({ where: { orgId: ORG_C_ID } });
+    // Flow→FlowStatus has no cascade; clean statuses first.
+    const orgCFlows = await prisma.flow.findMany({
+      where: { orgId: ORG_C_ID },
+      select: { id: true },
+    });
+    const flowIds = orgCFlows.map((f) => f.id);
+    if (flowIds.length > 0) {
+      await prisma.flowTransition.deleteMany({ where: { flowId: { in: flowIds } } });
+      await prisma.flowStatus.deleteMany({ where: { flowId: { in: flowIds } } });
+      await prisma.flow.deleteMany({ where: { id: { in: flowIds } } });
+    }
     await prisma.orgMember.deleteMany({ where: { orgId: ORG_C_ID } });
     await prisma.organization.deleteMany({ where: { id: ORG_C_ID } });
     await prisma.user.deleteMany({ where: { id: ORG_C_OWNER_ID } });

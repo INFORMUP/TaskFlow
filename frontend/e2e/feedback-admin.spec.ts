@@ -4,6 +4,20 @@ import { createUserWithOrg, type TestUser } from "./helpers/test-user";
 
 const DEFAULT_ORG_ID = "2ee0765c-6028-54a4-a201-a639ff748972";
 
+async function joinEngineerTeam(userId: string) {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query(
+      `INSERT INTO user_teams (user_id, team_id, is_primary, granted_at)
+       SELECT $1, id, true, NOW() FROM teams WHERE slug = 'engineer'`,
+      [userId],
+    );
+  } finally {
+    await client.end();
+  }
+}
+
 async function authAndSkipModals(
   page: import("@playwright/test").Page,
   user: TestUser,
@@ -68,6 +82,7 @@ async function firstProjectId(): Promise<string> {
 test.describe("Admin feedback list", () => {
   test("admin can view feedback rows", async ({ page }) => {
     const user = await createUserWithOrg("owner");
+    await joinEngineerTeam(user.id);
     const stamp = Date.now();
     await seedFeedback(DEFAULT_ORG_ID, user.id, [
       { type: "BUG", message: `e2e list ${stamp}` },
@@ -83,6 +98,7 @@ test.describe("Admin feedback list", () => {
 
   test("admin promotes a feedback row into a task", async ({ page }) => {
     const user = await createUserWithOrg("owner");
+    await joinEngineerTeam(user.id);
     const stamp = Date.now();
     const [feedbackId] = await seedFeedback(DEFAULT_ORG_ID, user.id, [
       { type: "BUG", message: `e2e promote ${stamp}` },
