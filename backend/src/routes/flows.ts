@@ -10,9 +10,21 @@ import {
   VisualCustomizationError,
 } from "../services/visual-customization.js";
 
+const StatusBreakdownEntry = Type.Object({
+  status: Type.Object({
+    id: Type.String({ format: "uuid" }),
+    slug: Type.String(),
+    name: Type.String(),
+    color: Type.Union([Type.String(), Type.Null()]),
+    sortOrder: Type.Number(),
+  }),
+  count: Type.Integer({ minimum: 0 }),
+});
+
 const FlowStats = Type.Object({
   openCount: Type.Integer({ minimum: 0 }),
   assignedToMeCount: Type.Integer({ minimum: 0 }),
+  byStatus: Type.Array(StatusBreakdownEntry),
 });
 
 const FlowSummary = Type.Object(
@@ -84,7 +96,7 @@ export async function flowRoutes(fastify: FastifyInstance) {
         ...viewWhere,
       } as const;
 
-      const [openGroups, mineGroups] = await Promise.all([
+      const [openGroups, mineGroups, byStatusGroups, statuses] = await Promise.all([
         prisma.task.groupBy({
           by: ["flowId"],
           where: baseWhere,
@@ -95,23 +107,62 @@ export async function flowRoutes(fastify: FastifyInstance) {
           where: { ...baseWhere, assigneeId: userId },
           _count: { _all: true },
         }),
+        prisma.task.groupBy({
+          by: ["flowId", "currentStatusId"],
+          where: baseWhere,
+          _count: { _all: true },
+        }),
+        prisma.flowStatus.findMany({
+          where: { flowId: { in: flows.map((f) => f.id) } },
+          orderBy: [{ flowId: "asc" }, { sortOrder: "asc" }],
+        }),
       ]);
 
       const openByFlow = new Map(openGroups.map((g) => [g.flowId, g._count._all]));
       const mineByFlow = new Map(mineGroups.map((g) => [g.flowId, g._count._all]));
+      // Map<flowId, Map<statusId, count>>
+      const countsByFlowStatus = new Map<string, Map<string, number>>();
+      for (const g of byStatusGroups) {
+        if (!countsByFlowStatus.has(g.flowId)) {
+          countsByFlowStatus.set(g.flowId, new Map());
+        }
+        countsByFlowStatus.get(g.flowId)!.set(g.currentStatusId, g._count._all);
+      }
+      // Map<flowId, FlowStatus[]> excluding the `closed` status, sortOrder ascending
+      const statusesByFlow = new Map<string, typeof statuses>();
+      for (const s of statuses) {
+        if (s.slug === "closed") continue;
+        if (!statusesByFlow.has(s.flowId)) statusesByFlow.set(s.flowId, []);
+        statusesByFlow.get(s.flowId)!.push(s);
+      }
 
       return {
-        data: flows.map((f) => ({
-          id: f.id,
-          slug: f.slug,
-          name: f.name,
-          description: f.description,
-          icon: f.icon ?? null,
-          stats: {
-            openCount: openByFlow.get(f.id) ?? 0,
-            assignedToMeCount: mineByFlow.get(f.id) ?? 0,
-          },
-        })),
+        data: flows.map((f) => {
+          const flowStatuses = statusesByFlow.get(f.id) ?? [];
+          const flowCounts = countsByFlowStatus.get(f.id);
+          const byStatus = flowStatuses.map((s) => ({
+            status: {
+              id: s.id,
+              slug: s.slug,
+              name: s.name,
+              color: s.color ?? null,
+              sortOrder: s.sortOrder,
+            },
+            count: flowCounts?.get(s.id) ?? 0,
+          }));
+          return {
+            id: f.id,
+            slug: f.slug,
+            name: f.name,
+            description: f.description,
+            icon: f.icon ?? null,
+            stats: {
+              openCount: openByFlow.get(f.id) ?? 0,
+              assignedToMeCount: mineByFlow.get(f.id) ?? 0,
+              byStatus,
+            },
+          };
+        }),
       };
     }
   );
@@ -209,7 +260,7 @@ export async function flowRoutes(fastify: FastifyInstance) {
         name: updated.name,
         description: updated.description,
         icon: updated.icon ?? null,
-        stats: { openCount: 0, assignedToMeCount: 0 },
+        stats: { openCount: 0, assignedToMeCount: 0, byStatus: [] },
       };
     }
   );

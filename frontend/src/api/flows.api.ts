@@ -1,8 +1,20 @@
 import { apiFetch } from "@/api/client";
 
+export interface FlowStatusBreakdownEntry {
+  status: {
+    id: string;
+    slug: string;
+    name: string;
+    color: string | null;
+    sortOrder: number;
+  };
+  count: number;
+}
+
 export interface FlowStats {
   openCount: number;
   assignedToMeCount: number;
+  byStatus: FlowStatusBreakdownEntry[];
 }
 
 export interface Flow {
