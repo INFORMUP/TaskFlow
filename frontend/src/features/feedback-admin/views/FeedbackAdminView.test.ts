@@ -8,6 +8,7 @@ import type {
   FeedbackListResponse,
 } from "@/api/feedback.api";
 import type { Project } from "@/api/projects.api";
+import type { Flow } from "@/api/flows.api";
 import type { OrgMembership, OrgRole } from "@/api/organizations.api";
 
 const listFeedback = vi.fn();
@@ -16,6 +17,7 @@ const updateFeedbackNotes = vi.fn();
 const exportFeedbackCsv = vi.fn();
 const promoteFeedback = vi.fn();
 const listProjects = vi.fn();
+const listFlows = vi.fn();
 
 vi.mock("@/api/feedback.api", () => ({
   listFeedback: (...a: unknown[]) => listFeedback(...a),
@@ -27,6 +29,10 @@ vi.mock("@/api/feedback.api", () => ({
 
 vi.mock("@/api/projects.api", () => ({
   listProjects: (...a: unknown[]) => listProjects(...a),
+}));
+
+vi.mock("@/api/flows.api", () => ({
+  listFlows: (...a: unknown[]) => listFlows(...a),
 }));
 
 const routerReplace = vi.fn();
@@ -45,11 +51,30 @@ function row(overrides: Partial<FeedbackWithUser> = {}): FeedbackWithUser {
     adminNotes: null,
     archivedAt: null,
     taskId: null,
+    task: null,
     createdAt: new Date("2026-05-01T00:00:00Z").toISOString(),
     user: { displayName: "Alice", email: "a@x.com" },
     ...overrides,
   };
 }
+
+function flow(overrides: Partial<Flow> = {}): Flow {
+  return {
+    id: "flow-1",
+    slug: "feature",
+    name: "Feature",
+    description: null,
+    icon: null,
+    stats: { openCount: 0, assignedToMeCount: 0 },
+    ...overrides,
+  };
+}
+
+const DEFAULT_FLOWS: Flow[] = [
+  flow({ id: "flow-bug", slug: "bug", name: "Bug" }),
+  flow({ id: "flow-feat", slug: "feature", name: "Feature" }),
+  flow({ id: "flow-imp", slug: "improvement", name: "Improvement" }),
+];
 
 function page(rows: FeedbackWithUser[], opts: Partial<FeedbackListResponse> = {}): FeedbackListResponse {
   return {
@@ -108,9 +133,11 @@ beforeEach(() => {
   exportFeedbackCsv.mockReset();
   promoteFeedback.mockReset();
   listProjects.mockReset();
+  listFlows.mockReset();
   routerReplace.mockReset();
   listFeedback.mockResolvedValue(page([]));
   listProjects.mockResolvedValue([project()]);
+  listFlows.mockResolvedValue(DEFAULT_FLOWS);
 });
 
 describe("FeedbackAdminView", () => {
@@ -178,6 +205,22 @@ describe("FeedbackAdminView", () => {
       const link = w.find("[data-testid='feedback-task-link-fb-1']");
       expect(link.exists()).toBe(true);
       expect(link.attributes("href")).toBe("/tasks/feature/task-abc");
+    });
+
+    it("View task link uses the linked task's actual flow when type and flow diverge", async () => {
+      listFeedback.mockResolvedValue(
+        page([
+          row({
+            id: "fb-1",
+            type: "FEATURE",
+            taskId: "task-abc",
+            task: { flow: { slug: "improvement" } },
+          }),
+        ]),
+      );
+      const w = await mountAs("admin");
+      const link = w.find("[data-testid='feedback-task-link-fb-1']");
+      expect(link.attributes("href")).toBe("/tasks/improvement/task-abc");
     });
   });
 
@@ -269,11 +312,16 @@ describe("FeedbackAdminView", () => {
       ).toBeUndefined();
     });
 
-    it("calls promoteFeedback with the picked project and updates the row", async () => {
+    it("calls promoteFeedback with the picked project and the type-derived flow", async () => {
       listFeedback.mockResolvedValue(page([row({ id: "fb-1", type: "FEATURE" })]));
       listProjects.mockResolvedValue([project({ id: "proj-1" })]);
       promoteFeedback.mockResolvedValue(
-        row({ id: "fb-1", type: "FEATURE", taskId: "task-99" }),
+        row({
+          id: "fb-1",
+          type: "FEATURE",
+          taskId: "task-99",
+          task: { flow: { slug: "feature" } },
+        }),
       );
       const w = await mountAs("admin");
       await w.find("[data-testid='feedback-row-fb-1']").trigger("click");
@@ -282,8 +330,38 @@ describe("FeedbackAdminView", () => {
         .setValue("proj-1");
       await w.find("[data-testid='feedback-promote-fb-1']").trigger("click");
       await flushPromises();
-      expect(promoteFeedback).toHaveBeenCalledWith("fb-1", "proj-1");
+      expect(promoteFeedback).toHaveBeenCalledWith("fb-1", "proj-1", "feature");
       expect(w.find("[data-testid='feedback-task-link-fb-1']").exists()).toBe(true);
+    });
+
+    it("flow dropdown is pre-selected by feedback type but can be overridden", async () => {
+      listFeedback.mockResolvedValue(page([row({ id: "fb-1", type: "FEATURE" })]));
+      listProjects.mockResolvedValue([project({ id: "proj-1" })]);
+      promoteFeedback.mockResolvedValue(
+        row({
+          id: "fb-1",
+          type: "FEATURE",
+          taskId: "task-77",
+          task: { flow: { slug: "improvement" } },
+        }),
+      );
+      const w = await mountAs("admin");
+      await w.find("[data-testid='feedback-row-fb-1']").trigger("click");
+
+      const flowSelect = w.find("[data-testid='feedback-flow-select-fb-1']");
+      expect((flowSelect.element as HTMLSelectElement).value).toBe("feature");
+
+      await flowSelect.setValue("improvement");
+      expect(w.find("[data-testid='feedback-promote-fb-1']").text()).toContain(
+        "improvement",
+      );
+
+      await w
+        .find("[data-testid='feedback-project-select-fb-1']")
+        .setValue("proj-1");
+      await w.find("[data-testid='feedback-promote-fb-1']").trigger("click");
+      await flushPromises();
+      expect(promoteFeedback).toHaveBeenCalledWith("fb-1", "proj-1", "improvement");
     });
 
     it("hides the promote controls once feedback has a linked task", async () => {

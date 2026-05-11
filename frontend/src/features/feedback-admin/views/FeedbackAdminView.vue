@@ -11,6 +11,7 @@ import {
   type FeedbackWithUser,
 } from "@/api/feedback.api";
 import { listProjects, type Project } from "@/api/projects.api";
+import { listFlows, type Flow } from "@/api/flows.api";
 import FeedbackTypeBadge from "../components/FeedbackTypeBadge.vue";
 
 const PAGE_SIZE = 20;
@@ -27,6 +28,7 @@ const router = useRouter();
 
 const rows = ref<FeedbackWithUser[]>([]);
 const projects = ref<Project[]>([]);
+const flows = ref<Flow[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const total = ref(0);
@@ -40,6 +42,7 @@ const savedFlag = ref<Record<string, boolean>>({});
 const exporting = ref(false);
 const promotingId = ref<string | null>(null);
 const projectChoice = ref<Record<string, string>>({});
+const flowChoice = ref<Record<string, string>>({});
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)));
 const canPrev = computed(() => currentPage.value > 1);
@@ -59,9 +62,11 @@ async function load() {
     total.value = res.total;
     notesInitial.value = {};
     notesDraft.value = {};
+    flowChoice.value = {};
     for (const r of res.data) {
       notesInitial.value[r.id] = r.adminNotes ?? "";
       notesDraft.value[r.id] = r.adminNotes ?? "";
+      flowChoice.value[r.id] = TYPE_TO_FLOW_SLUG[r.type];
     }
   } catch (e: any) {
     error.value = e?.error?.message || e?.message || "Failed to load feedback";
@@ -77,6 +82,14 @@ async function loadProjects() {
     // Non-fatal — the rest of the view still works; promote button just won't
     // have any targets to choose from.
     error.value = e?.error?.message || "Failed to load projects";
+  }
+}
+
+async function loadFlows() {
+  try {
+    flows.value = await listFlows();
+  } catch (e: any) {
+    error.value = e?.error?.message || "Failed to load flows";
   }
 }
 
@@ -121,9 +134,10 @@ async function handlePromote(row: FeedbackWithUser) {
     error.value = "Pick a project before promoting.";
     return;
   }
+  const flowSlug = flowChoice.value[row.id] || targetFlowSlug(row);
   promotingId.value = row.id;
   try {
-    const updated = await promoteFeedback(row.id, projectId);
+    const updated = await promoteFeedback(row.id, projectId, flowSlug);
     Object.assign(row, updated);
   } catch (e: any) {
     error.value = e?.error?.message || "Promote failed";
@@ -163,6 +177,10 @@ function targetFlowSlug(row: FeedbackWithUser): string {
   return TYPE_TO_FLOW_SLUG[row.type];
 }
 
+function linkedTaskFlowSlug(row: FeedbackWithUser): string {
+  return row.task?.flow.slug ?? targetFlowSlug(row);
+}
+
 onMounted(() => {
   if (isMember.value) {
     router.replace("/");
@@ -170,6 +188,7 @@ onMounted(() => {
   }
   load();
   loadProjects();
+  loadFlows();
 });
 
 watch(filterArchived, () => {
@@ -272,7 +291,7 @@ watch(currentPage, () => {
               <td>
                 <a
                   v-if="row.taskId"
-                  :href="`/tasks/${targetFlowSlug(row)}/${row.taskId}`"
+                  :href="`/tasks/${linkedTaskFlowSlug(row)}/${row.taskId}`"
                   class="feedback-admin__task-chip"
                   :data-testid="`feedback-task-link-${row.id}`"
                   @click.stop
@@ -330,6 +349,19 @@ watch(currentPage, () => {
                             {{ p.key }} — {{ p.name }}
                           </option>
                         </select>
+                        <select
+                          v-model="flowChoice[row.id]"
+                          class="feedback-admin__project-select"
+                          :data-testid="`feedback-flow-select-${row.id}`"
+                        >
+                          <option
+                            v-for="f in flows"
+                            :key="f.id"
+                            :value="f.slug"
+                          >
+                            {{ f.name }}
+                          </option>
+                        </select>
                         <button
                           type="button"
                           :disabled="
@@ -341,7 +373,7 @@ watch(currentPage, () => {
                           {{
                             promotingId === row.id
                               ? "Promoting…"
-                              : `Promote to ${targetFlowSlug(row)} task`
+                              : `Promote to ${flowChoice[row.id] || targetFlowSlug(row)} task`
                           }}
                         </button>
                       </template>

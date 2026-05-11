@@ -70,6 +70,7 @@ const ArchiveBody = Type.Object({
 
 const PromoteBody = Type.Object({
   projectId: Type.String({ format: "uuid" }),
+  flowSlug: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 const ListQuery = Type.Object({
@@ -185,6 +186,7 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
           where,
           include: {
             user: { select: { displayName: true, email: true } },
+            task: { select: { flow: { select: { slug: true } } } },
           },
           orderBy: { createdAt: "desc" },
           skip: (page - 1) * limit,
@@ -334,7 +336,7 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       if (!requireAdmin(request, reply)) return;
       const { id } = request.params;
-      const { projectId } = request.body;
+      const { projectId, flowSlug: flowSlugOverride } = request.body;
       const existing = await prisma.feedback.findFirst({
         where: { id, orgId: request.org.id },
       });
@@ -349,7 +351,7 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const flowSlug = FEEDBACK_TYPE_TO_FLOW_SLUG[existing.type];
+      const flowSlug = flowSlugOverride ?? FEEDBACK_TYPE_TO_FLOW_SLUG[existing.type];
       const description =
         `${existing.message}\n\n---\nPromoted from in-app feedback.` +
         (existing.page ? `\nPage: ${existing.page}` : "");
@@ -378,6 +380,7 @@ export async function feedbackRoutes(fastify: FastifyInstance) {
         const updated = await prisma.feedback.update({
           where: { id },
           data: { taskId: task.id },
+          include: { task: { select: { flow: { select: { slug: true } } } } },
         });
         return updated;
       } catch (err) {

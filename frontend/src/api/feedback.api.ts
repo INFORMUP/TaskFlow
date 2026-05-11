@@ -12,6 +12,7 @@ export interface Feedback {
   adminNotes: string | null;
   archivedAt: string | null;
   taskId: string | null;
+  task: { flow: { slug: string } } | null;
   createdAt: string;
 }
 
@@ -71,9 +72,13 @@ export function exportFeedbackCsv(): Promise<Blob> {
   return apiFetchBlob("/api/v1/feedback/export");
 }
 
-export function promoteFeedback(id: string, projectId: string): Promise<Feedback> {
+export function promoteFeedback(
+  id: string,
+  projectId: string,
+  flowSlug?: string,
+): Promise<Feedback> {
   return apiFetch(`/api/v1/feedback/${id}/promote`, {
     method: "POST",
-    body: JSON.stringify({ projectId }),
+    body: JSON.stringify(flowSlug ? { projectId, flowSlug } : { projectId }),
   });
 }
