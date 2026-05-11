@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchBlob } from "./client";
 
 export type FeedbackType = "BUG" | "FEATURE" | "IMPROVEMENT";
 
@@ -82,4 +82,8 @@ export function archiveFeedback(id: string, archived: boolean): Promise<Feedback
     method: "PATCH",
     body: JSON.stringify({ archived }),
   });
+}
+
+export function exportFeedbackCsv(): Promise<Blob> {
+  return apiFetchBlob("/api/v1/feedback/export");
 }
