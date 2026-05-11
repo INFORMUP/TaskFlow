@@ -15,7 +15,21 @@ const FLOWS: Flow[] = [
     slug: "bug",
     name: "Bug",
     description: "Defect resolution",
-    stats: { openCount: 4, assignedToMeCount: 1 },
+    icon: null,
+    stats: {
+      openCount: 4,
+      assignedToMeCount: 1,
+      byStatus: [
+        {
+          status: { id: "s-triage", slug: "triage", name: "Triage", color: "#3b82f6", sortOrder: 1 },
+          count: 2,
+        },
+        {
+          status: { id: "s-investigate", slug: "investigate", name: "Investigate", color: "#f59e0b", sortOrder: 2 },
+          count: 2,
+        },
+      ],
+    },
   },
 ];
 

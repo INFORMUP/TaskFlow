@@ -53,7 +53,7 @@ const flows: Flow[] = [
     name: "Feature",
     description: null,
     icon: null,
-    stats: { openCount: 0, assignedToMeCount: 0 },
+    stats: { openCount: 0, assignedToMeCount: 0, byStatus: [] },
   },
 ];
 

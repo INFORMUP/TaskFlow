@@ -54,7 +54,7 @@ beforeEach(() => {
       name: "Improvement",
       description: null,
       icon: "wrench",
-      stats: { openCount: 0, assignedToMeCount: 0 },
+      stats: { openCount: 0, assignedToMeCount: 0, byStatus: [] },
     },
   ]);
   listFlowStatuses.mockResolvedValue([
@@ -106,7 +106,7 @@ describe("VisualsSettingsView", () => {
       name: "Improvement",
       description: null,
       icon: "sparkles",
-      stats: { openCount: 0, assignedToMeCount: 0 },
+      stats: { openCount: 0, assignedToMeCount: 0, byStatus: [] },
     });
 
     const wrapper = mount(VisualsSettingsView);
