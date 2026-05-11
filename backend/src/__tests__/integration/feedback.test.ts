@@ -4,7 +4,6 @@ import { buildApp } from "../helpers/app.js";
 import { mintTestToken, TEST_ENGINEER_ID, TEST_USER_ID } from "../helpers/auth.js";
 import { seedTestUsers } from "../helpers/seed-test-users.js";
 import { DEFAULT_ORG_ID } from "../../constants/org.js";
-import { FEEDBACK_BOT_USER_ID } from "../../constants/system-users.js";
 
 const prisma = new PrismaClient();
 
@@ -411,23 +410,18 @@ describe("feedback API", () => {
   });
 });
 
-describe("feedback API: product-task wiring", () => {
+
+describe("feedback API: promote-to-task", () => {
   const ORG_C_ID = "d0000000-0000-4000-8000-0000000000c1";
-  const PRODUCT_PROJECT_KEY = "TFTEST";
-  const PRODUCT_PROJECT_ID = "d0000000-0000-4000-8000-0000000000d1";
-  let savedOrgId: string | undefined;
-  let savedKey: string | undefined;
+  const ORG_C_OWNER_ID = "d0000000-0000-4000-8000-0000000000c2";
+  const PROJECT_KEY = "PROMOTE";
+  const PROJECT_ID = "d0000000-0000-4000-8000-0000000000d1";
   let createdTaskIds: string[] = [];
 
   async function clearTaskFixtures() {
-    createdTaskIds = createdTaskIds.filter((id): id is string => !!id);
     if (createdTaskIds.length === 0) return;
-    await prisma.taskTransition.deleteMany({
-      where: { taskId: { in: createdTaskIds } },
-    });
-    await prisma.taskProject.deleteMany({
-      where: { taskId: { in: createdTaskIds } },
-    });
+    await prisma.taskTransition.deleteMany({ where: { taskId: { in: createdTaskIds } } });
+    await prisma.taskProject.deleteMany({ where: { taskId: { in: createdTaskIds } } });
     await prisma.feedback.updateMany({
       where: { taskId: { in: createdTaskIds } },
       data: { taskId: null },
@@ -436,406 +430,226 @@ describe("feedback API: product-task wiring", () => {
     createdTaskIds = [];
   }
 
-  async function clearOrgCFixtures() {
+  async function clearOrgFixtures() {
     await prisma.feedback.deleteMany({ where: { orgId: ORG_C_ID } });
+    // Deleting projects cascade-cleans projectFlows.
+    await prisma.project.deleteMany({ where: { orgId: ORG_C_ID } });
+    // Flow→FlowStatus has no cascade; clean statuses first.
+    const orgCFlows = await prisma.flow.findMany({
+      where: { orgId: ORG_C_ID },
+      select: { id: true },
+    });
+    const flowIds = orgCFlows.map((f) => f.id);
+    if (flowIds.length > 0) {
+      await prisma.flowTransition.deleteMany({ where: { flowId: { in: flowIds } } });
+      await prisma.flowStatus.deleteMany({ where: { flowId: { in: flowIds } } });
+      await prisma.flow.deleteMany({ where: { id: { in: flowIds } } });
+    }
     await prisma.orgMember.deleteMany({ where: { orgId: ORG_C_ID } });
     await prisma.organization.deleteMany({ where: { id: ORG_C_ID } });
+    await prisma.user.deleteMany({ where: { id: ORG_C_OWNER_ID } });
   }
 
   beforeAll(async () => {
     await seedTestUsers(prisma);
-    savedOrgId = process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
-    savedKey = process.env.TASKFLOW_PRODUCT_PROJECT_KEY;
-
-    // Create the product project (in DEFAULT_ORG_ID) and attach the three
-    // engineering flows so feedback→task wiring can resolve them.
-    const flowSlugs = ["bug", "feature", "improvement"];
-    const flows = await prisma.flow.findMany({
-      where: { orgId: DEFAULT_ORG_ID, slug: { in: flowSlugs } },
-    });
-    if (flows.length !== 3) {
-      throw new Error(
-        "Dev DB missing seeded engineering flows; run `npx prisma db seed` first.",
-      );
-    }
-    await prisma.project.upsert({
-      where: { id: PRODUCT_PROJECT_ID },
-      update: {},
-      create: {
-        id: PRODUCT_PROJECT_ID,
-        orgId: DEFAULT_ORG_ID,
-        key: PRODUCT_PROJECT_KEY,
-        name: "TaskFlow product (test)",
-        ownerUserId: TEST_ENGINEER_ID,
-      },
-    });
-    for (const flow of flows) {
-      await prisma.projectFlow.upsert({
-        where: {
-          projectId_flowId: { projectId: PRODUCT_PROJECT_ID, flowId: flow.id },
-        },
-        update: {},
-        create: { projectId: PRODUCT_PROJECT_ID, flowId: flow.id },
-      });
-    }
   });
 
   beforeEach(async () => {
     await clearTaskFixtures();
-    await clearOrgCFixtures();
+    await clearOrgFixtures();
 
-    // Submitter org (separate from the seeded product org).
+    await prisma.user.create({
+      data: {
+        id: ORG_C_OWNER_ID,
+        email: "fb-orgc-owner@test.com",
+        displayName: "OrgC Owner",
+        actorType: "human",
+        status: "active",
+      },
+    });
     await prisma.organization.create({
       data: { id: ORG_C_ID, slug: "org-c-fb", name: "Org C FB" },
+    });
+    await prisma.orgMember.create({
+      data: { orgId: ORG_C_ID, userId: ORG_C_OWNER_ID, role: "owner" },
     });
     await prisma.orgMember.create({
       data: { orgId: ORG_C_ID, userId: TEST_USER_ID, role: "member" },
     });
 
-    // Point the route at the seeded TF project in DEFAULT_ORG_ID.
-    process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID = DEFAULT_ORG_ID;
-    process.env.TASKFLOW_PRODUCT_PROJECT_KEY = PRODUCT_PROJECT_KEY;
+    // Clone the engineering flows into Org C so a promote target exists.
+    const seededFlows = await prisma.flow.findMany({
+      where: { orgId: DEFAULT_ORG_ID, slug: { in: ["bug", "feature", "improvement"] } },
+      include: { statuses: { orderBy: { sortOrder: "asc" } } },
+    });
+    if (seededFlows.length !== 3) {
+      throw new Error("Dev DB missing seeded engineering flows; run `npx prisma db seed`.");
+    }
+    const flowIdByOrgC: Record<string, string> = {};
+    for (const src of seededFlows) {
+      const cloned = await prisma.flow.create({
+        data: {
+          orgId: ORG_C_ID,
+          slug: src.slug,
+          name: src.name,
+          icon: src.icon,
+          statuses: {
+            create: src.statuses.map((s) => ({
+              slug: s.slug,
+              name: s.name,
+              color: s.color,
+              sortOrder: s.sortOrder,
+            })),
+          },
+        },
+      });
+      flowIdByOrgC[src.slug] = cloned.id;
+    }
+
+    await prisma.project.create({
+      data: {
+        id: PROJECT_ID,
+        orgId: ORG_C_ID,
+        key: PROJECT_KEY,
+        name: "Promote target",
+        ownerUserId: ORG_C_OWNER_ID,
+      },
+    });
+    for (const slug of ["bug", "feature", "improvement"]) {
+      await prisma.projectFlow.create({
+        data: { projectId: PROJECT_ID, flowId: flowIdByOrgC[slug] },
+      });
+    }
   });
 
   afterEach(async () => {
     await clearTaskFixtures();
-    await clearOrgCFixtures();
-    if (savedOrgId === undefined) delete process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
-    else process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID = savedOrgId;
-    if (savedKey === undefined) delete process.env.TASKFLOW_PRODUCT_PROJECT_KEY;
-    else process.env.TASKFLOW_PRODUCT_PROJECT_KEY = savedKey;
+    await clearOrgFixtures();
   });
 
   afterAll(async () => {
     await prisma.$disconnect();
   });
 
-  async function postFeedback(type: string, message: string, page = "/x") {
+  async function adminPromote(feedbackId: string, projectId: string) {
+    const app = await buildApp();
+    const token = mintTestToken(ORG_C_OWNER_ID, { orgId: ORG_C_ID });
+    return app.inject({
+      method: "POST",
+      url: `/api/v1/feedback/${feedbackId}/promote`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { projectId },
+    });
+  }
+
+  it("POST /feedback no longer auto-creates a task", async () => {
     const app = await buildApp();
     const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
-    return app.inject({
+    const res = await app.inject({
       method: "POST",
       url: "/api/v1/feedback",
       headers: { authorization: `Bearer ${token}` },
-      payload: { type, message, page },
+      payload: { type: "BUG", message: "no auto-link expected", page: "/x" },
     });
-  }
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.taskId).toBeNull();
+  });
+
+  it("members cannot promote", async () => {
+    const fb = await prisma.feedback.create({
+      data: { orgId: ORG_C_ID, userId: TEST_USER_ID, type: "BUG", message: "x" },
+    });
+    const app = await buildApp();
+    const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/v1/feedback/${fb.id}/promote`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { projectId: PROJECT_ID },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("returns 404 for feedback in another org", async () => {
+    const otherOrgId = "d0000000-0000-4000-8000-0000000000c9";
+    await prisma.organization.create({
+      data: { id: otherOrgId, slug: "org-promote-other", name: "Other" },
+    });
+    const fb = await prisma.feedback.create({
+      data: { orgId: otherOrgId, userId: ORG_C_OWNER_ID, type: "BUG", message: "x" },
+    });
+    const res = await adminPromote(fb.id, PROJECT_ID);
+    expect(res.statusCode).toBe(404);
+    await prisma.feedback.deleteMany({ where: { orgId: otherOrgId } });
+    await prisma.organization.delete({ where: { id: otherOrgId } });
+  });
+
+  it("returns 409 ALREADY_PROMOTED when feedback already has a linked task", async () => {
+    const fb = await prisma.feedback.create({
+      data: { orgId: ORG_C_ID, userId: ORG_C_OWNER_ID, type: "BUG", message: "first" },
+    });
+    const first = await adminPromote(fb.id, PROJECT_ID);
+    expect(first.statusCode).toBe(200);
+    createdTaskIds.push(first.json().taskId);
+
+    const second = await adminPromote(fb.id, PROJECT_ID);
+    expect(second.statusCode).toBe(409);
+    expect(second.json().error.code).toBe("ALREADY_PROMOTED");
+  });
+
+  it("returns 422 when the chosen project does not exist", async () => {
+    const fb = await prisma.feedback.create({
+      data: { orgId: ORG_C_ID, userId: ORG_C_OWNER_ID, type: "BUG", message: "x" },
+    });
+    const bogusId = "d0000000-0000-4000-8000-00000000beef";
+    const res = await adminPromote(fb.id, bogusId);
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe("INVALID_PROJECT");
+  });
 
   it.each([
     ["BUG", "bug"],
     ["FEATURE", "feature"],
     ["IMPROVEMENT", "improvement"],
-  ])(
-    "POST with type=%s creates a task on the matching flow in the product project",
-    async (type, expectedFlowSlug) => {
-      const res = await postFeedback(type, `${type} message body`);
-      expect(res.statusCode).toBe(201);
-      const body = res.json();
-      expect(body.taskId).toBeTruthy();
-      createdTaskIds.push(body.taskId);
-
-      const task = await prisma.task.findUnique({
-        where: { id: body.taskId },
-        include: { flow: true, projects: { include: { project: true } } },
-      });
-      expect(task).not.toBeNull();
-      expect(task!.flow.slug).toBe(expectedFlowSlug);
-      expect(task!.projects).toHaveLength(1);
-      expect(task!.projects[0].project.id).toBe(PRODUCT_PROJECT_ID);
-      expect(task!.projects[0].project.orgId).toBe(DEFAULT_ORG_ID);
-      expect(task!.title).toContain(type);
-      // Submitter PII must NOT leak into the cross-org task description.
-      expect(task!.description).not.toContain(TEST_USER_ID);
-      expect(task!.description).not.toContain(ORG_C_ID);
-      expect(task!.description).not.toContain("user@test.com");
-      expect(task!.description).not.toContain("org-c-fb");
-      // createdBy is the synthetic system user, not the submitter.
-      expect(task!.createdBy).toBe(FEEDBACK_BOT_USER_ID);
-      // No auto-assignment.
-      expect(task!.assigneeId).toBeNull();
-
-      // Cross-org: feedback row stays under the submitter's org.
-      expect(body.orgId).toBe(ORG_C_ID);
-      // Attribution lives structurally on the Feedback row.
-      const fb = await prisma.feedback.findUnique({ where: { id: body.id } });
-      expect(fb!.userId).toBe(TEST_USER_ID);
-      expect(fb!.orgId).toBe(ORG_C_ID);
-      expect(fb!.taskId).toBe(body.taskId);
-    },
-  );
-
-  it("does not create a task when productProjectOrgId is unset", async () => {
-    delete process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
-    const res = await postFeedback("BUG", "no task expected");
-    expect(res.statusCode).toBe(201);
-    const body = res.json();
-    expect(body.taskId).toBeNull();
-    expect(body.taskLinkStatus).toBe("skipped_no_config");
-    expect(body.taskLinkError).toBeNull();
-  });
-
-  it("succeeds (without task) when product project is misconfigured", async () => {
-    process.env.TASKFLOW_PRODUCT_PROJECT_KEY = "DOES-NOT-EXIST";
-    const res = await postFeedback("BUG", "misconfigured");
-    expect(res.statusCode).toBe(201);
-    const body = res.json();
-    expect(body.taskId).toBeNull();
-    expect(body.taskLinkStatus).toBe("skipped_no_project");
-    expect(body.taskLinkError).toBeNull();
-  });
-
-  it("happy-path response includes taskLinkStatus=linked", async () => {
-    const res = await postFeedback("BUG", "linked happy path");
-    expect(res.statusCode).toBe(201);
-    const body = res.json();
-    createdTaskIds.push(body.taskId);
-    expect(body.taskLinkStatus).toBe("linked");
-    expect(body.taskLinkError).toBeNull();
-  });
-
-  it("returns skipped_no_flow when the product project has no matching flow attached", async () => {
-    // Detach the bug flow from the product project for this test only.
-    const bugFlow = await prisma.flow.findFirst({
-      where: { orgId: DEFAULT_ORG_ID, slug: "bug" },
-    });
-    expect(bugFlow).not.toBeNull();
-    await prisma.projectFlow.delete({
-      where: {
-        projectId_flowId: { projectId: PRODUCT_PROJECT_ID, flowId: bugFlow!.id },
+  ])("promotes a %s feedback into a task on the %s flow", async (type, flowSlug) => {
+    const fb = await prisma.feedback.create({
+      data: {
+        orgId: ORG_C_ID,
+        userId: ORG_C_OWNER_ID,
+        type,
+        message: `some ${type.toLowerCase()} description`,
+        page: "/somewhere",
       },
     });
-    try {
-      const res = await postFeedback("BUG", "no flow attached");
-      expect(res.statusCode).toBe(201);
-      const body = res.json();
-      expect(body.taskId).toBeNull();
-      expect(body.taskLinkStatus).toBe("skipped_no_flow");
-      expect(body.taskLinkError).toBeNull();
-    } finally {
-      // Re-attach so subsequent tests aren't affected.
-      await prisma.projectFlow.create({
-        data: { projectId: PRODUCT_PROJECT_ID, flowId: bugFlow!.id },
-      });
-    }
-  });
-
-  describe("POST /api/v1/feedback/:id/retry-link", () => {
-    it("returns 403 for a member", async () => {
-      const fb = await prisma.feedback.create({
-        data: {
-          orgId: ORG_C_ID,
-          userId: TEST_USER_ID,
-          type: "BUG",
-          message: "x",
-          taskLinkStatus: "failed_create",
-          taskLinkError: "boom",
-        },
-      });
-      const app = await buildApp();
-      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
-      const res = await app.inject({
-        method: "POST",
-        url: `/api/v1/feedback/${fb.id}/retry-link`,
-        headers: { authorization: `Bearer ${token}` },
-      });
-      expect(res.statusCode).toBe(403);
-    });
-
-    it("returns 409 INVALID_STATE for a row already linked", async () => {
-      // Promote test user to admin so they can hit the admin endpoint here.
-      await prisma.orgMember.update({
-        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
-        data: { role: "admin" },
-      });
-      const fb = await prisma.feedback.create({
-        data: {
-          orgId: ORG_C_ID,
-          userId: TEST_USER_ID,
-          type: "BUG",
-          message: "already linked",
-          taskLinkStatus: "linked",
-        },
-      });
-      const app = await buildApp();
-      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
-      const res = await app.inject({
-        method: "POST",
-        url: `/api/v1/feedback/${fb.id}/retry-link`,
-        headers: { authorization: `Bearer ${token}` },
-      });
-      expect(res.statusCode).toBe(409);
-      expect(res.json().error.code).toBe("INVALID_STATE");
-    });
-
-    it("re-runs task creation for failed_create rows and links them", async () => {
-      await prisma.orgMember.update({
-        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
-        data: { role: "admin" },
-      });
-      const fb = await prisma.feedback.create({
-        data: {
-          orgId: ORG_C_ID,
-          userId: TEST_USER_ID,
-          type: "FEATURE",
-          message: "retry me",
-          taskLinkStatus: "failed_create",
-          taskLinkError: "previous failure",
-        },
-      });
-      const app = await buildApp();
-      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
-      const res = await app.inject({
-        method: "POST",
-        url: `/api/v1/feedback/${fb.id}/retry-link`,
-        headers: { authorization: `Bearer ${token}` },
-      });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.taskLinkStatus).toBe("linked");
-      expect(body.taskLinkError).toBeNull();
-      expect(body.taskId).toBeTruthy();
-      createdTaskIds.push(body.taskId);
-    });
-
-    it("relinks failed_link rows without creating a new task", async () => {
-      await prisma.orgMember.update({
-        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
-        data: { role: "admin" },
-      });
-      // Seed an orphan task via the service so displayId/transitions are set up
-      // correctly. ensureFeedbackBot user upsert is handled by the service.
-      const { createTask } = await import("../../services/task.service.js");
-      const orphan = await createTask({
-        orgId: DEFAULT_ORG_ID,
-        flowSlug: "bug",
-        title: "orphan",
-        priority: "medium",
-        createdBy: TEST_ENGINEER_ID,
-        actorType: "human",
-        assigneeUserId: null,
-        projectIds: [PRODUCT_PROJECT_ID],
-      });
-      if (!orphan) throw new Error("failed to seed orphan task");
-      createdTaskIds.push(orphan.id);
-
-      const fb = await prisma.feedback.create({
-        data: {
-          orgId: ORG_C_ID,
-          userId: TEST_USER_ID,
-          type: "BUG",
-          message: "had an orphan",
-          taskId: orphan.id,
-          taskLinkStatus: "failed_link",
-          taskLinkError: "linker exploded",
-        },
-      });
-      const app = await buildApp();
-      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
-      const res = await app.inject({
-        method: "POST",
-        url: `/api/v1/feedback/${fb.id}/retry-link`,
-        headers: { authorization: `Bearer ${token}` },
-      });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.taskLinkStatus).toBe("linked");
-      expect(body.taskLinkError).toBeNull();
-      expect(body.taskId).toBe(orphan.id);
-
-      // No new task created — count should still be one (the orphan).
-      const count = await prisma.task.count({ where: { id: orphan.id } });
-      expect(count).toBe(1);
-    });
-
-    it("retry on failed_create when still misconfigured remains failed/skipped", async () => {
-      await prisma.orgMember.update({
-        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
-        data: { role: "admin" },
-      });
-      delete process.env.TASKFLOW_PRODUCT_PROJECT_ORG_ID;
-      const fb = await prisma.feedback.create({
-        data: {
-          orgId: ORG_C_ID,
-          userId: TEST_USER_ID,
-          type: "BUG",
-          message: "still broken",
-          taskLinkStatus: "failed_create",
-          taskLinkError: "old failure",
-        },
-      });
-      const app = await buildApp();
-      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
-      const res = await app.inject({
-        method: "POST",
-        url: `/api/v1/feedback/${fb.id}/retry-link`,
-        headers: { authorization: `Bearer ${token}` },
-      });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.taskId).toBeNull();
-      expect(body.taskLinkStatus).toBe("skipped_no_config");
-    });
-  });
-
-  describe("GET /api/v1/feedback?taskLinkStatus=", () => {
-    it("filters by taskLinkStatus", async () => {
-      await prisma.orgMember.update({
-        where: { orgId_userId: { orgId: ORG_C_ID, userId: TEST_USER_ID } },
-        data: { role: "admin" },
-      });
-      await prisma.feedback.createMany({
-        data: [
-          {
-            orgId: ORG_C_ID,
-            userId: TEST_USER_ID,
-            type: "BUG",
-            message: "a",
-            taskLinkStatus: "failed_create",
-          },
-          {
-            orgId: ORG_C_ID,
-            userId: TEST_USER_ID,
-            type: "BUG",
-            message: "b",
-            taskLinkStatus: "linked",
-          },
-          {
-            orgId: ORG_C_ID,
-            userId: TEST_USER_ID,
-            type: "BUG",
-            message: "c",
-            taskLinkStatus: "failed_create",
-          },
-        ],
-      });
-      const app = await buildApp();
-      const token = mintTestToken(TEST_USER_ID, { orgId: ORG_C_ID });
-      const res = await app.inject({
-        method: "GET",
-        url: "/api/v1/feedback?taskLinkStatus=failed_create",
-        headers: { authorization: `Bearer ${token}` },
-      });
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.total).toBe(2);
-      expect(body.data.every((f: any) => f.taskLinkStatus === "failed_create")).toBe(true);
-    });
-  });
-
-  it("creates exactly one task per submission and links via Feedback.taskId", async () => {
-    const res = await postFeedback("BUG", "wired up properly");
+    const res = await adminPromote(fb.id, PROJECT_ID);
+    expect(res.statusCode).toBe(200);
     const body = res.json();
+    expect(body.taskId).toBeTruthy();
     createdTaskIds.push(body.taskId);
-
-    const fb = await prisma.feedback.findUnique({ where: { id: body.id } });
-    expect(fb!.taskId).toBe(body.taskId);
 
     const task = await prisma.task.findUnique({
       where: { id: body.taskId },
-      include: { transitions: true },
+      include: { flow: true, projects: { include: { project: true } }, transitions: true },
     });
-    // createTask writes one initial transition record.
+    expect(task!.flow.slug).toBe(flowSlug);
+    expect(task!.projects[0]!.project.id).toBe(PROJECT_ID);
+    expect(task!.description).toContain("Promoted from in-app feedback");
+    expect(task!.description).toContain("/somewhere");
+    expect(task!.createdBy).toBe(ORG_C_OWNER_ID);
     expect(task!.transitions).toHaveLength(1);
-    expect(task!.transitions[0].fromStatusId).toBeNull();
+  });
+
+  it("truncates very long messages into a manageable task title", async () => {
+    const long = "x".repeat(500);
+    const fb = await prisma.feedback.create({
+      data: { orgId: ORG_C_ID, userId: ORG_C_OWNER_ID, type: "BUG", message: long },
+    });
+    const res = await adminPromote(fb.id, PROJECT_ID);
+    expect(res.statusCode).toBe(200);
+    createdTaskIds.push(res.json().taskId);
+    const task = await prisma.task.findUnique({ where: { id: res.json().taskId } });
+    expect(task!.title.length).toBeLessThanOrEqual(80);
+    expect(task!.title.endsWith("…")).toBe(true);
   });
 });

@@ -1,15 +1,6 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchBlob } from "./client";
 
 export type FeedbackType = "BUG" | "FEATURE" | "IMPROVEMENT";
-
-export type TaskLinkStatus =
-  | "pending"
-  | "linked"
-  | "skipped_no_config"
-  | "skipped_no_project"
-  | "skipped_no_flow"
-  | "failed_create"
-  | "failed_link";
 
 export interface Feedback {
   id: string;
@@ -21,8 +12,7 @@ export interface Feedback {
   adminNotes: string | null;
   archivedAt: string | null;
   taskId: string | null;
-  taskLinkStatus: TaskLinkStatus;
-  taskLinkError: string | null;
+  task: { flow: { slug: string } } | null;
   createdAt: string;
 }
 
@@ -50,21 +40,15 @@ export function submitFeedback(payload: {
 
 export function listFeedback(params: {
   archived?: boolean;
-  taskLinkStatus?: TaskLinkStatus;
   page?: number;
   limit?: number;
 } = {}): Promise<FeedbackListResponse> {
   const qs = new URLSearchParams();
   if (params.archived !== undefined) qs.set("archived", String(params.archived));
-  if (params.taskLinkStatus) qs.set("taskLinkStatus", params.taskLinkStatus);
   if (params.page) qs.set("page", String(params.page));
   if (params.limit) qs.set("limit", String(params.limit));
   const q = qs.toString();
   return apiFetch(`/api/v1/feedback${q ? `?${q}` : ""}`);
-}
-
-export function retryFeedbackLink(id: string): Promise<Feedback> {
-  return apiFetch(`/api/v1/feedback/${id}/retry-link`, { method: "POST" });
 }
 
 export function updateFeedbackNotes(
@@ -81,5 +65,20 @@ export function archiveFeedback(id: string, archived: boolean): Promise<Feedback
   return apiFetch(`/api/v1/feedback/${id}/archive`, {
     method: "PATCH",
     body: JSON.stringify({ archived }),
+  });
+}
+
+export function exportFeedbackCsv(): Promise<Blob> {
+  return apiFetchBlob("/api/v1/feedback/export");
+}
+
+export function promoteFeedback(
+  id: string,
+  projectId: string,
+  flowSlug?: string,
+): Promise<Feedback> {
+  return apiFetch(`/api/v1/feedback/${id}/promote`, {
+    method: "POST",
+    body: JSON.stringify(flowSlug ? { projectId, flowSlug } : { projectId }),
   });
 }
