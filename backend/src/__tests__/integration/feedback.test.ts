@@ -467,7 +467,7 @@ describe("feedback API: promote-to-task", () => {
     // Clone the engineering flows into Org C so a promote target exists.
     const seededFlows = await prisma.flow.findMany({
       where: { orgId: DEFAULT_ORG_ID, slug: { in: ["bug", "feature", "improvement"] } },
-      include: { statuses: { orderBy: { sortIndex: "asc" } } },
+      include: { statuses: { orderBy: { sortOrder: "asc" } } },
     });
     if (seededFlows.length !== 3) {
       throw new Error("Dev DB missing seeded engineering flows; run `npx prisma db seed`.");
@@ -485,9 +485,7 @@ describe("feedback API: promote-to-task", () => {
               slug: s.slug,
               name: s.name,
               color: s.color,
-              sortIndex: s.sortIndex,
-              isInitial: s.isInitial,
-              isTerminal: s.isTerminal,
+              sortOrder: s.sortOrder,
             })),
           },
         },
