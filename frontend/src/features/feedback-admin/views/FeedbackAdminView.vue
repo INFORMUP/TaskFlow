@@ -4,48 +4,42 @@ import { useRouter } from "vue-router";
 import { useOrg } from "@/composables/useOrg";
 import {
   listFeedback,
-  retryFeedbackLink,
   archiveFeedback,
   updateFeedbackNotes,
   exportFeedbackCsv,
+  promoteFeedback,
   type FeedbackWithUser,
-  type TaskLinkStatus,
 } from "@/api/feedback.api";
-import FeedbackStatusBadge from "../components/FeedbackStatusBadge.vue";
+import { listProjects, type Project } from "@/api/projects.api";
 import FeedbackTypeBadge from "../components/FeedbackTypeBadge.vue";
 
 const PAGE_SIZE = 20;
 const MESSAGE_EXCERPT_LENGTH = 80;
 const SAVED_INDICATOR_MS = 1500;
-
-const STATUS_OPTIONS: Array<{ value: TaskLinkStatus | ""; label: string }> = [
-  { value: "", label: "All statuses" },
-  { value: "linked", label: "Linked" },
-  { value: "skipped_no_config", label: "Skipped: no config" },
-  { value: "skipped_no_project", label: "Skipped: no project" },
-  { value: "skipped_no_flow", label: "Skipped: no flow" },
-  { value: "failed_create", label: "Failed: create" },
-  { value: "failed_link", label: "Failed: link" },
-  { value: "pending", label: "Pending" },
-];
+const TYPE_TO_FLOW_SLUG: Record<string, string> = {
+  BUG: "bug",
+  FEATURE: "feature",
+  IMPROVEMENT: "improvement",
+};
 
 const org = useOrg();
 const router = useRouter();
 
 const rows = ref<FeedbackWithUser[]>([]);
+const projects = ref<Project[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const total = ref(0);
 
-const filterStatus = ref<TaskLinkStatus | "">("");
 const filterArchived = ref(false);
 const currentPage = ref(1);
-const retryingId = ref<string | null>(null);
 const expandedId = ref<string | null>(null);
 const notesDraft = ref<Record<string, string>>({});
 const notesInitial = ref<Record<string, string>>({});
 const savedFlag = ref<Record<string, boolean>>({});
 const exporting = ref(false);
+const promotingId = ref<string | null>(null);
+const projectChoice = ref<Record<string, string>>({});
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)));
 const canPrev = computed(() => currentPage.value > 1);
@@ -58,13 +52,11 @@ async function load() {
   try {
     const res = await listFeedback({
       archived: filterArchived.value,
-      taskLinkStatus: filterStatus.value || undefined,
       page: currentPage.value,
       limit: PAGE_SIZE,
     });
     rows.value = res.data;
     total.value = res.total;
-    // Reset notes drafts to reflect freshly-loaded server state.
     notesInitial.value = {};
     notesDraft.value = {};
     for (const r of res.data) {
@@ -78,15 +70,13 @@ async function load() {
   }
 }
 
-async function handleRetry(row: FeedbackWithUser) {
-  retryingId.value = row.id;
+async function loadProjects() {
   try {
-    const updated = await retryFeedbackLink(row.id);
-    Object.assign(row, updated);
+    projects.value = await listProjects();
   } catch (e: any) {
-    error.value = e?.error?.message || "Retry failed";
-  } finally {
-    retryingId.value = null;
+    // Non-fatal — the rest of the view still works; promote button just won't
+    // have any targets to choose from.
+    error.value = e?.error?.message || "Failed to load projects";
   }
 }
 
@@ -94,8 +84,6 @@ async function handleArchiveToggle(row: FeedbackWithUser) {
   const next = !row.archivedAt;
   try {
     const updated = await archiveFeedback(row.id, next);
-    // Whether toggled to archived or active, the row no longer belongs in the
-    // currently-displayed list — drop it so the user sees the move land.
     rows.value = rows.value.filter((r) => r.id !== updated.id);
     total.value = Math.max(0, total.value - 1);
     if (expandedId.value === updated.id) expandedId.value = null;
@@ -127,6 +115,23 @@ async function saveNotes(row: FeedbackWithUser) {
   }
 }
 
+async function handlePromote(row: FeedbackWithUser) {
+  const projectId = projectChoice.value[row.id];
+  if (!projectId) {
+    error.value = "Pick a project before promoting.";
+    return;
+  }
+  promotingId.value = row.id;
+  try {
+    const updated = await promoteFeedback(row.id, projectId);
+    Object.assign(row, updated);
+  } catch (e: any) {
+    error.value = e?.error?.message || "Promote failed";
+  } finally {
+    promotingId.value = null;
+  }
+}
+
 async function handleExport() {
   exporting.value = true;
   try {
@@ -144,10 +149,6 @@ async function handleExport() {
   }
 }
 
-function isFailed(s: TaskLinkStatus): boolean {
-  return s === "failed_create" || s === "failed_link";
-}
-
 function excerpt(s: string, length: number = MESSAGE_EXCERPT_LENGTH): string {
   return s.length > length ? s.slice(0, length - 1) + "…" : s;
 }
@@ -158,15 +159,20 @@ function goToPage(p: number) {
   currentPage.value = target;
 }
 
+function targetFlowSlug(row: FeedbackWithUser): string {
+  return TYPE_TO_FLOW_SLUG[row.type];
+}
+
 onMounted(() => {
   if (isMember.value) {
     router.replace("/");
     return;
   }
   load();
+  loadProjects();
 });
 
-watch([filterStatus, filterArchived], () => {
+watch(filterArchived, () => {
   currentPage.value = 1;
   if (!isMember.value) load();
 });
@@ -182,8 +188,9 @@ watch(currentPage, () => {
       <div>
         <h1>Feedback</h1>
         <p class="feedback-admin__hint">
-          Submissions from the in-app feedback bubble. Status reflects whether
-          the submission was translated into a TaskFlow task.
+          Submissions from the in-app feedback bubble. Promote a row into a
+          task when it deserves engineering work, archive it when it's been
+          handled.
         </p>
       </div>
       <button
@@ -198,14 +205,6 @@ watch(currentPage, () => {
     </header>
 
     <div class="feedback-admin__filters">
-      <label class="feedback-admin__filter">
-        <span>Status</span>
-        <select v-model="filterStatus" data-testid="feedback-status-filter">
-          <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">
-            {{ opt.label }}
-          </option>
-        </select>
-      </label>
       <label class="feedback-admin__filter">
         <input
           type="checkbox"
@@ -237,8 +236,7 @@ watch(currentPage, () => {
             <th>Page</th>
             <th>Submitted by</th>
             <th>Date</th>
-            <th>Link status</th>
-            <th></th>
+            <th>Task</th>
           </tr>
         </thead>
         <tbody>
@@ -272,26 +270,16 @@ watch(currentPage, () => {
               <td>{{ row.user.displayName }}</td>
               <td>{{ new Date(row.createdAt).toLocaleDateString() }}</td>
               <td>
-                <FeedbackStatusBadge :status="row.taskLinkStatus" />
                 <a
                   v-if="row.taskId"
-                  :href="`/tasks/feature/${row.taskId}`"
+                  :href="`/tasks/${targetFlowSlug(row)}/${row.taskId}`"
                   class="feedback-admin__task-chip"
+                  :data-testid="`feedback-task-link-${row.id}`"
                   @click.stop
                 >
-                  task
+                  View task
                 </a>
-              </td>
-              <td class="feedback-admin__row-actions" @click.stop>
-                <button
-                  v-if="isFailed(row.taskLinkStatus)"
-                  type="button"
-                  :disabled="retryingId === row.id"
-                  :data-testid="`feedback-retry-${row.id}`"
-                  @click="handleRetry(row)"
-                >
-                  {{ retryingId === row.id ? "Retrying…" : "Retry" }}
-                </button>
+                <span v-else class="feedback-admin__task-none">—</span>
               </td>
             </tr>
             <tr
@@ -299,17 +287,11 @@ watch(currentPage, () => {
               class="feedback-admin__row-expanded"
               :data-testid="`feedback-expanded-${row.id}`"
             >
-              <td colspan="7">
+              <td colspan="6">
                 <div class="feedback-admin__expanded-grid">
                   <div>
                     <h3 class="feedback-admin__expanded-heading">Full message</h3>
                     <p class="feedback-admin__expanded-message">{{ row.message }}</p>
-                    <p
-                      v-if="row.taskLinkError"
-                      class="feedback-admin__expanded-error"
-                    >
-                      Link error: {{ row.taskLinkError }}
-                    </p>
                   </div>
                   <div>
                     <label class="feedback-admin__notes-label">
@@ -333,6 +315,36 @@ watch(currentPage, () => {
                       />
                     </label>
                     <div class="feedback-admin__expanded-actions">
+                      <template v-if="!row.taskId">
+                        <select
+                          v-model="projectChoice[row.id]"
+                          class="feedback-admin__project-select"
+                          :data-testid="`feedback-project-select-${row.id}`"
+                        >
+                          <option value="" disabled>Pick a project…</option>
+                          <option
+                            v-for="p in projects"
+                            :key="p.id"
+                            :value="p.id"
+                          >
+                            {{ p.key }} — {{ p.name }}
+                          </option>
+                        </select>
+                        <button
+                          type="button"
+                          :disabled="
+                            !projectChoice[row.id] || promotingId === row.id
+                          "
+                          :data-testid="`feedback-promote-${row.id}`"
+                          @click="handlePromote(row)"
+                        >
+                          {{
+                            promotingId === row.id
+                              ? "Promoting…"
+                              : `Promote to ${targetFlowSlug(row)} task`
+                          }}
+                        </button>
+                      </template>
                       <button
                         type="button"
                         :data-testid="`feedback-archive-toggle-${row.id}`"
@@ -511,18 +523,22 @@ watch(currentPage, () => {
 
 .feedback-admin__task-chip {
   display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.0625rem 0.375rem;
+  padding: 0.125rem 0.5rem;
   border-radius: 3px;
   background: var(--bg-primary);
   color: var(--accent);
   text-decoration: none;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   border: 1px solid var(--border-soft);
 }
 
-.feedback-admin__row-actions {
-  text-align: right;
+.feedback-admin__task-chip:hover {
+  background: var(--bg-secondary);
+}
+
+.feedback-admin__task-none {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
 }
 
 .feedback-admin__row-expanded > td {
@@ -556,12 +572,6 @@ watch(currentPage, () => {
   white-space: pre-wrap;
   font-size: 0.875rem;
   line-height: 1.45;
-}
-
-.feedback-admin__expanded-error {
-  margin-top: 0.5rem;
-  color: #991b1b;
-  font-size: 0.75rem;
 }
 
 .feedback-admin__notes-label {
@@ -599,6 +609,8 @@ watch(currentPage, () => {
   margin-top: 0.75rem;
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .feedback-admin__expanded-actions button {
@@ -610,8 +622,22 @@ watch(currentPage, () => {
   cursor: pointer;
 }
 
-.feedback-admin__expanded-actions button:hover {
+.feedback-admin__expanded-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.feedback-admin__expanded-actions button:hover:not(:disabled) {
   background: var(--bg-secondary);
+}
+
+.feedback-admin__project-select {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  min-width: 12rem;
 }
 
 .feedback-admin__pagination {

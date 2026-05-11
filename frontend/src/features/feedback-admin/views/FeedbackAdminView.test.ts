@@ -7,20 +7,26 @@ import type {
   FeedbackWithUser,
   FeedbackListResponse,
 } from "@/api/feedback.api";
+import type { Project } from "@/api/projects.api";
 import type { OrgMembership, OrgRole } from "@/api/organizations.api";
 
 const listFeedback = vi.fn();
-const retryFeedbackLink = vi.fn();
 const archiveFeedback = vi.fn();
 const updateFeedbackNotes = vi.fn();
 const exportFeedbackCsv = vi.fn();
+const promoteFeedback = vi.fn();
+const listProjects = vi.fn();
 
 vi.mock("@/api/feedback.api", () => ({
   listFeedback: (...a: unknown[]) => listFeedback(...a),
-  retryFeedbackLink: (...a: unknown[]) => retryFeedbackLink(...a),
   archiveFeedback: (...a: unknown[]) => archiveFeedback(...a),
   updateFeedbackNotes: (...a: unknown[]) => updateFeedbackNotes(...a),
   exportFeedbackCsv: (...a: unknown[]) => exportFeedbackCsv(...a),
+  promoteFeedback: (...a: unknown[]) => promoteFeedback(...a),
+}));
+
+vi.mock("@/api/projects.api", () => ({
+  listProjects: (...a: unknown[]) => listProjects(...a),
 }));
 
 const routerReplace = vi.fn();
@@ -39,8 +45,6 @@ function row(overrides: Partial<FeedbackWithUser> = {}): FeedbackWithUser {
     adminNotes: null,
     archivedAt: null,
     taskId: null,
-    taskLinkStatus: "linked",
-    taskLinkError: null,
     createdAt: new Date("2026-05-01T00:00:00Z").toISOString(),
     user: { displayName: "Alice", email: "a@x.com" },
     ...overrides,
@@ -53,6 +57,22 @@ function page(rows: FeedbackWithUser[], opts: Partial<FeedbackListResponse> = {}
     total: opts.total ?? rows.length,
     page: opts.page ?? 1,
     limit: opts.limit ?? 20,
+  };
+}
+
+function project(overrides: Partial<Project> = {}): Project {
+  return {
+    id: "proj-1",
+    key: "TF",
+    name: "TaskFlow",
+    owner: { id: "u-1", displayName: "Alice", actorType: "human" },
+    defaultAssignee: null,
+    defaultFlow: null,
+    teams: [],
+    color: null,
+    createdAt: new Date("2026-01-01T00:00:00Z").toISOString(),
+    archivedAt: null,
+    ...overrides,
   };
 }
 
@@ -83,12 +103,14 @@ async function mountAs(role: OrgRole) {
 
 beforeEach(() => {
   listFeedback.mockReset();
-  retryFeedbackLink.mockReset();
   archiveFeedback.mockReset();
   updateFeedbackNotes.mockReset();
   exportFeedbackCsv.mockReset();
+  promoteFeedback.mockReset();
+  listProjects.mockReset();
   routerReplace.mockReset();
   listFeedback.mockResolvedValue(page([]));
+  listProjects.mockResolvedValue([project()]);
 });
 
 describe("FeedbackAdminView", () => {
@@ -104,12 +126,6 @@ describe("FeedbackAdminView", () => {
       expect(routerReplace).not.toHaveBeenCalled();
       expect(listFeedback).toHaveBeenCalled();
     });
-
-    it("does not redirect owners", async () => {
-      await mountAs("owner");
-      expect(routerReplace).not.toHaveBeenCalled();
-      expect(listFeedback).toHaveBeenCalled();
-    });
   });
 
   describe("rendering", () => {
@@ -122,14 +138,14 @@ describe("FeedbackAdminView", () => {
         ]),
       );
       const w = await mountAs("admin");
-      expect(w.find("[data-testid='feedback-type-fb-bug']").text()).toBe("BUG");
-      expect(w.find("[data-testid='feedback-type-fb-feat']").text()).toBe("FEATURE");
-      expect(w.find("[data-testid='feedback-type-fb-imp']").text()).toBe("IMPROVEMENT");
       expect(w.find("[data-testid='feedback-type-fb-bug']").classes()).toContain(
         "feedback-type-badge--bug",
       );
       expect(w.find("[data-testid='feedback-type-fb-feat']").classes()).toContain(
         "feedback-type-badge--feature",
+      );
+      expect(w.find("[data-testid='feedback-type-fb-imp']").classes()).toContain(
+        "feedback-type-badge--improvement",
       );
     });
 
@@ -153,6 +169,16 @@ describe("FeedbackAdminView", () => {
         "No archived feedback",
       );
     });
+
+    it("renders a 'View task' link when the feedback already has a taskId", async () => {
+      listFeedback.mockResolvedValue(
+        page([row({ id: "fb-1", type: "FEATURE", taskId: "task-abc" })]),
+      );
+      const w = await mountAs("admin");
+      const link = w.find("[data-testid='feedback-task-link-fb-1']");
+      expect(link.exists()).toBe(true);
+      expect(link.attributes("href")).toBe("/tasks/feature/task-abc");
+    });
   });
 
   describe("expandable rows", () => {
@@ -161,20 +187,14 @@ describe("FeedbackAdminView", () => {
         page([row({ id: "fb-1", message: "Full message body here." })]),
       );
       const w = await mountAs("admin");
-      expect(w.find("[data-testid='feedback-expanded-fb-1']").exists()).toBe(
-        false,
-      );
+      expect(w.find("[data-testid='feedback-expanded-fb-1']").exists()).toBe(false);
       await w.find("[data-testid='feedback-row-fb-1']").trigger("click");
       const panel = w.find("[data-testid='feedback-expanded-fb-1']");
       expect(panel.exists()).toBe(true);
       expect(panel.text()).toContain("Full message body here.");
-      expect(
-        panel.find("[data-testid='feedback-notes-fb-1']").exists(),
-      ).toBe(true);
+      expect(panel.find("[data-testid='feedback-notes-fb-1']").exists()).toBe(true);
       await w.find("[data-testid='feedback-row-fb-1']").trigger("click");
-      expect(w.find("[data-testid='feedback-expanded-fb-1']").exists()).toBe(
-        false,
-      );
+      expect(w.find("[data-testid='feedback-expanded-fb-1']").exists()).toBe(false);
     });
   });
 
@@ -193,14 +213,10 @@ describe("FeedbackAdminView", () => {
         await notes.trigger("blur");
         await flushPromises();
         expect(updateFeedbackNotes).toHaveBeenCalledWith("fb-1", "follow up");
-        expect(
-          w.find("[data-testid='feedback-saved-fb-1']").exists(),
-        ).toBe(true);
+        expect(w.find("[data-testid='feedback-saved-fb-1']").exists()).toBe(true);
         vi.advanceTimersByTime(2000);
         await flushPromises();
-        expect(
-          w.find("[data-testid='feedback-saved-fb-1']").exists(),
-        ).toBe(false);
+        expect(w.find("[data-testid='feedback-saved-fb-1']").exists()).toBe(false);
       } finally {
         vi.useRealTimers();
       }
@@ -212,8 +228,7 @@ describe("FeedbackAdminView", () => {
       );
       const w = await mountAs("admin");
       await w.find("[data-testid='feedback-row-fb-1']").trigger("click");
-      const notes = w.find("[data-testid='feedback-notes-fb-1']");
-      await notes.trigger("blur");
+      await w.find("[data-testid='feedback-notes-fb-1']").trigger("blur");
       await flushPromises();
       expect(updateFeedbackNotes).not.toHaveBeenCalled();
     });
@@ -236,6 +251,71 @@ describe("FeedbackAdminView", () => {
     });
   });
 
+  describe("promote to task", () => {
+    it("disables the promote button until a project is picked", async () => {
+      listFeedback.mockResolvedValue(page([row({ id: "fb-1", type: "BUG" })]));
+      listProjects.mockResolvedValue([project({ id: "proj-1", key: "TF", name: "TaskFlow" })]);
+      const w = await mountAs("admin");
+      await w.find("[data-testid='feedback-row-fb-1']").trigger("click");
+      const btn = w.find("[data-testid='feedback-promote-fb-1']");
+      expect(btn.attributes("disabled")).toBeDefined();
+
+      await w
+        .find("[data-testid='feedback-project-select-fb-1']")
+        .setValue("proj-1");
+      await flushPromises();
+      expect(
+        w.find("[data-testid='feedback-promote-fb-1']").attributes("disabled"),
+      ).toBeUndefined();
+    });
+
+    it("calls promoteFeedback with the picked project and updates the row", async () => {
+      listFeedback.mockResolvedValue(page([row({ id: "fb-1", type: "FEATURE" })]));
+      listProjects.mockResolvedValue([project({ id: "proj-1" })]);
+      promoteFeedback.mockResolvedValue(
+        row({ id: "fb-1", type: "FEATURE", taskId: "task-99" }),
+      );
+      const w = await mountAs("admin");
+      await w.find("[data-testid='feedback-row-fb-1']").trigger("click");
+      await w
+        .find("[data-testid='feedback-project-select-fb-1']")
+        .setValue("proj-1");
+      await w.find("[data-testid='feedback-promote-fb-1']").trigger("click");
+      await flushPromises();
+      expect(promoteFeedback).toHaveBeenCalledWith("fb-1", "proj-1");
+      expect(w.find("[data-testid='feedback-task-link-fb-1']").exists()).toBe(true);
+    });
+
+    it("hides the promote controls once feedback has a linked task", async () => {
+      listFeedback.mockResolvedValue(
+        page([row({ id: "fb-1", taskId: "task-99" })]),
+      );
+      const w = await mountAs("admin");
+      await w.find("[data-testid='feedback-row-fb-1']").trigger("click");
+      expect(w.find("[data-testid='feedback-project-select-fb-1']").exists()).toBe(false);
+      expect(w.find("[data-testid='feedback-promote-fb-1']").exists()).toBe(false);
+    });
+
+    it("labels the promote button with the destination flow slug", async () => {
+      listFeedback.mockResolvedValue(
+        page([
+          row({ id: "fb-bug", type: "BUG" }),
+          row({ id: "fb-feat", type: "FEATURE" }),
+          row({ id: "fb-imp", type: "IMPROVEMENT" }),
+        ]),
+      );
+      const w = await mountAs("admin");
+      await w.find("[data-testid='feedback-row-fb-bug']").trigger("click");
+      expect(w.find("[data-testid='feedback-promote-fb-bug']").text()).toContain("bug");
+      await w.find("[data-testid='feedback-row-fb-bug']").trigger("click");
+      await w.find("[data-testid='feedback-row-fb-feat']").trigger("click");
+      expect(w.find("[data-testid='feedback-promote-fb-feat']").text()).toContain("feature");
+      await w.find("[data-testid='feedback-row-fb-feat']").trigger("click");
+      await w.find("[data-testid='feedback-row-fb-imp']").trigger("click");
+      expect(w.find("[data-testid='feedback-promote-fb-imp']").text()).toContain("improvement");
+    });
+  });
+
   describe("pagination", () => {
     it("renders Page X of Y and disables prev on the first page", async () => {
       listFeedback.mockResolvedValue(
@@ -245,14 +325,8 @@ describe("FeedbackAdminView", () => {
       expect(w.find("[data-testid='feedback-pagination']").text()).toContain(
         "Page 1 of 3",
       );
-      expect(
-        (w.find("[data-testid='feedback-prev']").attributes("disabled") ?? null) !==
-          null,
-      ).toBe(true);
-      expect(
-        (w.find("[data-testid='feedback-next']").attributes("disabled") ?? null) !==
-          null,
-      ).toBe(false);
+      expect(w.find("[data-testid='feedback-prev']").attributes("disabled")).toBeDefined();
+      expect(w.find("[data-testid='feedback-next']").attributes("disabled")).toBeUndefined();
     });
 
     it("clicking next advances the page and re-fetches", async () => {
@@ -329,44 +403,6 @@ describe("FeedbackAdminView", () => {
         createUrl.mockRestore();
         revokeUrl.mockRestore();
       }
-    });
-  });
-
-  describe("task-link status preserved from prior phase", () => {
-    it("renders the link-status badge", async () => {
-      listFeedback.mockResolvedValue(
-        page([
-          row({ id: "fb-1", taskLinkStatus: "linked" }),
-          row({ id: "fb-2", taskLinkStatus: "failed_create", taskLinkError: "boom" }),
-        ]),
-      );
-      const w = await mountAs("admin");
-      expect(w.text()).toContain("Linked");
-      expect(w.text()).toContain("Failed: create");
-    });
-
-    it("only shows Retry on failed rows", async () => {
-      listFeedback.mockResolvedValue(
-        page([
-          row({ id: "fb-1", taskLinkStatus: "linked" }),
-          row({ id: "fb-2", taskLinkStatus: "failed_create" }),
-        ]),
-      );
-      const w = await mountAs("admin");
-      expect(w.find("[data-testid='feedback-retry-fb-1']").exists()).toBe(false);
-      expect(w.find("[data-testid='feedback-retry-fb-2']").exists()).toBe(true);
-    });
-
-    it("changing the link-status filter re-queries with the new value", async () => {
-      listFeedback.mockResolvedValue(page([]));
-      const w = await mountAs("admin");
-      await w
-        .find("[data-testid='feedback-status-filter']")
-        .setValue("failed_create");
-      await flushPromises();
-      expect(listFeedback).toHaveBeenLastCalledWith(
-        expect.objectContaining({ taskLinkStatus: "failed_create" }),
-      );
     });
   });
 });
