@@ -34,11 +34,15 @@ export const emptyStateContent: Record<
     },
     validate: {
       heading: "Nothing to validate",
-      description: "Resolved bugs wait here for verification before closing.",
+      description: "Resolved bugs wait here for verification before staging.",
+    },
+    staging: {
+      heading: "Nothing in staging",
+      description: "Validated fixes wait here, staged for release.",
     },
     closed: {
       heading: "No closed bugs",
-      description: "Validated bugs end up here once fully resolved.",
+      description: "Staged fixes end up here once released.",
     },
   },
   feature: {

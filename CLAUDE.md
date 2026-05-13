@@ -89,6 +89,10 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 - Do not spin up a local database to run tests that need one (backend integration tests, Playwright E2E). Instead, push the branch to GitHub, open a PR into `staging`, and review the CI results there.
 - Use `gh pr checks <PR>` and `gh run view <run-id> --log-failed` to inspect CI output rather than running the DB-backed suites locally.
 
+## PR Workflow
+- After pushing to a PR, **wait for CI to come back clean** (all checks pass) and verify there are no branch conflicts before returning control to the user. Poll with `gh pr checks <PR>` until every check is `pass`; if anything fails, diagnose and push a fix in the same loop. Don't hand back a PR that's still red or unmergeable — the user shouldn't have to discover the failure.
+- Also check mergeability: `gh pr view <PR> --json mergeable,mergeStateStatus`. If `mergeStateStatus` is `DIRTY`/`BEHIND`/`BLOCKED`, resolve conflicts or rebase before returning.
+
 ## PR Titles (Conventional Commits)
 - PRs into `staging` and direct hotfix PRs into `main` must have titles following Conventional Commits — e.g. `feat(api): add version endpoint`, `fix: handle null assignee`, `feat!: drop deprecated field` for breaking changes. The `commitlint` workflow enforces this.
 - Allowed types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`, `style`. Use `!` after type/scope for breaking changes.
