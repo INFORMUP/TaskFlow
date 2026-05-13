@@ -21,6 +21,7 @@ const BUG_STATUSES: StatusDef[] = [
   { slug: "approve", name: "Approve", description: "Engineer reviews investigation findings", color: "#8b5cf6" },
   { slug: "resolve", name: "Resolve", description: "Execute fix via red-green regression TDD", color: "#f59e0b" },
   { slug: "validate", name: "Validate", description: "Confirm bug no longer occurs, no regressions", color: "#14b8a6" },
+  { slug: "staging", name: "Staging", description: "Fix is staged for release", color: "#22c55e" },
   { slug: "closed", name: "Closed", description: "Task resolved with resolution", color: "#6b7280" },
 ];
 

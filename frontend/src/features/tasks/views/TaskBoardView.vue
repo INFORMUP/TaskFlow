@@ -67,7 +67,8 @@ async function loadStatuses() {
       { id: "3", slug: "approve", name: "Approve", sortOrder: 3 },
       { id: "4", slug: "resolve", name: "Resolve", sortOrder: 4 },
       { id: "5", slug: "validate", name: "Validate", sortOrder: 5 },
-      { id: "6", slug: "closed", name: "Closed", sortOrder: 6 },
+      { id: "6", slug: "staging", name: "Staging", sortOrder: 6 },
+      { id: "7", slug: "closed", name: "Closed", sortOrder: 7 },
     ],
     feature: [
       { id: "1", slug: "discuss", name: "Discuss", sortOrder: 1 },

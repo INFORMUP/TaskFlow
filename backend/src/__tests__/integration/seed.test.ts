@@ -47,15 +47,15 @@ describe("seed data", () => {
     ]);
   });
 
-  it("bug flow has 6 statuses in correct order", async () => {
+  it("bug flow has 7 statuses in correct order", async () => {
     const flow = await prisma.flow.findFirst({ where: { slug: "bug" } });
     const statuses = await prisma.flowStatus.findMany({
       where: { flowId: flow!.id },
       orderBy: { sortOrder: "asc" },
     });
-    expect(statuses).toHaveLength(6);
+    expect(statuses).toHaveLength(7);
     expect(statuses.map((s) => s.slug)).toEqual([
-      "triage", "investigate", "approve", "resolve", "validate", "closed",
+      "triage", "investigate", "approve", "resolve", "validate", "staging", "closed",
     ]);
   });
 
@@ -83,12 +83,12 @@ describe("seed data", () => {
     ]);
   });
 
-  it("bug flow has 14 transitions", async () => {
+  it("bug flow has 16 transitions", async () => {
     const flow = await prisma.flow.findFirst({ where: { slug: "bug" } });
     const transitions = await prisma.flowTransition.findMany({
       where: { flowId: flow!.id },
     });
-    expect(transitions).toHaveLength(14);
+    expect(transitions).toHaveLength(16);
   });
 
   it("feature flow has 17 transitions", async () => {
@@ -150,8 +150,8 @@ describe("seed data", () => {
     expect(flowsResult.created).toBe(0);
     expect(flowsResult.skipped).toBe(6);
     expect(statusesResult.created).toBe(0);
-    expect(statusesResult.skipped).toBe(33);
+    expect(statusesResult.skipped).toBe(34);
     expect(transitionsResult.created).toBe(0);
-    expect(transitionsResult.skipped).toBe(65);
+    expect(transitionsResult.skipped).toBe(67);
   });
 });

@@ -76,6 +76,7 @@ Not all team members can trigger all transitions. This table specifies which tea
 | → Approve | Agent (surfaces to Engineer) |
 | → Resolve | Engineer |
 | → Validate | Engineer, Agent |
+| → Staging | Engineer, Product |
 | → Closed (from any status) | Engineer, Product (with required `resolution` and status change note) |
 
 ### Feature Flow Transitions

@@ -32,7 +32,7 @@ const FLOW_PREFIX: Record<FlowSlug, string> = {
 
 // Non-initial, non-terminal statuses ("in progress" buckets) per flow.
 const MID_STATUSES: Record<FlowSlug, string[]> = {
-  bug: ["investigate", "approve", "resolve", "validate"],
+  bug: ["investigate", "approve", "resolve", "validate", "staging"],
   feature: ["design", "prototype", "implement", "validate", "review"],
   improvement: ["approve", "implement", "validate"],
 };
