@@ -31,33 +31,31 @@ WHERE id = '894fa035-4c05-5af0-a537-bfe14546f0e3'::uuid;
 -- 3. Insert the new flow_transitions for the inserted staging stage:
 --    validate → staging (forward), staging → closed (forward),
 --    staging → validate (backward bounce).
-INSERT INTO flow_transitions (id, flow_id, from_status_id, to_status_id, created_at)
+--    (flow_transitions has no created_at column — see schema.prisma.)
+INSERT INTO flow_transitions (id, flow_id, from_status_id, to_status_id)
 SELECT
   '0413b05f-8797-5bef-a3a8-79f14676bb77'::uuid,
   flow_id,
   '894fa035-4c05-5af0-a537-bfe14546f0e3'::uuid,
-  'bef6e3cf-9b8c-5c2f-be00-a3f312ab048c'::uuid,
-  NOW()
+  'bef6e3cf-9b8c-5c2f-be00-a3f312ab048c'::uuid
 FROM flow_statuses
 WHERE id = '894fa035-4c05-5af0-a537-bfe14546f0e3'::uuid;
 
-INSERT INTO flow_transitions (id, flow_id, from_status_id, to_status_id, created_at)
+INSERT INTO flow_transitions (id, flow_id, from_status_id, to_status_id)
 SELECT
   '398ab53e-3d10-5e17-a6c9-fd97fd68905f'::uuid,
   flow_id,
   'bef6e3cf-9b8c-5c2f-be00-a3f312ab048c'::uuid,
-  'd891bd28-b61b-5135-9a87-241d99fa5594'::uuid,
-  NOW()
+  'd891bd28-b61b-5135-9a87-241d99fa5594'::uuid
 FROM flow_statuses
 WHERE id = 'bef6e3cf-9b8c-5c2f-be00-a3f312ab048c'::uuid;
 
-INSERT INTO flow_transitions (id, flow_id, from_status_id, to_status_id, created_at)
+INSERT INTO flow_transitions (id, flow_id, from_status_id, to_status_id)
 SELECT
   '615afba5-1228-5099-8922-bf9172b0f6d0'::uuid,
   flow_id,
   'bef6e3cf-9b8c-5c2f-be00-a3f312ab048c'::uuid,
-  '894fa035-4c05-5af0-a537-bfe14546f0e3'::uuid,
-  NOW()
+  '894fa035-4c05-5af0-a537-bfe14546f0e3'::uuid
 FROM flow_statuses
 WHERE id = 'bef6e3cf-9b8c-5c2f-be00-a3f312ab048c'::uuid;
 
