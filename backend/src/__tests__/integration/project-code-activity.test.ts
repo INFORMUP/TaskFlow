@@ -156,25 +156,28 @@ describe("project code activity rollup", () => {
     it("aggregates commits across all tasks in the project, newest first", async () => {
       const app = await buildApp();
       // Two commits on task A1 (different repos), one on task A2, one on task B (excluded).
+      // Explicit createdAt spacing — CI inserts can otherwise share a microsecond and
+      // make the desc-by-createdAt order non-deterministic.
+      const t0 = new Date("2026-01-01T00:00:00Z").getTime();
       const c1 = await prisma.taskCommit.create({
         data: { taskId: taskA1Id, repositoryId: repoA1Id, sha: "1".repeat(40),
                 url: "https://github.com/INFORMUP/RepoOne/commit/" + "1".repeat(40),
-                message: "first" },
+                message: "first", createdAt: new Date(t0) },
       });
       const c2 = await prisma.taskCommit.create({
         data: { taskId: taskA1Id, repositoryId: repoA2Id, sha: "2".repeat(40),
                 url: "https://github.com/INFORMUP/RepoTwo/commit/" + "2".repeat(40),
-                message: "second" },
+                message: "second", createdAt: new Date(t0 + 1000) },
       });
       const c3 = await prisma.taskCommit.create({
         data: { taskId: taskA2Id, repositoryId: repoA1Id, sha: "3".repeat(40),
                 url: "https://github.com/INFORMUP/RepoOne/commit/" + "3".repeat(40),
-                message: "third" },
+                message: "third", createdAt: new Date(t0 + 2000) },
       });
       await prisma.taskCommit.create({
         data: { taskId: taskBId, repositoryId: repoBId, sha: "4".repeat(40),
                 url: "https://github.com/INFORMUP/RepoB/commit/" + "4".repeat(40),
-                message: "should not appear" },
+                message: "should not appear", createdAt: new Date(t0 + 3000) },
       });
 
       const res = await app.inject({
@@ -224,12 +227,15 @@ describe("project code activity rollup", () => {
 
     it("paginates via cursor", async () => {
       const app = await buildApp();
-      // Create 3 commits with controlled createdAt order.
+      // Create 3 commits with controlled createdAt order. Explicit spacing avoids the
+      // cursor (`createdAt: { lt: ... }`) silently dropping a row that ties at the boundary.
+      const t0 = new Date("2026-01-01T00:00:00Z").getTime();
       const shas = ["1", "2", "3"].map((c) => c.repeat(40));
-      for (const sha of shas) {
+      for (let i = 0; i < shas.length; i++) {
         await prisma.taskCommit.create({
-          data: { taskId: taskA1Id, repositoryId: repoA1Id, sha,
-                  url: `https://github.com/INFORMUP/RepoOne/commit/${sha}` },
+          data: { taskId: taskA1Id, repositoryId: repoA1Id, sha: shas[i],
+                  url: `https://github.com/INFORMUP/RepoOne/commit/${shas[i]}`,
+                  createdAt: new Date(t0 + i * 1000) },
         });
       }
       const first = await app.inject({
@@ -291,17 +297,22 @@ describe("project code activity rollup", () => {
   describe("GET /api/v1/projects/:id/pull-requests", () => {
     it("aggregates PRs across tasks, newest first", async () => {
       const app = await buildApp();
+      // Explicit createdAt spacing — see commits test above for rationale.
+      const t0 = new Date("2026-01-01T00:00:00Z").getTime();
       const p1 = await prisma.taskPullRequest.create({
         data: { taskId: taskA1Id, repositoryId: repoA1Id, number: 1, state: "open", title: "PR1",
-                url: "https://github.com/INFORMUP/RepoOne/pull/1" },
+                url: "https://github.com/INFORMUP/RepoOne/pull/1",
+                createdAt: new Date(t0) },
       });
       const p2 = await prisma.taskPullRequest.create({
         data: { taskId: taskA2Id, repositoryId: repoA1Id, number: 2, state: "merged", title: "PR2",
-                url: "https://github.com/INFORMUP/RepoOne/pull/2" },
+                url: "https://github.com/INFORMUP/RepoOne/pull/2",
+                createdAt: new Date(t0 + 1000) },
       });
       await prisma.taskPullRequest.create({
         data: { taskId: taskBId, repositoryId: repoBId, number: 3, state: "open", title: "PR-other",
-                url: "https://github.com/INFORMUP/RepoB/pull/3" },
+                url: "https://github.com/INFORMUP/RepoB/pull/3",
+                createdAt: new Date(t0 + 2000) },
       });
 
       const res = await app.inject({
