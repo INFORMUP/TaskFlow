@@ -150,8 +150,8 @@ describe("seed data", () => {
     expect(flowsResult.created).toBe(0);
     expect(flowsResult.skipped).toBe(6);
     expect(statusesResult.created).toBe(0);
-    expect(statusesResult.skipped).toBe(33);
+    expect(statusesResult.skipped).toBe(34);
     expect(transitionsResult.created).toBe(0);
-    expect(transitionsResult.skipped).toBe(65);
+    expect(transitionsResult.skipped).toBe(67);
   });
 });
