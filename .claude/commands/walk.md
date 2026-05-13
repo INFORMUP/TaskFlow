@@ -50,6 +50,7 @@ This is the careful counterpart to `/fast-track`. Fast-track skips the per-stage
         - `approve` — human gate (product/eng decides whether to fix). Print the investigation summary and stop the walk so a human can approve.
         - `resolve` — same as feature `implement` but with `fix/` branch prefix. Open PR, link to task.
         - `validate` — same as feature `validate`.
+        - `staging` — human merge gate (same as feature `staging`). Print the PR URL and stop the walk; merge is never an agent action.
         - `closed` — terminal. Stop.
 
       - **`improvement` flow**

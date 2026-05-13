@@ -118,12 +118,14 @@ describe("permission.service", () => {
       expect(canTransitionToStatus(["engineer"], "bug", "approve")).toBe(true);
       expect(canTransitionToStatus(["engineer"], "bug", "resolve")).toBe(true);
       expect(canTransitionToStatus(["engineer"], "bug", "validate")).toBe(true);
+      expect(canTransitionToStatus(["engineer"], "bug", "staging")).toBe(true);
       expect(canTransitionToStatus(["engineer"], "bug", "closed")).toBe(true);
     });
 
-    it("product can only transition bug to triage and closed", () => {
+    it("product can transition bug to triage, staging, and closed", () => {
       expect(canTransitionToStatus(["product"], "bug", "triage")).toBe(true);
       expect(canTransitionToStatus(["product"], "bug", "investigate")).toBe(false);
+      expect(canTransitionToStatus(["product"], "bug", "staging")).toBe(true);
       expect(canTransitionToStatus(["product"], "bug", "closed")).toBe(true);
     });
 
@@ -144,6 +146,14 @@ describe("permission.service", () => {
 
     it("agent cannot transition bug to resolve", () => {
       expect(canTransitionToStatus(["agent"], "bug", "resolve")).toBe(false);
+    });
+
+    it("agent cannot transition bug to staging", () => {
+      expect(canTransitionToStatus(["agent"], "bug", "staging")).toBe(false);
+    });
+
+    it("user cannot transition bug to staging", () => {
+      expect(canTransitionToStatus(["user"], "bug", "staging")).toBe(false);
     });
   });
 

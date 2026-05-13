@@ -77,7 +77,8 @@ Handles reported defects — from initial triage through resolution and confirma
 | 3 | **Approve** | Surface investigation findings to engineer for review. Engineer approves the proposed fix approach or requests further investigation. | Engineer | → Investigate (if more analysis needed) |
 | 4 | **Resolve** | Execute the fix via red-green regression TDD. Agent writes failing test, implements fix, confirms test passes. Human-in-the-loop as needed. | Agent + Engineer | → Investigate (if fix attempt reveals different root cause) |
 | 5 | **Validate** | Confirm the bug no longer occurs and no regressions were introduced. Agent validates first, then surfaces to human for confirmation. | Agent → Engineer | → Resolve (if validation fails) |
-| 6 | **Closed** | Task is resolved. Resolution field records outcome (`fixed`, `invalid`, `duplicate`, `wont_fix`, `cannot_reproduce`). Reachable from any status. | Engineer | → Validate (if bug recurs after closure) |
+| 6 | **Staging** | Fix is staged for release, awaiting promotion to production. | Engineer + Product | → Validate (if staging surfaces a regression) |
+| 7 | **Closed** | Task is resolved. Resolution field records outcome (`fixed`, `invalid`, `duplicate`, `wont_fix`, `cannot_reproduce`). Reachable from any status. Terminal — recurrences are tracked as fresh Bug tasks. | Engineer | — |
 
 **Changes from original proposal:**
 - Renamed "Analyze" → **Triage** — more standard terminology that better communicates the deduplication and severity-assessment nature of this step.
@@ -150,6 +151,6 @@ Epics group related tasks. This is better handled as a **parent-child relationsh
 
 | Flow | Purpose | Statuses |
 |------|---------|----------|
-| **Bug** | Defect resolution | Triage → Investigate → Approve → Resolve → Validate → Closed |
+| **Bug** | Defect resolution | Triage → Investigate → Approve → Resolve → Validate → Staging → Closed |
 | **Feature** | New functionality | Discuss → Design → Prototype → Implement → Validate → Review → Closed |
 | **Improvement** | Tech debt, refactoring, optimization | Propose → Approve → Implement → Validate → Closed |

@@ -6,7 +6,7 @@ interface TransitionDef {
   to: string;
 }
 
-// Bug: Triage → Investigate → Approve → Resolve → Validate → Closed
+// Bug: Triage → Investigate → Approve → Resolve → Validate → Staging → Closed
 // Plus backward transitions and any-to-Closed
 const BUG_TRANSITIONS: TransitionDef[] = [
   // Forward
@@ -14,18 +14,20 @@ const BUG_TRANSITIONS: TransitionDef[] = [
   { from: "investigate", to: "approve" },
   { from: "approve", to: "resolve" },
   { from: "resolve", to: "validate" },
-  { from: "validate", to: "closed" },
+  { from: "validate", to: "staging" },
+  { from: "staging", to: "closed" },
   // Backward
   { from: "investigate", to: "triage" },
   { from: "approve", to: "investigate" },
   { from: "resolve", to: "investigate" },
   { from: "validate", to: "resolve" },
-  { from: "closed", to: "validate" },
-  // Any-to-Closed (those not already covered)
+  { from: "staging", to: "validate" },
+  // Any-to-Closed (early termination, e.g. wont_fix / duplicate)
   { from: "triage", to: "closed" },
   { from: "investigate", to: "closed" },
   { from: "approve", to: "closed" },
   { from: "resolve", to: "closed" },
+  { from: "validate", to: "closed" },
 ];
 
 // Feature: Discuss → Design → Prototype → Implement → Validate → Staging → Closed
