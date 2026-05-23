@@ -129,7 +129,15 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
           +{{ user.teams.length - 1 }}
         </span>
       </button>
-      <span v-if="user">{{ user.displayName }}</span>
+      <router-link
+        v-if="user"
+        :to="`/users/${user.id}`"
+        class="navbar__me"
+        title="View my activity"
+        data-testid="navbar-my-activity-link"
+      >
+        {{ user.displayName }}
+      </router-link>
       <button type="button" class="navbar__logout" @click="handleLogout">Logout</button>
     </div>
   </nav>
@@ -222,6 +230,16 @@ async function handleTeamSubmit(teams: TeamSelection[]) {
 
 .navbar__add-task:hover {
   filter: brightness(1.08);
+}
+
+.navbar__me {
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.navbar__me:hover {
+  text-decoration: underline;
 }
 
 .navbar__logout {
