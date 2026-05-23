@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   getProject,
@@ -122,7 +122,7 @@ async function handleAssigneeSelect(userId: string | null) {
   }
 }
 
-onMounted(async () => {
+async function loadProject() {
   loading.value = true;
   try {
     const [proj, attachedFlows] = await Promise.all([
@@ -135,12 +135,22 @@ onMounted(async () => {
     error.value = e?.error?.message ?? "Failed to load project";
   }
   selectedFlow.value = pickInitialFlow();
+  await loadTasks();
+}
+
+onMounted(async () => {
   try {
     users.value = await listOrgMembers();
   } catch {
     users.value = [];
   }
-  await loadTasks();
+  await loadProject();
+});
+
+// Router reuses this component when only :id changes (e.g. via global
+// search), so reload everything when the project in the URL changes.
+watch(projectId, () => {
+  loadProject();
 });
 </script>
 

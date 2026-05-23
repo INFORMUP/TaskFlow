@@ -176,4 +176,19 @@ describe("ProjectWorkspaceView", () => {
 
     expect(wrapper.find("[data-testid='workspace-empty']").exists()).toBe(true);
   });
+
+  it("reloads project, flows, and tasks when navigating to a different project", async () => {
+    const { router } = await mountView();
+    getProject.mockClear();
+    listProjectFlows.mockClear();
+    getTasks.mockClear();
+    getProject.mockResolvedValue({ ...PROJECT, id: "p-2", key: "OPS", name: "Ops" });
+
+    await router.push("/projects/p-2");
+    await flushPromises();
+
+    expect(getProject).toHaveBeenCalledWith("p-2");
+    expect(listProjectFlows).toHaveBeenCalledWith("p-2");
+    expect(getTasks).toHaveBeenCalledWith(expect.objectContaining({ projectId: "p-2" }));
+  });
 });
