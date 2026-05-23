@@ -37,7 +37,9 @@ async function handleSubmit(payload: any) {
   error.value = null;
   try {
     const created = await createProject(payload);
-    router.push(`/projects/${created.id}`);
+    // A new project lands on its settings page to finish configuration
+    // (teams, flows, repositories) before it has any tasks to show.
+    router.push(`/projects/${created.id}/settings`);
   } catch (e: any) {
     error.value = e?.error?.message ?? "Failed to create project";
   } finally {
