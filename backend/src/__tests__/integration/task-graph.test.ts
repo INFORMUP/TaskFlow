@@ -111,6 +111,31 @@ describe("task graph", () => {
     }
   });
 
+  it("includes each node's project chips", async () => {
+    const a = await createTask("A");
+    const b = await createTask("B");
+    await addBlocker(b.id, a.id);
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/v1/tasks/${a.id}/graph`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    expect(body.nodes.length).toBeGreaterThan(0);
+    for (const node of body.nodes) {
+      expect(Array.isArray(node.projects)).toBe(true);
+      expect(node.projects.length).toBeGreaterThan(0);
+      const project = node.projects[0];
+      expect(project).toHaveProperty("key");
+      expect(project).toHaveProperty("name");
+      expect(project).toHaveProperty("color");
+    }
+  });
+
   it("returns transitive blockers in both directions", async () => {
     const a = await createTask("A");
     const b = await createTask("B");
