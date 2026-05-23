@@ -91,6 +91,12 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: "auth", public: true },
   },
   {
+    path: "/users/:id",
+    name: "user-profile",
+    component: () => import("@/features/users/views/UserProfileView.vue"),
+    meta: { layout: "app" },
+  },
+  {
     path: "/settings",
     name: "settings",
     component: () => import("@/features/settings/views/SettingsView.vue"),

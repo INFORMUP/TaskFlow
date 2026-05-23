@@ -2,6 +2,7 @@ import { FastifyInstance } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { enforceScope } from "../services/permission.service.js";
+import { listUserActivity, UserActivityError } from "../services/user-activity.service.js";
 import { CommonErrorResponses, ErrorResponse } from "./_schemas.js";
 
 const OrgMember = Type.Object(
@@ -12,6 +13,59 @@ const OrgMember = Type.Object(
   },
   { additionalProperties: true }
 );
+
+const ActivityTaskRef = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    displayId: Type.String(),
+    title: Type.String(),
+    flow: Type.Object(
+      { id: Type.String(), slug: Type.String(), name: Type.String() },
+      { additionalProperties: true }
+    ),
+  },
+  { additionalProperties: true }
+);
+
+const ActivityStatusRef = Type.Object(
+  {
+    id: Type.String(),
+    slug: Type.String(),
+    name: Type.String(),
+    color: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: true }
+);
+
+const ActivityEventRecord = Type.Object(
+  {
+    id: Type.String(),
+    type: Type.String(),
+    timestamp: Type.String({ format: "date-time" }),
+    task: ActivityTaskRef,
+    fromStatus: Type.Optional(Type.Union([ActivityStatusRef, Type.Null()])),
+    toStatus: Type.Optional(ActivityStatusRef),
+    commentId: Type.Optional(Type.String()),
+    bodyPreview: Type.Optional(Type.String()),
+  },
+  { additionalProperties: true }
+);
+
+const ActivityPagination = Type.Object(
+  {
+    cursor: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+    hasMore: Type.Boolean(),
+  },
+  { additionalProperties: true }
+);
+
+const ListUserActivityQuery = Type.Object({
+  projectId: Type.Optional(Type.String({ format: "uuid" })),
+  from: Type.Optional(Type.String()),
+  to: Type.Optional(Type.String()),
+  cursor: Type.Optional(Type.String()),
+  limit: Type.Optional(Type.String()),
+});
 
 const UserTeamMembership = Type.Object(
   {
@@ -238,6 +292,66 @@ export async function userRoutes(fastify: FastifyInstance) {
       });
 
       return { data: members };
+    }
+  );
+
+  fastify.get<{
+    Params: { id: string };
+    Querystring: Static<typeof ListUserActivityQuery>;
+  }>(
+    "/api/v1/users/:id/activity",
+    {
+      schema: {
+        summary: "List a user's activity timeline",
+        description:
+          "Reverse-chronological feed of a user's tasks created, status transitions made, and comments added, merged into one stream. Scoped to events on tasks the requester is allowed to view. Filter by `projectId` and an inclusive `from`/`to` date range (ISO timestamps). Cursor-paginated (`cursor` is a `createdAt` ISO timestamp; `limit` max 100, default 20). The target user must be an active member of the requester's org.",
+        tags: ["users"],
+        params: Type.Object({ id: Type.String({ format: "uuid" }) }),
+        querystring: ListUserActivityQuery,
+        response: {
+          200: Type.Object(
+            {
+              user: OrgMember,
+              data: Type.Array(ActivityEventRecord),
+              pagination: ActivityPagination,
+            },
+            { additionalProperties: true }
+          ),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:read")) return;
+      const { id } = request.params;
+      const flows = await prisma.flow.findMany({
+        where: { orgId: request.org.id },
+        select: { id: true, slug: true },
+      });
+      const flowIdBySlug = new Map(flows.map((f) => [f.slug, f.id]));
+      const teamSlugs = request.user.teams.map((t) => t.slug);
+      const limit = Math.min(parseInt(request.query.limit || "20", 10) || 20, 100);
+      try {
+        return await listUserActivity(
+          request.org.id,
+          id,
+          {
+            projectId: request.query.projectId,
+            from: request.query.from,
+            to: request.query.to,
+            cursor: request.query.cursor,
+            limit,
+          },
+          { teamSlugs, userId: request.user.id, flowIdBySlug }
+        );
+      } catch (err) {
+        if (err instanceof UserActivityError) {
+          return reply
+            .status(err.status)
+            .send({ error: { code: err.code, message: err.message } });
+        }
+        throw err;
+      }
     }
   );
 }
