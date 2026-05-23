@@ -20,6 +20,16 @@ const GraphNode = Type.Object(
       { slug: Type.String(), name: Type.String() },
       { additionalProperties: true },
     ),
+    projects: Type.Array(
+      Type.Object(
+        {
+          key: Type.String(),
+          name: Type.String(),
+          color: Type.Union([Type.String(), Type.Null()]),
+        },
+        { additionalProperties: true },
+      ),
+    ),
     isRoot: Type.Boolean(),
   },
   { additionalProperties: true },

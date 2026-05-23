@@ -6,6 +6,7 @@ import { Background } from "@vue-flow/background";
 import { Controls } from "@vue-flow/controls";
 import dagre from "dagre";
 import { getTaskGraph, type TaskGraphResponse } from "@/api/tasks.api";
+import TaskGraphTable from "../components/TaskGraphTable.vue";
 
 import "@vue-flow/core/dist/style.css";
 import "@vue-flow/core/dist/theme-default.css";
@@ -19,6 +20,7 @@ const flowSlug = route.params.flow as string;
 const data = ref<TaskGraphResponse | null>(null);
 const error = ref<string | null>(null);
 const loading = ref(true);
+const mode = ref<"diagram" | "table">("diagram");
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 80;
@@ -140,7 +142,29 @@ onMounted(load);
         ← Back to task
       </router-link>
       <h2>Task graph</h2>
-      <ul class="graph-view__legend">
+      <div class="graph-view__modes" role="group" aria-label="Graph view mode">
+        <button
+          type="button"
+          class="graph-view__mode-btn"
+          :class="{ 'graph-view__mode-btn--active': mode === 'diagram' }"
+          :aria-pressed="mode === 'diagram'"
+          data-testid="graph-mode-diagram"
+          @click="mode = 'diagram'"
+        >
+          Diagram
+        </button>
+        <button
+          type="button"
+          class="graph-view__mode-btn"
+          :class="{ 'graph-view__mode-btn--active': mode === 'table' }"
+          :aria-pressed="mode === 'table'"
+          data-testid="graph-mode-table"
+          @click="mode = 'table'"
+        >
+          Table
+        </button>
+      </div>
+      <ul v-show="mode === 'diagram'" class="graph-view__legend">
         <li><span class="legend__swatch legend__swatch--spawn"></span>Spawn</li>
         <li><span class="legend__swatch legend__swatch--blocker"></span>Blocks</li>
         <li><span class="legend__swatch legend__swatch--root"></span>Root</li>
@@ -159,7 +183,11 @@ onMounted(load);
       Graph is large; results were truncated at 500 nodes.
     </p>
 
-    <div v-show="!loading && !error && !isEmpty" class="graph-view__canvas" data-testid="graph-canvas">
+    <div
+      v-show="!loading && !error && !isEmpty && mode === 'diagram'"
+      class="graph-view__canvas"
+      data-testid="graph-canvas"
+    >
       <VueFlow
         :nodes="flowNodes"
         :edges="flowEdges"
@@ -172,6 +200,13 @@ onMounted(load);
         <Background />
         <Controls />
       </VueFlow>
+    </div>
+
+    <div
+      v-if="!loading && !error && !isEmpty && mode === 'table' && data"
+      class="graph-view__table-wrap"
+    >
+      <TaskGraphTable :graph="data" />
     </div>
   </div>
 </template>
@@ -201,6 +236,34 @@ onMounted(load);
 }
 .graph-view__back:hover {
   text-decoration: underline;
+}
+.graph-view__modes {
+  display: inline-flex;
+  border: 1px solid var(--border-primary, #ddd);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.graph-view__mode-btn {
+  border: none;
+  background: var(--bg-primary, #fff);
+  color: var(--color-text, #333);
+  padding: 0.3rem 0.75rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.graph-view__mode-btn + .graph-view__mode-btn {
+  border-left: 1px solid var(--border-primary, #ddd);
+}
+.graph-view__mode-btn--active {
+  background: var(--color-link, #2563eb);
+  color: #fff;
+}
+.graph-view__table-wrap {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid var(--border-primary, #ddd);
+  border-radius: 4px;
+  min-height: 200px;
 }
 .graph-view__legend {
   display: flex;

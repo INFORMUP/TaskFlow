@@ -1,0 +1,86 @@
+name: Migration sync gate
+
+# Blocks a staging->main PR that changes Prisma migrations until an operator
+# has run a prod->staging dry-run and attested it by applying the
+# `migration-verified` label.
+#
+# Why: migrations that pass against staging's synthetic seed data can still
+# fail -- or run dangerously slow / destructively -- against real prod-shaped
+# data. `scripts/taskflow/sync-prod-to-staging.sh --dry-run` (in the
+# aws-config repo) restores a prod snapshot into a scratch DB, applies
+# tip-of-staging migrations, and sanitizes, all without touching staging.
+# This gate forces that check to happen before the migration reaches
+# production.
+#
+# Deliberately NO hotfix bypass: a hotfix migration going straight to prod
+# without a dry-run is the highest-risk path, not a path to fast-track.
+# release-please PRs never touch migrations, so they pass automatically.
+#
+# Setup: the `migration-verified` label must exist in the repo, and this
+# workflow must be added as a required status check on `main`.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  migration-sync-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect Prisma migration changes
+        id: detect
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Files this PR introduces relative to its merge-base with the target.
+          CHANGED="$(git diff --name-only "$BASE_SHA...$HEAD_SHA" -- 'backend/prisma/migrations/')"
+          if [ -n "$CHANGED" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Prisma migration files changed by this PR:"
+            echo "$CHANGED"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "OK: no Prisma migration files changed -- gate passes."
+          fi
+
+      - name: Require a verified prod->staging dry-run
+        if: steps.detect.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # A new push that touches migrations invalidates any prior
+          # attestation -- drop the label so it must be re-earned.
+          if [ "${{ github.event.action }}" = "synchronize" ]; then
+            gh pr edit "$PR" --repo "$REPO" --remove-label migration-verified \
+              >/dev/null 2>&1 \
+              && echo "Removed stale 'migration-verified' label (new migration commits pushed)." \
+              || true
+          fi
+
+          # Re-query the live label set; the event payload can be stale.
+          LABELS="$(gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels[].name')"
+          if echo "$LABELS" | grep -qx 'migration-verified'; then
+            echo "OK: PR carries the 'migration-verified' label."
+            exit 0
+          fi
+
+          echo "::error::This PR changes Prisma migrations under backend/prisma/migrations/."
+          echo "::error::Before promoting to main, run a prod->staging dry-run from the aws-config repo:"
+          echo "::error::  ALLOWLIST_EMAILS=<dev-emails> ./scripts/taskflow/sync-prod-to-staging.sh --dry-run"
+          echo "::error::It restores a prod snapshot into a scratch DB, applies these migrations, and"
+          echo "::error::sanitizes -- staging is left untouched. Once it passes, apply the"
+          echo "::error::'migration-verified' label to this PR to unblock the merge."
+          exit 1

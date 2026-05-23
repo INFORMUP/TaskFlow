@@ -8,12 +8,19 @@ export class TaskGraphError extends Error {
 
 export type GraphEdgeType = "spawn" | "blocker";
 
+export interface GraphProject {
+  key: string;
+  name: string;
+  color: string | null;
+}
+
 export interface GraphNode {
   id: string;
   displayId: string;
   title: string;
   flow: { slug: string; name: string };
   currentStatus: { slug: string; name: string; color: string | null };
+  projects: GraphProject[];
   isRoot: boolean;
 }
 
@@ -38,6 +45,11 @@ const nodeSelect = {
   spawnedFromTaskId: true,
   flow: { select: { slug: true, name: true } },
   currentStatus: { select: { slug: true, name: true, color: true } },
+  projects: {
+    select: {
+      project: { select: { key: true, name: true, color: true } },
+    },
+  },
 } as const;
 
 export async function buildTaskGraph(input: {
@@ -67,6 +79,11 @@ export async function buildTaskGraph(input: {
       title: t.title,
       flow: t.flow,
       currentStatus: t.currentStatus,
+      projects: t.projects.map((tp) => ({
+        key: tp.project.key,
+        name: tp.project.name,
+        color: tp.project.color ?? null,
+      })),
       isRoot,
     });
   }
