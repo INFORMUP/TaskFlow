@@ -177,7 +177,11 @@ describe("GET /api/v1/users/:id/activity", () => {
       headers: { authorization: `Bearer ${engineerToken}` },
     });
     expect(res.statusCode).toBe(200);
-    const previews = res.json().data.map((e: any) => e.bodyPreview);
+    const data = res.json().data;
+    // Every returned event is on the project-A task; the project-B comment is excluded.
+    // (The engineer's task_created event for engTaskId is also on project A, so it stays.)
+    expect(data.every((e: any) => e.task.id === engTaskId)).toBe(true);
+    const previews = data.map((e: any) => e.bodyPreview).filter(Boolean);
     expect(previews).toEqual(["on project A"]);
   });
 
@@ -209,7 +213,10 @@ describe("GET /api/v1/users/:id/activity", () => {
   it("paginates the merged feed via cursor", async () => {
     const app = await buildApp();
     const t0 = new Date("2026-02-01T00:00:00Z").getTime();
-    for (let i = 0; i < 3; i++) {
+    // Pin the engineer task's createdAt so its task_created event is the oldest of the
+    // three events; with two comments on top this gives a deterministic 2 + 1 split.
+    await prisma.task.update({ where: { id: engTaskId }, data: { createdAt: new Date(t0) } });
+    for (let i = 1; i <= 2; i++) {
       await prisma.comment.create({
         data: {
           taskId: engTaskId,
