@@ -2,7 +2,18 @@ import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createRouter, createMemoryHistory, type Router } from "vue-router";
 import TaskGraphTable from "./TaskGraphTable.vue";
+import StatusBadge from "@/components/visual/StatusBadge.vue";
 import type { TaskGraphNode, TaskGraphResponse } from "@/api/tasks.api";
+
+function withStatus(
+  n: TaskGraphNode,
+  slug: string,
+  name: string,
+  color: string,
+): TaskGraphNode {
+  n.currentStatus = { slug, name, color };
+  return n;
+}
 
 function node(
   id: string,
@@ -111,6 +122,91 @@ describe("TaskGraphTable", () => {
     // Root id should not be a navigating link.
     const rootRow = wrapper.get('[data-display-id="FEAT-1"]');
     expect(rootRow.find('a[href="/tasks/feature/a"]').exists()).toBe(false);
+  });
+
+  it("renders each blocked and blocking task on its own line", async () => {
+    const a = withStatus(node("a", "FEAT-1", "design"), "design", "Design", "#004de6");
+    const b = withStatus(
+      node("b", "FEAT-2", "implement"),
+      "implement",
+      "Implement",
+      "#f06000",
+    );
+    const c = withStatus(node("c", "FEAT-3", "closed"), "closed", "Closed", "#10b981");
+    // FEAT-1 blocks both FEAT-2 and FEAT-3.
+    const wrapper = await mountTable({
+      nodes: [a, b, c],
+      edges: [
+        { from: "a", to: "b", type: "blocker" },
+        { from: "a", to: "c", type: "blocker" },
+      ],
+    });
+    const blocksCell = wrapper
+      .get('[data-display-id="FEAT-1"]')
+      .get('[data-testid="row-blocks"]');
+    const lines = blocksCell.findAll('[data-testid="ref-line"]');
+    expect(lines).toHaveLength(2);
+    // Sorted by display id: FEAT-2 then FEAT-3, each with its stage inline.
+    expect(lines[0].text()).toContain("FEAT-2");
+    expect(lines[0].text()).toContain("Implement");
+    expect(lines[1].text()).toContain("FEAT-3");
+    expect(lines[1].text()).toContain("Closed");
+  });
+
+  it("shows each referenced task's stage with status coloration in both columns", async () => {
+    const a = withStatus(node("a", "FEAT-1", "design"), "design", "Design", "#004de6");
+    const b = withStatus(
+      node("b", "FEAT-2", "implement"),
+      "implement",
+      "Implement",
+      "#f06000",
+    );
+    const wrapper = await mountTable({
+      nodes: [a, b],
+      edges: [{ from: "a", to: "b", type: "blocker" }],
+    });
+    // "Blocked by" on FEAT-2 surfaces FEAT-1's stage + color.
+    const blockedByBadges = wrapper
+      .get('[data-display-id="FEAT-2"]')
+      .get('[data-testid="row-blocked-by"]')
+      .findAllComponents(StatusBadge);
+    expect(blockedByBadges).toHaveLength(1);
+    expect(blockedByBadges[0].props("name")).toBe("Design");
+    expect(blockedByBadges[0].props("color")).toBe("#004de6");
+    // "Blocks" on FEAT-1 surfaces FEAT-2's stage + color.
+    const blocksBadges = wrapper
+      .get('[data-display-id="FEAT-1"]')
+      .get('[data-testid="row-blocks"]')
+      .findAllComponents(StatusBadge);
+    expect(blocksBadges).toHaveLength(1);
+    expect(blocksBadges[0].props("name")).toBe("Implement");
+    expect(blocksBadges[0].props("color")).toBe("#f06000");
+  });
+
+  it("keeps the display id a navigating link on each ref line", async () => {
+    const a = node("a", "FEAT-1");
+    const b = node("b", "FEAT-2");
+    const wrapper = await mountTable({
+      nodes: [a, b],
+      edges: [{ from: "a", to: "b", type: "blocker" }],
+    });
+    const link = wrapper
+      .get('[data-display-id="FEAT-1"]')
+      .get('[data-testid="row-blocks"]')
+      .find('a[href="/tasks/feature/b"]');
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toBe("FEAT-2");
+  });
+
+  it("renders an em dash and no ref lines for empty blocks/blocked-by cells", async () => {
+    const wrapper = await mountTable({ nodes: [node("a", "FEAT-1")], edges: [] });
+    const row = wrapper.get('[data-display-id="FEAT-1"]');
+    const blocks = row.get('[data-testid="row-blocks"]');
+    const blockedBy = row.get('[data-testid="row-blocked-by"]');
+    expect(blocks.text()).toContain("—");
+    expect(blockedBy.text()).toContain("—");
+    expect(blocks.findAll('[data-testid="ref-line"]')).toHaveLength(0);
+    expect(blockedBy.findAll('[data-testid="ref-line"]')).toHaveLength(0);
   });
 
   it("dims closed rows", async () => {

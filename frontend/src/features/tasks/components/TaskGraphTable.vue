@@ -3,12 +3,11 @@ import { computed } from "vue";
 import type { TaskGraphNode, TaskGraphResponse } from "@/api/tasks.api";
 import { orderGraph } from "../graph-order";
 import ProjectChip from "@/components/visual/ProjectChip.vue";
+import StatusBadge from "@/components/visual/StatusBadge.vue";
 
 const props = defineProps<{ graph: TaskGraphResponse }>();
 
 const rows = computed(() => orderGraph(props.graph));
-
-const DEFAULT_STATUS_COLOR = "#9ca3af";
 
 function detailTo(node: TaskGraphNode) {
   return { name: "task-detail", params: { flow: node.flow.slug, taskId: node.id } };
@@ -72,24 +71,25 @@ function detailTo(node: TaskGraphNode) {
           </div>
         </td>
         <td class="graph-table__status">
-          <span
-            class="graph-table__status-badge"
-            :style="{
-              borderLeftColor: row.node.currentStatus.color || DEFAULT_STATUS_COLOR,
-            }"
-            >{{ row.node.currentStatus.name }}</span
-          >
+          <StatusBadge
+            :name="row.node.currentStatus.name"
+            :color="row.node.currentStatus.color"
+          />
         </td>
         <td data-testid="row-blocked-by">
           <div class="graph-table__refs">
             <template v-if="row.blockedBy.length">
-              <router-link
+              <div
                 v-for="b in row.blockedBy"
                 :key="b.id"
-                :to="detailTo(b)"
-                class="graph-table__ref"
-                >{{ b.displayId }}</router-link
+                class="graph-table__ref-line"
+                data-testid="ref-line"
               >
+                <router-link :to="detailTo(b)" class="graph-table__ref">{{
+                  b.displayId
+                }}</router-link>
+                <StatusBadge :name="b.currentStatus.name" :color="b.currentStatus.color" />
+              </div>
             </template>
             <span v-else class="graph-table__none">—</span>
           </div>
@@ -97,13 +97,17 @@ function detailTo(node: TaskGraphNode) {
         <td data-testid="row-blocks">
           <div class="graph-table__refs">
             <template v-if="row.blocks.length">
-              <router-link
+              <div
                 v-for="b in row.blocks"
                 :key="b.id"
-                :to="detailTo(b)"
-                class="graph-table__ref"
-                >{{ b.displayId }}</router-link
+                class="graph-table__ref-line"
+                data-testid="ref-line"
               >
+                <router-link :to="detailTo(b)" class="graph-table__ref">{{
+                  b.displayId
+                }}</router-link>
+                <StatusBadge :name="b.currentStatus.name" :color="b.currentStatus.color" />
+              </div>
             </template>
             <span v-else class="graph-table__none">—</span>
           </div>
@@ -175,18 +179,15 @@ function detailTo(node: TaskGraphNode) {
   flex-wrap: wrap;
   gap: 0.25rem;
 }
-.graph-table__status-badge {
-  display: inline-block;
-  padding: 0.1rem 0.4rem;
-  border-left: 4px solid var(--color-text-muted, #9ca3af);
-  background: var(--bg-secondary, #f7f7f7);
-  border-radius: 2px;
-  white-space: nowrap;
-}
 .graph-table__refs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.graph-table__ref-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 .graph-table__none {
   color: var(--color-text-muted, #999);
