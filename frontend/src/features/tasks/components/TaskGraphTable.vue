@@ -60,14 +60,16 @@ function detailTo(node: TaskGraphNode) {
           <span v-if="row.node.isRoot">{{ row.node.title }}</span>
           <router-link v-else :to="detailTo(row.node)">{{ row.node.title }}</router-link>
         </td>
-        <td class="graph-table__projects">
-          <ProjectChip
-            v-for="p in row.node.projects"
-            :key="p.key"
-            :project-key="p.key"
-            :name="p.name"
-            :color="p.color"
-          />
+        <td>
+          <div class="graph-table__chips">
+            <ProjectChip
+              v-for="p in row.node.projects"
+              :key="p.key"
+              :project-key="p.key"
+              :name="p.name"
+              :color="p.color"
+            />
+          </div>
         </td>
         <td class="graph-table__status">
           <span
@@ -78,29 +80,33 @@ function detailTo(node: TaskGraphNode) {
             >{{ row.node.currentStatus.name }}</span
           >
         </td>
-        <td class="graph-table__refs" data-testid="row-blocked-by">
-          <template v-if="row.blockedBy.length">
-            <router-link
-              v-for="b in row.blockedBy"
-              :key="b.id"
-              :to="detailTo(b)"
-              class="graph-table__ref"
-              >{{ b.displayId }}</router-link
-            >
-          </template>
-          <span v-else class="graph-table__none">—</span>
+        <td data-testid="row-blocked-by">
+          <div class="graph-table__refs">
+            <template v-if="row.blockedBy.length">
+              <router-link
+                v-for="b in row.blockedBy"
+                :key="b.id"
+                :to="detailTo(b)"
+                class="graph-table__ref"
+                >{{ b.displayId }}</router-link
+              >
+            </template>
+            <span v-else class="graph-table__none">—</span>
+          </div>
         </td>
-        <td class="graph-table__refs" data-testid="row-blocks">
-          <template v-if="row.blocks.length">
-            <router-link
-              v-for="b in row.blocks"
-              :key="b.id"
-              :to="detailTo(b)"
-              class="graph-table__ref"
-              >{{ b.displayId }}</router-link
-            >
-          </template>
-          <span v-else class="graph-table__none">—</span>
+        <td data-testid="row-blocks">
+          <div class="graph-table__refs">
+            <template v-if="row.blocks.length">
+              <router-link
+                v-for="b in row.blocks"
+                :key="b.id"
+                :to="detailTo(b)"
+                class="graph-table__ref"
+                >{{ b.displayId }}</router-link
+              >
+            </template>
+            <span v-else class="graph-table__none">—</span>
+          </div>
         </td>
       </tr>
     </tbody>
@@ -164,7 +170,7 @@ function detailTo(node: TaskGraphNode) {
   background: var(--color-success, #10b981);
   color: #fff;
 }
-.graph-table__projects {
+.graph-table__chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
