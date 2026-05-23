@@ -49,6 +49,7 @@ const ROOT = {
   title: "Root",
   flow: { slug: "feature", name: "Feature" },
   currentStatus: { slug: "implement", name: "Implement", color: "#f59e0b" },
+  projects: [{ key: "TF", name: "Taskflow", color: "#df6807" }],
   isRoot: true,
 };
 const CHILD = {
@@ -57,6 +58,7 @@ const CHILD = {
   title: "Child",
   flow: { slug: "feature", name: "Feature" },
   currentStatus: { slug: "closed", name: "Closed", color: "#6b7280" },
+  projects: [{ key: "TF", name: "Taskflow", color: "#df6807" }],
   isRoot: false,
 };
 
@@ -187,5 +189,26 @@ describe("TaskGraphView", () => {
     });
     const { wrapper } = await mountView();
     expect(wrapper.text()).toContain("truncated");
+  });
+
+  it("defaults to the diagram and switches to the table via the toggle", async () => {
+    getTaskGraph.mockResolvedValueOnce({
+      nodes: [ROOT, CHILD],
+      edges: [{ from: ROOT.id, to: CHILD.id, type: "blocker" }],
+    });
+    const { wrapper } = await mountView();
+
+    // Diagram is the default mode.
+    expect(wrapper.find('[data-testid="vue-flow-stub"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="graph-table"]').exists()).toBe(false);
+
+    // Switch to the table mode.
+    await wrapper.get('[data-testid="graph-mode-table"]').trigger("click");
+    expect(wrapper.find('[data-testid="graph-table"]').exists()).toBe(true);
+
+    // And back to the diagram.
+    await wrapper.get('[data-testid="graph-mode-diagram"]').trigger("click");
+    expect(wrapper.find('[data-testid="graph-table"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="vue-flow-stub"]').exists()).toBe(true);
   });
 });
