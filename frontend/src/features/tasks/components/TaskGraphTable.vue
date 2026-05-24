@@ -129,6 +129,9 @@ function detailTo(node: TaskGraphNode) {
   padding: 0.4rem 0.6rem;
   border-bottom: 1px solid var(--border-primary, #eee);
   vertical-align: top;
+  /* Only the title column wraps; every other column stays on one line so task
+     ids like FEAT-81 never break across rows. */
+  white-space: nowrap;
 }
 .graph-table th {
   font-size: 0.75rem;
@@ -137,7 +140,13 @@ function detailTo(node: TaskGraphNode) {
   color: var(--color-text-muted, #666);
   position: sticky;
   top: 0;
+  /* Opaque background + stacking above body cells so scrolled rows don't show
+     through the sticky header. */
   background: var(--bg-primary, #fff);
+  z-index: 1;
+}
+.graph-table__title {
+  white-space: normal;
 }
 .graph-table__row--ready {
   background: var(--color-ready-bg, #ecfdf5);

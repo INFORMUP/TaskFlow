@@ -48,10 +48,17 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: "app" },
   },
   {
-    path: "/tasks/:flow/:taskId/graph",
-    name: "task-graph",
-    component: () => import("@/features/tasks/views/TaskGraphView.vue"),
-    meta: { layout: "app" },
+    path: "/tasks/:flow/:taskId/dependencies",
+    redirect: (to) => ({
+      name: "task-dependencies",
+      params: { ...to.params, view: "graph" },
+    }),
+  },
+  {
+    path: "/tasks/:flow/:taskId/dependencies/:view(graph|table)",
+    name: "task-dependencies",
+    component: () => import("@/features/tasks/views/TaskDependenciesView.vue"),
+    meta: { layout: "app", fullBleed: true },
   },
   {
     path: "/projects",
