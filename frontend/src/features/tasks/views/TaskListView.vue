@@ -2,8 +2,9 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import type { Task } from "@/api/tasks.api";
+import FlowIcon from "@/components/visual/FlowIcon.vue";
 
-const props = defineProps<{ tasks: Task[]; flow: string }>();
+const props = defineProps<{ tasks: Task[]; flow?: string; showFlow?: boolean }>();
 const emit = defineEmits<{
   "request-assignee-pick": [task: Task, anchor: HTMLElement];
 }>();
@@ -56,7 +57,7 @@ function ariaSort(key: SortKey): "ascending" | "descending" | "none" {
 }
 
 function openTask(task: Task) {
-  router.push(`/tasks/${props.flow}/${task.id}`);
+  router.push(`/tasks/${task.flow.slug}/${task.id}`);
 }
 
 function handleAssigneeClick(task: Task, event: MouseEvent) {
@@ -69,6 +70,7 @@ function handleAssigneeClick(task: Task, event: MouseEvent) {
     <thead>
       <tr>
         <th scope="col">ID</th>
+        <th v-if="showFlow" scope="col">Flow</th>
         <th scope="col" :aria-sort="ariaSort('title')">
           <button type="button" class="task-list__sort-btn" @click="toggleSort('title')">
             Title{{ sortIndicator("title") }}
@@ -117,6 +119,10 @@ function handleAssigneeClick(task: Task, event: MouseEvent) {
           >
             {{ t.displayId }}
           </button>
+        </td>
+        <td v-if="showFlow" class="task-list__flow">
+          <FlowIcon :icon="t.flow.icon" :flow-name="t.flow.name" />
+          <span>{{ t.flow.name }}</span>
         </td>
         <td>{{ t.title }}</td>
         <td>
@@ -197,6 +203,13 @@ function handleAssigneeClick(task: Task, event: MouseEvent) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--text-secondary);
   font-size: 0.8125rem;
+}
+.task-list__flow {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 .task-list__assignee-btn {
   background: transparent;
