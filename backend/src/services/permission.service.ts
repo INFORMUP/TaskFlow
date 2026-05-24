@@ -215,8 +215,11 @@ export function canPerformAction(
 export function canTransitionToStatus(
   teamSlugs: string[],
   flowSlug: string,
-  toStatusSlug: string
+  toStatusSlug: string,
+  orgRole?: OrgRole,
 ): boolean {
+  if (orgRoleGrantsAll(orgRole)) return true;
+
   const flowTransitions = TRANSITION_PERMISSIONS[flowSlug];
   if (!flowTransitions) return false;
 
