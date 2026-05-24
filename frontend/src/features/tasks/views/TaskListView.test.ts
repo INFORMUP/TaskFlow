@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createRouter, createMemoryHistory } from "vue-router";
 import TaskListView from "./TaskListView.vue";
@@ -68,5 +68,37 @@ describe("TaskListView — assignee reassignment", () => {
     expect(btn.text()).toContain("Unassigned");
     await btn.trigger("click");
     expect(wrapper.emitted("request-assignee-pick")).toBeTruthy();
+  });
+});
+
+describe("TaskListView — cross-flow (showFlow)", () => {
+  it("renders a Flow column and routes each row to its own flow", async () => {
+    const router = makeRouter();
+    await router.push("/tasks/feature");
+    await router.isReady();
+    const push = vi.spyOn(router, "push");
+    const tasks = [
+      taskFixture({ id: "a", displayId: "FEAT-1", flow: { id: "f1", slug: "feature", name: "Feature" } }),
+      taskFixture({ id: "b", displayId: "BUG-2", flow: { id: "f2", slug: "bug", name: "Bug" } }),
+    ];
+    const wrapper = mount(TaskListView, {
+      props: { tasks, showFlow: true },
+      global: { plugins: [router] },
+    });
+
+    const headers = wrapper.findAll("th").map((h) => h.text());
+    expect(headers).toContain("Flow");
+    expect(wrapper.text()).toContain("Feature");
+    expect(wrapper.text()).toContain("Bug");
+
+    const idButtons = wrapper.findAll(".task-list__row-btn");
+    await idButtons[1].trigger("click");
+    expect(push).toHaveBeenCalledWith("/tasks/bug/b");
+  });
+
+  it("omits the Flow column by default", async () => {
+    const wrapper = await mountList([taskFixture()]);
+    const headers = wrapper.findAll("th").map((h) => h.text());
+    expect(headers).not.toContain("Flow");
   });
 });
