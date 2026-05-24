@@ -62,9 +62,9 @@ const CHILD = {
   isRoot: false,
 };
 
-import TaskGraphView from "./TaskGraphView.vue";
+import TaskDependenciesView from "./TaskDependenciesView.vue";
 
-async function mountView() {
+async function mountView(view: "graph" | "table" = "graph") {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
@@ -75,15 +75,22 @@ async function mountView() {
         component: { template: "<div/>" },
       },
       {
-        path: "/tasks/:flow/:taskId/graph",
-        name: "task-graph",
-        component: TaskGraphView,
+        path: "/tasks/:flow/:taskId/dependencies",
+        redirect: (to) => ({
+          name: "task-dependencies",
+          params: { ...to.params, view: "graph" },
+        }),
+      },
+      {
+        path: "/tasks/:flow/:taskId/dependencies/:view(graph|table)",
+        name: "task-dependencies",
+        component: TaskDependenciesView,
       },
     ],
   });
-  router.push("/tasks/feature/root-id/graph");
+  router.push(`/tasks/feature/root-id/dependencies/${view}`);
   await router.isReady();
-  const wrapper = mount(TaskGraphView, { global: { plugins: [router] } });
+  const wrapper = mount(TaskDependenciesView, { global: { plugins: [router] } });
   await flushPromises();
   return { wrapper, router };
 }
@@ -94,7 +101,7 @@ beforeEach(() => {
   flowEmit.value = null;
 });
 
-describe("TaskGraphView", () => {
+describe("TaskDependenciesView", () => {
   it("fetches the graph and passes nodes + edges to VueFlow", async () => {
     getTaskGraph.mockResolvedValueOnce({
       nodes: [ROOT, CHILD],
@@ -191,23 +198,57 @@ describe("TaskGraphView", () => {
     expect(wrapper.text()).toContain("truncated");
   });
 
-  it("defaults to the diagram and switches to the table via the toggle", async () => {
+  it("titles the view 'Dependencies' rather than 'graph'", async () => {
+    getTaskGraph.mockResolvedValueOnce({ nodes: [ROOT, CHILD], edges: [] });
+    const { wrapper } = await mountView();
+    expect(wrapper.get("h2").text()).toBe("Dependencies");
+  });
+
+  it("renders the table directly when the route is the table sub-view", async () => {
     getTaskGraph.mockResolvedValueOnce({
       nodes: [ROOT, CHILD],
       edges: [{ from: ROOT.id, to: CHILD.id, type: "blocker" }],
     });
-    const { wrapper } = await mountView();
+    const { wrapper } = await mountView("table");
 
-    // Diagram is the default mode.
+    expect(wrapper.find('[data-testid="graph-table"]').exists()).toBe(true);
+    // The table tab is marked active, reflecting the route-driven mode.
+    expect(wrapper.get('[data-testid="graph-mode-table"]').classes()).toContain(
+      "graph-view__mode-btn--active",
+    );
+    expect(
+      wrapper.get('[data-testid="graph-mode-diagram"]').classes(),
+    ).not.toContain("graph-view__mode-btn--active");
+  });
+
+  it("drives the view from the route and switches via the toggle nav links", async () => {
+    getTaskGraph.mockResolvedValue({
+      nodes: [ROOT, CHILD],
+      edges: [{ from: ROOT.id, to: CHILD.id, type: "blocker" }],
+    });
+    const { wrapper, router } = await mountView("graph");
+
+    // Graph sub-view → diagram visible, table absent.
     expect(wrapper.find('[data-testid="vue-flow-stub"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="graph-table"]').exists()).toBe(false);
 
-    // Switch to the table mode.
-    await wrapper.get('[data-testid="graph-mode-table"]').trigger("click");
+    // The toggle entries are links pointing at the dedicated URLs.
+    const tableTab = wrapper.get('[data-testid="graph-mode-table"]');
+    expect(tableTab.element.tagName).toBe("A");
+    expect(tableTab.attributes("href")).toContain(
+      "/tasks/feature/root-id/dependencies/table",
+    );
+
+    // Clicking the table tab navigates to its URL and renders the table.
+    await tableTab.trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toContain("/dependencies/table");
     expect(wrapper.find('[data-testid="graph-table"]').exists()).toBe(true);
 
-    // And back to the diagram.
+    // And the diagram tab navigates back.
     await wrapper.get('[data-testid="graph-mode-diagram"]').trigger("click");
+    await flushPromises();
+    expect(router.currentRoute.value.fullPath).toContain("/dependencies/graph");
     expect(wrapper.find('[data-testid="graph-table"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="vue-flow-stub"]').exists()).toBe(true);
   });

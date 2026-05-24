@@ -84,7 +84,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
       }
 
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!canTransitionToStatus(teamSlugs, task.flow.slug, targetStatus.slug)) {
+      if (!canTransitionToStatus(teamSlugs, task.flow.slug, targetStatus.slug, request.org.role)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "You do not have permission to transition to this status" },
         });
@@ -223,7 +223,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
 
       const teamSlugs = request.user.teams.map((t) => t.slug);
       const allowed = transitions
-        .filter((t) => canTransitionToStatus(teamSlugs, task.flow.slug, t.toStatus.slug))
+        .filter((t) => canTransitionToStatus(teamSlugs, task.flow.slug, t.toStatus.slug, request.org.role))
         .map((t) => t.toStatus)
         .sort((a, b) => a.sortOrder - b.sortOrder);
 

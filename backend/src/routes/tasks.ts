@@ -169,7 +169,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       }
 
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!canPerformAction(teamSlugs, "create", flow)) {
+      if (!canPerformAction(teamSlugs, "create", flow, request.org.role)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "You do not have permission to create tasks in this flow" },
         });
@@ -237,7 +237,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         include: { flow: true },
       });
       if (!task) return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
-      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug, request.org.role)) {
         return reply.status(403).send({ error: { code: "FORBIDDEN", message: "Insufficient permission" } });
       }
 
@@ -279,7 +279,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         include: { flow: true },
       });
       if (!task) return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
-      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug, request.org.role)) {
         return reply.status(403).send({ error: { code: "FORBIDDEN", message: "Insufficient permission" } });
       }
 
@@ -486,7 +486,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
-      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug, request.org.role)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "You do not have permission to edit this task" },
         });
@@ -552,7 +552,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
-      if (!canPerformAction(teamSlugs, "delete", task.flow.slug)) {
+      if (!canPerformAction(teamSlugs, "delete", task.flow.slug, request.org.role)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "You do not have permission to delete this task" },
         });
@@ -597,7 +597,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       if (!task) {
         return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
       }
-      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug, request.org.role)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "You do not have permission to edit this task" },
         });
@@ -643,7 +643,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       if (!task) {
         return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
       }
-      if (!canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+      if (!canPerformAction(teamSlugs, "edit", task.flow.slug, request.org.role)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "You do not have permission to edit this task" },
         });

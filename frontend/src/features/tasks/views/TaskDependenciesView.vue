@@ -20,7 +20,11 @@ const flowSlug = route.params.flow as string;
 const data = ref<TaskGraphResponse | null>(null);
 const error = ref<string | null>(null);
 const loading = ref(true);
-const mode = ref<"diagram" | "table">("diagram");
+// The active sub-view is driven by the route (.../dependencies/graph|table) so
+// each has its own shareable URL; "graph" is the default.
+const mode = computed<"diagram" | "table">(() =>
+  route.params.view === "table" ? "table" : "diagram",
+);
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 80;
@@ -141,29 +145,33 @@ onMounted(load);
       >
         ← Back to task
       </router-link>
-      <h2>Task graph</h2>
-      <div class="graph-view__modes" role="group" aria-label="Graph view mode">
-        <button
-          type="button"
+      <h2>Dependencies</h2>
+      <nav class="graph-view__modes" aria-label="Dependencies view">
+        <router-link
           class="graph-view__mode-btn"
           :class="{ 'graph-view__mode-btn--active': mode === 'diagram' }"
-          :aria-pressed="mode === 'diagram'"
+          :aria-current="mode === 'diagram' ? 'page' : undefined"
+          :to="{
+            name: 'task-dependencies',
+            params: { flow: flowSlug, taskId, view: 'graph' },
+          }"
           data-testid="graph-mode-diagram"
-          @click="mode = 'diagram'"
         >
           Diagram
-        </button>
-        <button
-          type="button"
+        </router-link>
+        <router-link
           class="graph-view__mode-btn"
           :class="{ 'graph-view__mode-btn--active': mode === 'table' }"
-          :aria-pressed="mode === 'table'"
+          :aria-current="mode === 'table' ? 'page' : undefined"
+          :to="{
+            name: 'task-dependencies',
+            params: { flow: flowSlug, taskId, view: 'table' },
+          }"
           data-testid="graph-mode-table"
-          @click="mode = 'table'"
         >
           Table
-        </button>
-      </div>
+        </router-link>
+      </nav>
       <ul v-show="mode === 'diagram'" class="graph-view__legend">
         <li><span class="legend__swatch legend__swatch--spawn"></span>Spawn</li>
         <li><span class="legend__swatch legend__swatch--blocker"></span>Blocks</li>
@@ -216,7 +224,7 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   height: calc(100vh - 4rem);
-  padding: 1rem;
+  padding: 1rem 1.5rem;
   gap: 0.75rem;
 }
 .graph-view__header {
@@ -250,6 +258,8 @@ onMounted(load);
   padding: 0.3rem 0.75rem;
   font-size: 0.85rem;
   cursor: pointer;
+  display: inline-block;
+  text-decoration: none;
 }
 .graph-view__mode-btn + .graph-view__mode-btn {
   border-left: 1px solid var(--border-primary, #ddd);

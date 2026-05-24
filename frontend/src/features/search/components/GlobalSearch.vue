@@ -110,7 +110,7 @@ function safeSnippet(raw: string): string {
 }
 
 function viewAllTasksHref(): string {
-  return `/tasks?q=${encodeURIComponent(query.value.trim())}`;
+  return `/search?q=${encodeURIComponent(query.value.trim())}`;
 }
 
 onMounted(() => {

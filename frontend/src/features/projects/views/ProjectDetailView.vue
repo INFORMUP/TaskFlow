@@ -89,7 +89,7 @@ async function toggleArchive() {
         <button @click="toggleArchive">
           {{ project.archivedAt ? "Unarchive" : "Archive" }}
         </button>
-        <router-link to="/projects">Back</router-link>
+        <router-link :to="`/projects/${project.id}`">Back to tasks</router-link>
       </div>
     </header>
 
@@ -101,7 +101,7 @@ async function toggleArchive() {
       :submitting="submitting"
       :error="error"
       @submit="handleSubmit"
-      @cancel="router.push('/projects')"
+      @cancel="router.push(`/projects/${project.id}`)"
     />
 
     <ProjectFlowsSection

@@ -11,8 +11,13 @@ import {
 import { seedTestUsers } from "../helpers/seed-test-users.js";
 import { seedTestProjects, TEST_PROJECT_ID } from "../helpers/seed-test-projects.js";
 import { generateDisplayId } from "../../services/task.service.js";
+import { DEFAULT_ORG_ID } from "../../constants/org.js";
 
 const prisma = new PrismaClient();
+
+// An org `owner` who belongs to no team — reproduces the production report
+// where chris@informup.org could not create improvements despite being owner.
+const OWNER_ID = "00000000-0000-0000-0000-00000000000a";
 
 describe("tasks API", () => {
   let engineerToken: string;
@@ -39,6 +44,8 @@ describe("tasks API", () => {
     await prisma.taskTransition.deleteMany();
     await prisma.comment.deleteMany();
     await prisma.task.deleteMany();
+    await prisma.orgMember.deleteMany({ where: { userId: OWNER_ID } });
+    await prisma.user.deleteMany({ where: { id: OWNER_ID } });
     await prisma.$disconnect();
   });
 
@@ -130,6 +137,42 @@ describe("tasks API", () => {
         payload: { projectIds: [TEST_PROJECT_ID], flow: "improvement", title: "Test", priority: "low" },
       });
       expect(response.statusCode).toBe(403);
+    });
+
+    it("lets an org owner with no team membership create an improvement", async () => {
+      // Org owners/admins implicitly hold every team-level permission, so a
+      // team-less owner must still be able to create tasks on any flow. The
+      // route has to forward request.org.role into canPerformAction for the
+      // override to fire — without it the owner falls through to the (empty)
+      // team check and is wrongly 403'd.
+      await prisma.user.upsert({
+        where: { id: OWNER_ID },
+        update: {},
+        create: {
+          id: OWNER_ID,
+          email: "owner@test.com",
+          displayName: "Test Owner",
+          actorType: "human",
+          status: "active",
+        },
+      });
+      await prisma.orgMember.upsert({
+        where: { orgId_userId: { orgId: DEFAULT_ORG_ID, userId: OWNER_ID } },
+        update: { role: "owner" },
+        create: { orgId: DEFAULT_ORG_ID, userId: OWNER_ID, role: "owner" },
+      });
+      // Intentionally NO userTeam row — the owner relies solely on the org role.
+      const ownerToken = mintTestToken(OWNER_ID, { orgRole: "owner" });
+
+      const app = await buildApp();
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/v1/tasks",
+        headers: { authorization: `Bearer ${ownerToken}` },
+        payload: { projectIds: [TEST_PROJECT_ID], flow: "improvement", title: "Owner improvement", priority: "low" },
+      });
+      expect(response.statusCode).toBe(201);
+      expect(response.json().displayId).toMatch(/^IMP-\d+$/);
     });
 
     it("returns 400 with missing title", async () => {

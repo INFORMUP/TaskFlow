@@ -28,6 +28,18 @@ describe("router", () => {
     expect(route.params.flow).toBe("bug");
     expect(route.params.taskId).toBe("some-id");
   });
+
+  it("/projects/:id resolves to the project workspace (tasks), not settings", () => {
+    const route = router.resolve("/projects/p-1");
+    expect(route.name).toBe("project-workspace");
+    expect(route.params.id).toBe("p-1");
+  });
+
+  it("/projects/:id/settings resolves to the project settings page", () => {
+    const route = router.resolve("/projects/p-1/settings");
+    expect(route.name).toBe("project-settings");
+    expect(route.params.id).toBe("p-1");
+  });
 });
 
 describe("auth guard redirect param", () => {

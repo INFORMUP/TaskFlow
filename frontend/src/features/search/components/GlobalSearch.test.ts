@@ -15,6 +15,7 @@ function makeRouter() {
     routes: [
       { path: "/", component: { template: "<div />" } },
       { path: "/tasks", component: { template: "<div />" } },
+      { path: "/search", component: { template: "<div />" } },
       { path: "/tasks/:flow/:taskId", component: { template: "<div />" } },
       { path: "/projects/:id", component: { template: "<div />" } },
     ],
@@ -142,6 +143,32 @@ describe("GlobalSearch", () => {
     await input.trigger("keydown", { key: "Enter" });
 
     expect(pushSpy).toHaveBeenCalledWith("/tasks/feature/t1");
+  });
+
+  it("'View all task results' links to the search page preserving the query", async () => {
+    globalSearchMock.mockResolvedValueOnce({
+      tasks: [
+        {
+          id: "t1",
+          displayId: "FEAT-1",
+          title: "Login redirect",
+          snippet: "x",
+          flow: { slug: "feature", name: "Feature" },
+          currentStatus: { slug: "discuss", name: "Discuss" },
+          createdAt: "2026-05-01T00:00:00Z",
+        },
+      ],
+      projects: [],
+    });
+    const router = makeRouter();
+    const wrapper = mount(GlobalSearch, { global: { plugins: [router] } });
+
+    await wrapper.find("input").setValue("login");
+    await flushDebounce();
+
+    const link = wrapper.find(".global-search__view-all");
+    expect(link.exists()).toBe(true);
+    expect(link.attributes("href")).toBe("/search?q=login");
   });
 
   it("escape clears the query and closes the dropdown", async () => {

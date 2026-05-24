@@ -1,14 +1,21 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
 import NavBar from "@/components/NavBar.vue";
 import FeedbackBubble from "@/components/FeedbackBubble.vue";
 
 const version = __APP_VERSION__;
+
+// Routes can opt out of the centered max-width container (e.g. the
+// dependencies graph/table) to use the full viewport width.
+const route = useRoute();
+const fullBleed = computed(() => route.meta.fullBleed === true);
 </script>
 
 <template>
   <div class="app-layout">
     <NavBar />
-    <main class="app-main">
+    <main class="app-main" :class="{ 'app-main--full': fullBleed }">
       <slot />
     </main>
     <FeedbackBubble />
@@ -31,6 +38,14 @@ const version = __APP_VERSION__;
   max-width: 1400px;
   width: 100%;
   margin: 0 auto;
+}
+
+/* Full-bleed routes span the viewport width; the view supplies its own
+   horizontal padding. */
+.app-main--full {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .app-footer {

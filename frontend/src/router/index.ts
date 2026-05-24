@@ -18,6 +18,12 @@ const routes: RouteRecordRaw[] = [
     redirect: "/flows",
   },
   {
+    path: "/search",
+    name: "search",
+    component: () => import("@/features/search/views/SearchResultsView.vue"),
+    meta: { layout: "app" },
+  },
+  {
     path: "/tasks/new",
     name: "task-new",
     component: () => import("@/features/tasks/views/TaskNewView.vue"),
@@ -42,10 +48,17 @@ const routes: RouteRecordRaw[] = [
     meta: { layout: "app" },
   },
   {
-    path: "/tasks/:flow/:taskId/graph",
-    name: "task-graph",
-    component: () => import("@/features/tasks/views/TaskGraphView.vue"),
-    meta: { layout: "app" },
+    path: "/tasks/:flow/:taskId/dependencies",
+    redirect: (to) => ({
+      name: "task-dependencies",
+      params: { ...to.params, view: "graph" },
+    }),
+  },
+  {
+    path: "/tasks/:flow/:taskId/dependencies/:view(graph|table)",
+    name: "task-dependencies",
+    component: () => import("@/features/tasks/views/TaskDependenciesView.vue"),
+    meta: { layout: "app", fullBleed: true },
   },
   {
     path: "/projects",
@@ -61,7 +74,13 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: "/projects/:id",
-    name: "project-detail",
+    name: "project-workspace",
+    component: () => import("@/features/projects/views/ProjectWorkspaceView.vue"),
+    meta: { layout: "app" },
+  },
+  {
+    path: "/projects/:id/settings",
+    name: "project-settings",
     component: () => import("@/features/projects/views/ProjectDetailView.vue"),
     meta: { layout: "app" },
   },

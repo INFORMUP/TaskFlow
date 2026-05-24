@@ -324,5 +324,15 @@ describe("permission.service", () => {
       expect(canPerformAction(["user"], "create", "improvement", "member")).toBe(false);
       expect(canPerformAction(["user"], "create", "improvement")).toBe(false);
     });
+
+    it("org owner/admin can transition regardless of team membership", () => {
+      expect(canTransitionToStatus([], "improvement", "approve", "owner")).toBe(true);
+      expect(canTransitionToStatus([], "feature", "design", "admin")).toBe(true);
+    });
+
+    it("org member does not bypass the transition matrix", () => {
+      expect(canTransitionToStatus(["user"], "improvement", "approve", "member")).toBe(false);
+      expect(canTransitionToStatus(["user"], "improvement", "approve")).toBe(false);
+    });
   });
 });
