@@ -114,7 +114,7 @@ async function loadTaskOrForbid(
     reply.status(404).send({ error: { code: "NOT_FOUND", message: "Task not found" } });
     return null;
   }
-  if (action === "edit" && !canPerformAction(teamSlugs, "edit", task.flow.slug)) {
+  if (action === "edit" && !canPerformAction(teamSlugs, "edit", task.flow.slug, request.org.role)) {
     reply.status(403).send({ error: { code: "FORBIDDEN", message: "Insufficient permission" } });
     return null;
   }

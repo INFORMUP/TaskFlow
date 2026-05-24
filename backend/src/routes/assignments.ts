@@ -45,7 +45,7 @@ export async function assignmentRoutes(fastify: FastifyInstance) {
       }
 
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!canPerformAction(teamSlugs, "assign", task.flow.slug)) {
+      if (!canPerformAction(teamSlugs, "assign", task.flow.slug, request.org.role)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "You do not have permission to assign this task" },
         });
@@ -115,7 +115,7 @@ export async function assignmentRoutes(fastify: FastifyInstance) {
       }
 
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!canPerformAction(teamSlugs, "assign", task.flow.slug)) {
+      if (!canPerformAction(teamSlugs, "assign", task.flow.slug, request.org.role)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "You do not have permission to unassign this task" },
         });

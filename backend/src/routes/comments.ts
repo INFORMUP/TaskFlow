@@ -58,7 +58,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
       }
 
       const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!canPerformAction(teamSlugs, "comment", task.flow.slug)) {
+      if (!canPerformAction(teamSlugs, "comment", task.flow.slug, request.org.role)) {
         return reply.status(403).send({
           error: { code: "FORBIDDEN", message: "You do not have permission to comment" },
         });
@@ -222,7 +222,7 @@ export async function commentRoutes(fastify: FastifyInstance) {
           include: { flow: true },
         });
         const teamSlugs = request.user.teams.map((t) => t.slug);
-        if (!task || !canPerformAction(teamSlugs, "delete", task.flow.slug)) {
+        if (!task || !canPerformAction(teamSlugs, "delete", task.flow.slug, request.org.role)) {
           return reply.status(403).send({
             error: { code: "FORBIDDEN", message: "You can only delete your own comments" },
           });
