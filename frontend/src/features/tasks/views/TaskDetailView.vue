@@ -316,10 +316,10 @@ onMounted(async () => {
       <TaskBlockersSection :task-id="task.id" @changed="loadAll" />
       <router-link
         class="detail__graph-link"
-        :to="`/tasks/${task.flow.slug}/${task.id}/graph`"
-        data-testid="task-graph-link"
+        :to="`/tasks/${task.flow.slug}/${task.id}/dependencies`"
+        data-testid="task-dependencies-link"
       >
-        Open graph view →
+        Open dependencies view →
       </router-link>
     </div>
 

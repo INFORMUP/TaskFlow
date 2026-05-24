@@ -103,3 +103,4 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 - **[tooling]**: Fastify plugins are encapsulated by default — use `fastify-plugin` (fp) wrapper for plugins that need to affect the global scope (error handler, auth decorator).
 - **[testing]**: Integration tests sharing PostgreSQL must run sequentially — set `fileParallelism: false` in vitest.config.ts to avoid FK constraint violations.
 - **[testing]**: Playwright E2E tests need `npx prisma db seed` first — otherwise the `projects` table is empty and anything touching project pickers silently renders 0 options.
+- **[testing]**: `@vue/test-utils` `isVisible()` did not reflect a `v-show` `display:none` under happy-dom (returned `true` for a hidden element). Assert toggle/visibility state another way — active class, or `v-if` element existence.
