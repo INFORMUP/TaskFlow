@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { createTask, type Task } from "@/api/tasks.api";
+import { createTask, getTasks, type Task } from "@/api/tasks.api";
+import TaskPicker from "@/features/tasks/components/TaskPicker.vue";
 import { listProjects, listProjectFlows, type AttachedFlow, type Project } from "@/api/projects.api";
 import { listFlowStatuses, type FlowStatus } from "@/api/flows.api";
 import { listLabels, attachLabelToTask, type Label } from "@/api/labels.api";
@@ -9,6 +10,7 @@ import { listOrgMembers, type OrgMember } from "@/api/org-members.api";
 
 const props = defineProps<{
   flow?: string;
+  parentId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -26,6 +28,11 @@ const assigneeTouched = ref(false);
 const selectedFlowSlug = ref(props.flow ?? "");
 const selectedStatusSlug = ref("");
 const selectedLabelIds = ref<string[]>([]);
+
+// Parent (spawned-from) selection
+const selectedParentId = ref<string | null>(props.parentId ?? null);
+const selectedParentLabel = ref<string | null>(null);
+const showParentPicker = ref(false);
 
 const projects = ref<Project[]>([]);
 const users = ref<OrgMember[]>([]);
@@ -50,7 +57,43 @@ onMounted(async () => {
   } catch {
     labels.value = [];
   }
+  if (selectedParentId.value) {
+    // Fire-and-forget: resolving the label must not delay form readiness
+    // (assignee autofill, flow/status watchers).
+    void resolveParentLabel(selectedParentId.value);
+  }
 });
+
+async function resolveParentLabel(id: string) {
+  try {
+    const res = await getTasks({ q: "" });
+    const match = res.data.find((t) => t.id === id);
+    selectedParentLabel.value = match
+      ? `${match.displayId} — ${match.title}`
+      : id;
+  } catch {
+    selectedParentLabel.value = id;
+  }
+}
+
+function openParentPicker() {
+  showParentPicker.value = true;
+}
+
+function closeParentPicker() {
+  showParentPicker.value = false;
+}
+
+function handleParentSelect(taskId: string) {
+  selectedParentId.value = taskId;
+  closeParentPicker();
+  resolveParentLabel(taskId);
+}
+
+function clearParent() {
+  selectedParentId.value = null;
+  selectedParentLabel.value = null;
+}
 
 // Auto-fill assignee from the first selected project's default, unless the
 // user has manually touched the field. Load flow menus for newly-selected
@@ -185,6 +228,7 @@ async function handleSubmit() {
       projectIds: selectedProjectIds.value,
       assigneeUserId: assigneeUserId.value,
       dueDate: dueDate.value || null,
+      spawnedFromTaskId: selectedParentId.value,
     });
 
     const postCreateErrors: string[] = [];
@@ -315,6 +359,38 @@ async function handleSubmit() {
         />
         {{ l.name }}
       </label>
+    </div>
+
+    <label class="create-form__label">Parent task (optional)</label>
+    <div class="create-form__parent" data-testid="task-create-parent">
+      <span v-if="selectedParentLabel" class="create-form__parent-label">
+        {{ selectedParentLabel }}
+      </span>
+      <span v-else class="create-form__hint">No parent</span>
+      <button
+        type="button"
+        class="create-form__parent-btn"
+        data-testid="task-create-parent-btn"
+        @click="openParentPicker"
+      >
+        {{ selectedParentId ? "Change" : "Set parent" }}
+      </button>
+      <button
+        v-if="selectedParentId"
+        type="button"
+        class="create-form__parent-btn"
+        data-testid="task-create-parent-clear"
+        @click="clearParent"
+      >
+        Clear
+      </button>
+      <TaskPicker
+        v-if="showParentPicker"
+        :exclude-id="null"
+        class="create-form__parent-picker"
+        @select="handleParentSelect"
+        @close="closeParentPicker"
+      />
     </div>
 
     <label class="create-form__label">Description (optional)</label>
@@ -469,6 +545,42 @@ async function handleSubmit() {
   gap: 0.375rem;
   font-size: 0.8125rem;
   cursor: pointer;
+}
+
+.create-form__parent {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.create-form__parent-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.create-form__parent-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.create-form__parent-btn:hover,
+.create-form__parent-btn:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.create-form__parent-picker {
+  top: 100%;
+  left: 0;
+  margin-top: 0.25rem;
 }
 
 .create-form__label-swatch {
