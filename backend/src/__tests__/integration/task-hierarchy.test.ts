@@ -147,7 +147,7 @@ describe("task hierarchy: re-parenting, altitude filters, milestone roll-up", ()
       expect(parent.rollup).toEqual({ childCount: 2, childDoneCount: 0 });
 
       // Close one child (terminal status counts as done).
-      expect((await transition(c2, "closed", "completed")).statusCode).toBe(200);
+      expect((await transition(c2, "closed", "completed")).statusCode).toBe(201);
 
       parent = (await getTask(parentId)).json();
       expect(parent.rollup).toEqual({ childCount: 2, childDoneCount: 1 });
@@ -190,7 +190,7 @@ describe("task hierarchy: re-parenting, altitude filters, milestone roll-up", ()
       expect(m2body.derivedStatus).toBe("not_started");
 
       const closed = await transition(m2, "closed", "rejected");
-      expect(closed.statusCode).toBe(200);
+      expect(closed.statusCode).toBe(201);
       m2body = (await getTask(m2)).json();
       expect(m2body.currentStatus.slug).toBe("closed");
       expect(m2body.currentStatus.isTerminal).toBe(true);
