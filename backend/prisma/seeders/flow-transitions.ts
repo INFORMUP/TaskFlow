@@ -69,6 +69,13 @@ const IMPROVEMENT_TRANSITIONS: TransitionDef[] = [
   { from: "implement", to: "closed" },
 ];
 
+// Milestone: Open → Closed (manual early close / auto-complete display), with
+// Closed → Open reopen.
+const MILESTONE_TRANSITIONS: TransitionDef[] = [
+  { from: "open", to: "closed" },
+  { from: "closed", to: "open" },
+];
+
 // Grant: Research → Draft → Submitted → Awarded → Closed
 const GRANT_TRANSITIONS: TransitionDef[] = [
   { from: "research", to: "draft" },
@@ -114,6 +121,7 @@ const FLOW_TRANSITIONS: Record<string, TransitionDef[]> = {
   bug: BUG_TRANSITIONS,
   feature: FEATURE_TRANSITIONS,
   improvement: IMPROVEMENT_TRANSITIONS,
+  milestone: MILESTONE_TRANSITIONS,
   "grant-application": GRANT_TRANSITIONS,
   "donor-outreach": DONOR_TRANSITIONS,
   event: EVENT_TRANSITIONS,

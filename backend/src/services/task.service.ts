@@ -7,6 +7,7 @@ const FLOW_PREFIXES: Record<string, string> = {
   bug: "BUG",
   feature: "FEAT",
   improvement: "IMP",
+  milestone: "MILE",
   "grant-application": "GRNT",
   "donor-outreach": "OUTR",
   event: "EVNT",
@@ -34,6 +35,25 @@ export async function generateDisplayId(flowSlug: string): Promise<string> {
   }
 
   return `${prefix}-${maxNum + 1}`;
+}
+
+// Re-parenting guard: setting `taskId`'s parent to `newParentId` creates a
+// cycle iff `newParentId` is `taskId` itself or already a descendant of
+// `taskId` — i.e. walking up the parent chain from `newParentId` reaches
+// `taskId`. Walk is bounded by tree depth; a guard caps runaway loops.
+export async function wouldCreateCycle(taskId: string, newParentId: string): Promise<boolean> {
+  let cursor: string | null = newParentId;
+  let guard = 0;
+  while (cursor) {
+    if (cursor === taskId) return true;
+    if (++guard > 1000) return true;
+    const node: { spawnedFromTaskId: string | null } | null = await prisma.task.findUnique({
+      where: { id: cursor },
+      select: { spawnedFromTaskId: true },
+    });
+    cursor = node?.spawnedFromTaskId ?? null;
+  }
+  return false;
 }
 
 export async function getInitialStatus(flowId: string) {

@@ -204,6 +204,37 @@ describe("permission.service", () => {
     });
   });
 
+  describe("milestone flow", () => {
+    it("engineer, product, and agent can create milestones; user cannot", () => {
+      expect(canPerformAction(["engineer"], "create", "milestone")).toBe(true);
+      expect(canPerformAction(["product"], "create", "milestone")).toBe(true);
+      expect(canPerformAction(["agent"], "create", "milestone")).toBe(true);
+      expect(canPerformAction(["user"], "create", "milestone")).toBe(false);
+    });
+
+    it("engineer/agent can edit milestones (for re-parenting); user cannot", () => {
+      expect(canPerformAction(["engineer"], "edit", "milestone")).toBe(true);
+      expect(canPerformAction(["agent"], "edit", "milestone")).toBe(true);
+      expect(canPerformAction(["user"], "edit", "milestone")).toBe(false);
+    });
+
+    it("engineer, product, and agent can transition open/closed; user cannot", () => {
+      for (const status of ["open", "closed"]) {
+        expect(canTransitionToStatus(["engineer"], "milestone", status)).toBe(true);
+        expect(canTransitionToStatus(["product"], "milestone", status)).toBe(true);
+        expect(canTransitionToStatus(["agent"], "milestone", status)).toBe(true);
+        expect(canTransitionToStatus(["user"], "milestone", status)).toBe(false);
+      }
+    });
+
+    it("view scope mirrors feature: engineer/product all, user own_public, agent assigned", () => {
+      expect(getViewScope(["engineer"], "milestone")).toBe("all");
+      expect(getViewScope(["product"], "milestone")).toBe("all");
+      expect(getViewScope(["user"], "milestone")).toBe("own_public");
+      expect(getViewScope(["agent"], "milestone")).toBe("assigned");
+    });
+  });
+
   describe("multi-team permissions", () => {
     it("user in engineer+product has union of permissions", () => {
       // Engineer can create improvement, product cannot — union grants it
