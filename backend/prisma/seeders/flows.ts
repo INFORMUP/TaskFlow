@@ -6,6 +6,7 @@ const FLOWS = [
   { slug: "bug", name: "Bug", description: "Defect resolution", icon: "bug" },
   { slug: "feature", name: "Feature", description: "New functionality", icon: "sparkles" },
   { slug: "improvement", name: "Improvement", description: "Tech debt, refactoring, optimization", icon: "wrench" },
+  { slug: "milestone", name: "Milestone", description: "Container that aggregates child tasks; status computed from children", icon: "flag" },
   { slug: "grant-application", name: "Grant Application", description: "Fundraising grant submissions", icon: "document" },
   { slug: "donor-outreach", name: "Donor Outreach", description: "Fundraising donor pipeline", icon: "handshake" },
   { slug: "event", name: "Event", description: "Fundraising events", icon: "calendar" },

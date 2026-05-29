@@ -2,9 +2,10 @@ import { FastifyInstance } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { buildTaskViewWhere, canPerformAction, enforceScope } from "../services/permission.service.js";
-import { addProjectToTask, createTask, removeProjectFromTask, taskDetailInclude, taskInclude, TaskServiceError } from "../services/task.service.js";
+import { addProjectToTask, createTask, removeProjectFromTask, taskDetailInclude, taskInclude, TaskServiceError, wouldCreateCycle } from "../services/task.service.js";
 import { attachLabel, detachLabel, LabelServiceError } from "../services/label.service.js";
 import { getBlockerCounts } from "../services/task-dependency.service.js";
+import { getChildRollup, getChildRollups, deriveMilestoneStatus, emptyRollup, type ChildRollup } from "../services/task-rollup.service.js";
 import { CommonErrorResponses, IdParams, UserSummary } from "./_schemas.js";
 
 const FlowRef = Type.Object(
@@ -94,6 +95,12 @@ const UpdateTaskBody = Type.Object({
   assigneeUserId: Type.Optional(
     Type.Union([Type.String({ format: "uuid" }), Type.Null()])
   ),
+  spawnedFromTaskId: Type.Optional(
+    Type.Union([
+      Type.String({ format: "uuid", description: "Re-parent this task under the given parent. Null detaches it (makes it top-level)." }),
+      Type.Null(),
+    ])
+  ),
 });
 
 const ProjectIdBody = Type.Object({ projectId: Type.String({ format: "uuid" }) });
@@ -116,6 +123,12 @@ const ListTasksQuery = Type.Object({
   ),
   cursor: Type.Optional(Type.String({ description: "Opaque cursor — an ISO timestamp from a previous response." })),
   limit: Type.Optional(Type.String({ description: "Integer 1–100 as a string." })),
+  spawnedFromTaskId: Type.Optional(
+    Type.String({ format: "uuid", description: "Only tasks whose parent is this task (direct children)." })
+  ),
+  topLevel: Type.Optional(
+    Type.String({ description: "'true' to return only top-level tasks (no parent). Ignored when spawnedFromTaskId is given." })
+  ),
 });
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -203,7 +216,8 @@ export async function taskRoutes(fastify: FastifyInstance) {
           dueDate: dueDate ?? null,
           spawnedFromTaskId: spawnedFromTaskId ?? null,
         });
-        return reply.status(201).send(formatTask(task!));
+        // A just-created task has no children yet.
+        return reply.status(201).send(formatTask(task!, emptyRollup()));
       } catch (err) {
         if (err instanceof TaskServiceError) {
           return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
@@ -394,6 +408,14 @@ export async function taskRoutes(fastify: FastifyInstance) {
         where.dueDate = due;
       }
 
+      // Altitude filter: direct children of a given parent, or top-level only.
+      // An explicit parent filter wins over topLevel.
+      if (query.spawnedFromTaskId) {
+        where.spawnedFromTaskId = query.spawnedFromTaskId;
+      } else if (query.topLevel === "true") {
+        where.spawnedFromTaskId = null;
+      }
+
       const limit = Math.min(parseInt(query.limit || "25", 10), 100);
 
       if (query.cursor) {
@@ -413,8 +435,11 @@ export async function taskRoutes(fastify: FastifyInstance) {
         ? data[data.length - 1].createdAt.toISOString()
         : null;
 
+      // One batched roll-up query for the whole page (avoids an N+1).
+      const rollups = await getChildRollups(data.map((t) => t.id));
+
       return {
-        data: data.map(formatTask),
+        data: data.map((t) => formatTask(t, rollups.get(t.id))),
         pagination: { cursor: nextCursor, hasMore },
       };
     }
@@ -449,8 +474,11 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const counts = await getBlockerCounts(task.id);
-      return { ...formatTask(task), ...counts };
+      const [counts, rollup] = await Promise.all([
+        getBlockerCounts(task.id),
+        getChildRollup(task.id),
+      ]);
+      return { ...formatTask(task, rollup), ...counts };
     }
   );
 
@@ -503,6 +531,31 @@ export async function taskRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Re-parenting: validate the new parent is visible and won't create a cycle.
+      // A null value detaches the task (makes it top-level) and needs no checks.
+      if (updates.spawnedFromTaskId !== undefined && updates.spawnedFromTaskId !== null) {
+        const newParentId = updates.spawnedFromTaskId;
+        if (newParentId === id) {
+          return reply.status(409).send({
+            error: { code: "PARENT_CYCLE", message: "A task cannot be its own parent" },
+          });
+        }
+        const parent = await prisma.task.findFirst({
+          where: { id: newParentId, isDeleted: false, ...viewWhere },
+          select: { id: true },
+        });
+        if (!parent) {
+          return reply.status(404).send({
+            error: { code: "SPAWNED_FROM_NOT_FOUND", message: "Parent task not found or not visible" },
+          });
+        }
+        if (await wouldCreateCycle(id, newParentId)) {
+          return reply.status(409).send({
+            error: { code: "PARENT_CYCLE", message: "Re-parenting would create a cycle in the task tree" },
+          });
+        }
+      }
+
       const updated = await prisma.task.update({
         where: { id },
         data: {
@@ -511,11 +564,13 @@ export async function taskRoutes(fastify: FastifyInstance) {
           ...(updates.priority && { priority: updates.priority }),
           ...(updates.dueDate !== undefined && { dueDate: updates.dueDate ? new Date(updates.dueDate) : null }),
           ...(updates.assigneeUserId !== undefined && { assigneeId: updates.assigneeUserId }),
+          ...(updates.spawnedFromTaskId !== undefined && { spawnedFromTaskId: updates.spawnedFromTaskId }),
         },
         include: taskInclude,
       });
 
-      return formatTask(updated);
+      const rollup = await getChildRollup(updated.id);
+      return formatTask(updated, rollup);
     }
   );
 
@@ -662,7 +717,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
   );
 }
 
-function formatTask(task: any) {
+function formatTask(task: any, rollup?: ChildRollup) {
   const base: Record<string, unknown> = {
     id: task.id,
     displayId: task.displayId,
@@ -675,7 +730,7 @@ function formatTask(task: any) {
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     flow: { id: task.flow.id, slug: task.flow.slug, name: task.flow.name, icon: task.flow.icon ?? null },
-    currentStatus: { id: task.currentStatus.id, slug: task.currentStatus.slug, name: task.currentStatus.name, color: task.currentStatus.color ?? null },
+    currentStatus: { id: task.currentStatus.id, slug: task.currentStatus.slug, name: task.currentStatus.name, color: task.currentStatus.color ?? null, isTerminal: task.currentStatus.isTerminal ?? false },
     creator: task.creator,
     assignee: task.assignee,
     projects: (task.projects ?? []).map((tp: any) => ({
@@ -711,6 +766,17 @@ function formatTask(task: any) {
       flow: { slug: c.flow.slug },
       currentStatus: { slug: c.currentStatus.slug, name: c.currentStatus.name },
     }));
+  }
+
+  // Child-completion roll-up (present whenever the caller computed it). For
+  // milestone containers, also expose the derived status; a manually-closed
+  // (terminal) milestone always reads as complete.
+  if (rollup) {
+    base.spawnedFromTaskId = task.spawnedFromTaskId ?? null;
+    base.rollup = { childCount: rollup.childCount, childDoneCount: rollup.childDoneCount };
+    if (task.flow.slug === "milestone") {
+      base.derivedStatus = deriveMilestoneStatus(rollup, task.currentStatus.isTerminal ?? false);
+    }
   }
   return base;
 }

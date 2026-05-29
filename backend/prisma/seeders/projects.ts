@@ -16,8 +16,10 @@ interface ProjectDef {
   color: string;
 }
 
-const ENGINEERING_FLOWS = ["bug", "feature", "improvement"] as const;
-const FUNDRAISING_FLOWS = ["grant-application", "donor-outreach", "event"] as const;
+// `milestone` is a generic container flow available to every project type so
+// any project can group its tasks under a milestone.
+const ENGINEERING_FLOWS = ["bug", "feature", "improvement", "milestone"] as const;
+const FUNDRAISING_FLOWS = ["grant-application", "donor-outreach", "event", "milestone"] as const;
 
 const PROJECTS: ProjectDef[] = [
   { key: "REP", name: "Reportal", ownerId: USER_ID_MAX, defaultAssigneeId: USER_ID_MAX, defaultFlowSlug: "bug", teamSlugs: ["engineer", "product", "agent"], flowSlugs: [...ENGINEERING_FLOWS], color: "#0ea5e9" },

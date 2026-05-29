@@ -6,6 +6,11 @@ interface StatusDef {
   name: string;
   description: string;
   color: string;
+  // Marks a status as terminal (the task is "done"/off the board at this point).
+  // Used by milestone roll-up to count completed children. Defaults to the
+  // `closed` convention every flow already follows; set explicitly only when a
+  // flow's terminal status isn't named `closed`.
+  isTerminal?: boolean;
 }
 
 // Color families:
@@ -43,6 +48,15 @@ const IMPROVEMENT_STATUSES: StatusDef[] = [
   { slug: "closed", name: "Closed", description: "Task resolved with resolution", color: "#6b7280" },
 ];
 
+// Milestone: a container flow. Status is normally COMPUTED from children
+// (see task-rollup.service.ts); the authored open→closed layer exists only so a
+// human can manually close a milestone early. `closed` is the manual-override
+// terminal state.
+const MILESTONE_STATUSES: StatusDef[] = [
+  { slug: "open", name: "Open", description: "Milestone is active; progress is computed from its child tasks", color: "#3b82f6" },
+  { slug: "closed", name: "Closed", description: "Milestone closed (all children done, or manually closed early)", color: "#6b7280" },
+];
+
 const GRANT_STATUSES: StatusDef[] = [
   { slug: "research", name: "Research", description: "Identify grant and fit", color: "#3b82f6" },
   { slug: "draft", name: "Draft", description: "Write application", color: "#f59e0b" },
@@ -71,6 +85,7 @@ const FLOW_STATUSES: Record<string, StatusDef[]> = {
   bug: BUG_STATUSES,
   feature: FEATURE_STATUSES,
   improvement: IMPROVEMENT_STATUSES,
+  milestone: MILESTONE_STATUSES,
   "grant-application": GRANT_STATUSES,
   "donor-outreach": DONOR_STATUSES,
   event: EVENT_STATUSES,
@@ -99,6 +114,7 @@ export async function seedFlowStatuses(prisma: PrismaClient): Promise<SeederResu
           description: status.description,
           sortOrder: i + 1,
           color: status.color,
+          isTerminal: status.isTerminal ?? status.slug === "closed",
         },
       });
       result.created++;
