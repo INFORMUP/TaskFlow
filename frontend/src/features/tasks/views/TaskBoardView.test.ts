@@ -224,6 +224,88 @@ describe("TaskBoardView — pagination", () => {
   });
 });
 
+describe("TaskBoardView — close modal", () => {
+  it("shows the close modal instead of transitioning when a card is dropped on the closed column", async () => {
+    getTasks.mockResolvedValue({ data: [taskFixture()], pagination: { cursor: null, hasMore: false } });
+
+    const { wrapper } = await mountBoard();
+    const cards = wrapper.findAll('[role="button"][draggable="true"]');
+    const dataMap = new Map<string, string>();
+    const dataTransfer = {
+      setData: (k: string, v: string) => void dataMap.set(k, v),
+      getData: (k: string) => dataMap.get(k) ?? "",
+      effectAllowed: "",
+      dropEffect: "",
+    };
+
+    await cards[0].trigger("dragstart", { dataTransfer });
+    const closedColumn = wrapper.findAll(".column").find((c) => c.text().includes("Closed"))!;
+    await closedColumn.trigger("dragover", { dataTransfer });
+    await closedColumn.trigger("drop", { dataTransfer });
+    await flushPromises();
+
+    expect(createTransition).not.toHaveBeenCalled();
+    expect(wrapper.find('[aria-labelledby="close-modal-title"]').exists()).toBe(true);
+  });
+
+  it("calls createTransition with resolution and note when the close modal is confirmed", async () => {
+    getTasks.mockResolvedValue({ data: [taskFixture()], pagination: { cursor: null, hasMore: false } });
+    createTransition.mockResolvedValue({ success: true });
+
+    const { wrapper } = await mountBoard();
+    const cards = wrapper.findAll('[role="button"][draggable="true"]');
+    const dataMap = new Map<string, string>();
+    const dataTransfer = {
+      setData: (k: string, v: string) => void dataMap.set(k, v),
+      getData: (k: string) => dataMap.get(k) ?? "",
+      effectAllowed: "",
+      dropEffect: "",
+    };
+
+    await cards[0].trigger("dragstart", { dataTransfer });
+    const closedColumn = wrapper.findAll(".column").find((c) => c.text().includes("Closed"))!;
+    await closedColumn.trigger("dragover", { dataTransfer });
+    await closedColumn.trigger("drop", { dataTransfer });
+    await flushPromises();
+
+    await wrapper.find('[data-testid="close-modal-confirm"]').trigger("click");
+    await flushPromises();
+
+    expect(createTransition).toHaveBeenCalledWith("t-1", {
+      toStatus: "closed",
+      note: "Closed via board",
+      resolution: "completed",
+    });
+    expect(wrapper.find('[aria-labelledby="close-modal-title"]').exists()).toBe(false);
+  });
+
+  it("dismisses the close modal without calling the API when cancelled", async () => {
+    getTasks.mockResolvedValue({ data: [taskFixture()], pagination: { cursor: null, hasMore: false } });
+
+    const { wrapper } = await mountBoard();
+    const cards = wrapper.findAll('[role="button"][draggable="true"]');
+    const dataMap = new Map<string, string>();
+    const dataTransfer = {
+      setData: (k: string, v: string) => void dataMap.set(k, v),
+      getData: (k: string) => dataMap.get(k) ?? "",
+      effectAllowed: "",
+      dropEffect: "",
+    };
+
+    await cards[0].trigger("dragstart", { dataTransfer });
+    const closedColumn = wrapper.findAll(".column").find((c) => c.text().includes("Closed"))!;
+    await closedColumn.trigger("dragover", { dataTransfer });
+    await closedColumn.trigger("drop", { dataTransfer });
+    await flushPromises();
+
+    await wrapper.find(".close-modal__cancel").trigger("click");
+    await flushPromises();
+
+    expect(createTransition).not.toHaveBeenCalled();
+    expect(wrapper.find('[aria-labelledby="close-modal-title"]').exists()).toBe(false);
+  });
+});
+
 describe("TaskBoardView — closed column collapse", () => {
   it("renders the closed column collapsed by default so its tasks are not visible", async () => {
     const closedTask = taskFixture({
