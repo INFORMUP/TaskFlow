@@ -13,8 +13,10 @@ const createTransition = vi.fn();
 const listOrgMembers = vi.fn();
 const apiFetch = vi.fn();
 
+const getTasks = vi.fn();
 vi.mock("@/api/tasks.api", () => ({
   createTask: (...a: unknown[]) => createTask(...a),
+  getTasks: (...a: unknown[]) => getTasks(...a),
 }));
 vi.mock("@/api/projects.api", () => ({
   listProjects: (...a: unknown[]) => listProjects(...a),
@@ -69,6 +71,8 @@ beforeEach(() => {
   createTransition.mockReset();
   listOrgMembers.mockReset();
   apiFetch.mockReset();
+  getTasks.mockReset();
+  getTasks.mockResolvedValue({ data: [], pagination: { cursor: null, hasMore: false } });
 
   listProjects.mockResolvedValue([PROJECT]);
   listProjectFlows.mockResolvedValue([FEATURE_FLOW, BUG_FLOW]);
@@ -88,7 +92,7 @@ beforeEach(() => {
   });
 });
 
-async function mountForm(props: { flow?: string } = {}) {
+async function mountForm(props: { flow?: string; parentId?: string } = {}) {
   const wrapper = mount(TaskCreateForm, { props });
   await flushPromises();
   return wrapper;
@@ -212,6 +216,56 @@ describe("TaskCreateForm — assignee picker (BUG-18)", () => {
     const optionTexts = select.findAll("option").map((o) => o.text());
     expect(optionTexts).toContain("Alice");
     expect(optionTexts).toContain("Bob");
+  });
+});
+
+describe("TaskCreateForm — parent (spawned-from) selection (FEAT-116)", () => {
+  const PARENT = {
+    id: "parent-uuid-0000",
+    displayId: "FEAT-50",
+    title: "Big epic",
+    flow: { slug: "feature", name: "Feature" },
+    currentStatus: { slug: "discuss", name: "Discuss" },
+  };
+
+  it("passes the parentId prop as spawnedFromTaskId to createTask on submit", async () => {
+    const wrapper = await mountForm({ flow: "feature", parentId: "parent-uuid-0000" });
+    await pickFirstProject(wrapper);
+
+    await wrapper.get('input[placeholder="Title"]').setValue("Child of epic");
+    await wrapper.get(".create-form__submit").trigger("click");
+    await flushPromises();
+
+    expect(createTask).toHaveBeenCalledTimes(1);
+    expect(createTask.mock.calls[0][0]).toMatchObject({
+      spawnedFromTaskId: "parent-uuid-0000",
+    });
+  });
+
+  it("lets the user pick a parent via the picker, which is then submitted", async () => {
+    getTasks.mockResolvedValue({
+      data: [PARENT],
+      pagination: { cursor: null, hasMore: false },
+    });
+    const wrapper = await mountForm({ flow: "feature" });
+    await pickFirstProject(wrapper);
+
+    await wrapper.get('input[placeholder="Title"]').setValue("Picked parent");
+    await wrapper.get('[data-testid="task-create-parent-btn"]').trigger("click");
+    await flushPromises();
+    const option = wrapper
+      .findAll(".picker__option")
+      .find((o) => o.text().includes("Big epic"))!;
+    expect(option).toBeTruthy();
+    await option.trigger("click");
+    await flushPromises();
+
+    await wrapper.get(".create-form__submit").trigger("click");
+    await flushPromises();
+
+    expect(createTask.mock.calls[0][0]).toMatchObject({
+      spawnedFromTaskId: "parent-uuid-0000",
+    });
   });
 });
 

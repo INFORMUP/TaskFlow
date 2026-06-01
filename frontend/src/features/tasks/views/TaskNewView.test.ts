@@ -13,8 +13,10 @@ const attachLabelToTask = vi.fn();
 const createTransition = vi.fn();
 const apiFetch = vi.fn();
 
+const getTasks = vi.fn();
 vi.mock("@/api/tasks.api", () => ({
   createTask: (...a: unknown[]) => createTask(...a),
+  getTasks: (...a: unknown[]) => getTasks(...a),
 }));
 vi.mock("@/api/projects.api", () => ({
   listProjects: (...a: unknown[]) => listProjects(...a),
@@ -48,6 +50,8 @@ beforeEach(() => {
   attachLabelToTask.mockReset();
   createTransition.mockReset();
   apiFetch.mockReset();
+  getTasks.mockReset();
+  getTasks.mockResolvedValue({ data: [], pagination: { cursor: null, hasMore: false } });
 
   listProjects.mockResolvedValue([
     { id: "p-1", key: "TF", name: "TaskFlow", defaultAssignee: ALICE },
@@ -104,6 +108,24 @@ describe("TaskNewView", () => {
     await flushPromises();
 
     expect(router.currentRoute.value.fullPath).toBe("/tasks/feature/task-abc");
+  });
+
+  it("passes ?parent from the route query into the form as spawnedFromTaskId", async () => {
+    const router = makeRouter();
+    await router.push("/tasks/new?flow=feature&parent=parent-xyz");
+    await router.isReady();
+    const wrapper = mount(TaskNewView, { global: { plugins: [router] } });
+    await flushPromises();
+
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await flushPromises();
+    await wrapper.get('select[data-testid="task-create-assignee"]').setValue("u-1");
+    await wrapper.get('input[placeholder="Title"]').setValue("Spawned child");
+    await wrapper.get(".create-form__submit").trigger("click");
+    await flushPromises();
+
+    expect(createTask).toHaveBeenCalledTimes(1);
+    expect(createTask.mock.calls[0][0]).toMatchObject({ spawnedFromTaskId: "parent-xyz" });
   });
 
   it("navigates back to /flows on cancel", async () => {

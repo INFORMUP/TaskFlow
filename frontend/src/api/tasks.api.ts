@@ -119,6 +119,7 @@ export function updateTask(
     priority?: string;
     dueDate?: string | null;
     assigneeUserId?: string | null;
+    spawnedFromTaskId?: string | null;
   }
 ): Promise<Task> {
   return apiFetch(`/api/v1/tasks/${id}`, {

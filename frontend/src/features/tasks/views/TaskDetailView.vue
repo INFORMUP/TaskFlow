@@ -16,6 +16,7 @@ import TaskCodeLinksSection from "@/features/tasks/components/TaskCodeLinksSecti
 import TaskBlockersSection from "@/features/tasks/components/TaskBlockersSection.vue";
 import ActorLabel from "@/components/ActorLabel.vue";
 import AssigneePicker from "@/features/tasks/components/AssigneePicker.vue";
+import TaskPicker from "@/features/tasks/components/TaskPicker.vue";
 import LabelPicker from "@/features/labels/components/LabelPicker.vue";
 import { attachLabelToTask, detachLabelFromTask } from "@/api/labels.api";
 
@@ -45,6 +46,10 @@ const users = ref<OrgMember[]>([]);
 // Standalone assignee picker state
 const showAssigneePicker = ref(false);
 const assigneeError = ref("");
+
+// Parent (spawned-from) controls state
+const showParentPicker = ref(false);
+const parentError = ref("");
 
 const RESOLUTIONS: Record<string, string[]> = {
   bug: ["fixed", "invalid", "duplicate", "wont_fix", "cannot_reproduce"],
@@ -139,6 +144,43 @@ async function handleAssigneeSelect(userId: string | null) {
   }
 }
 
+function openParentPicker() {
+  parentError.value = "";
+  showParentPicker.value = true;
+}
+
+function closeParentPicker() {
+  showParentPicker.value = false;
+}
+
+async function handleParentSelect(parentId: string) {
+  closeParentPicker();
+  try {
+    const updated = await updateTask(taskId, { spawnedFromTaskId: parentId });
+    task.value = updated;
+  } catch (e: any) {
+    parentError.value = e?.error?.message ?? "Failed to update parent";
+  }
+}
+
+async function handleClearParent() {
+  parentError.value = "";
+  try {
+    const updated = await updateTask(taskId, { spawnedFromTaskId: null });
+    task.value = updated;
+  } catch (e: any) {
+    parentError.value = e?.error?.message ?? "Failed to update parent";
+  }
+}
+
+function handleSpawnSubtask() {
+  if (!task.value) return;
+  router.push({
+    name: "task-new",
+    query: { flow: task.value.flow.slug, parent: task.value.id },
+  });
+}
+
 function goBack() {
   router.push(`/tasks/${route.params.flow}`);
 }
@@ -179,13 +221,57 @@ onMounted(async () => {
       </span>
     </div>
 
-    <div v-if="task.spawnedFromTask" class="detail__spawned-from">
-      Spawned from
-      <router-link
-        :to="`/tasks/${task.spawnedFromTask.flow.slug}/${task.spawnedFromTask.id}`"
+    <div class="detail__parent">
+      <div v-if="task.spawnedFromTask" class="detail__spawned-from">
+        Spawned from
+        <router-link
+          :to="`/tasks/${task.spawnedFromTask.flow.slug}/${task.spawnedFromTask.id}`"
+        >
+          {{ task.spawnedFromTask.displayId }} — {{ task.spawnedFromTask.title }}
+        </router-link>
+      </div>
+      <div class="detail__parent-actions">
+        <button
+          type="button"
+          class="detail__link-btn"
+          data-testid="detail-set-parent-btn"
+          @click="openParentPicker"
+        >
+          {{ task.spawnedFromTask ? "Change parent" : "Set parent" }}
+        </button>
+        <button
+          v-if="task.spawnedFromTask"
+          type="button"
+          class="detail__link-btn"
+          data-testid="detail-clear-parent-btn"
+          @click="handleClearParent"
+        >
+          Clear parent
+        </button>
+        <button
+          type="button"
+          class="detail__link-btn"
+          data-testid="detail-spawn-subtask-btn"
+          @click="handleSpawnSubtask"
+        >
+          Spawn sub-task
+        </button>
+        <TaskPicker
+          v-if="showParentPicker"
+          :exclude-id="task.id"
+          class="detail__parent-picker"
+          @select="handleParentSelect"
+          @close="closeParentPicker"
+        />
+      </div>
+      <div
+        v-if="parentError"
+        class="detail__error"
+        role="alert"
+        data-testid="detail-parent-error"
       >
-        {{ task.spawnedFromTask.displayId }} — {{ task.spawnedFromTask.title }}
-      </router-link>
+        {{ parentError }}
+      </div>
     </div>
 
     <MarkdownView
@@ -479,10 +565,44 @@ onMounted(async () => {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.detail__parent {
+  margin-bottom: 0.75rem;
+}
+
 .detail__spawned-from {
   font-size: 0.875rem;
   color: var(--text-secondary);
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.375rem;
+}
+
+.detail__parent-actions {
+  position: relative;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.detail__link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.detail__link-btn:hover,
+.detail__link-btn:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.detail__parent-picker {
+  top: 100%;
+  left: 0;
+  margin-top: 0.25rem;
 }
 
 .detail__followups {
