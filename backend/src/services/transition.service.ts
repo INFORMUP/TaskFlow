@@ -2,6 +2,9 @@ export const RESOLUTIONS: Record<string, string[]> = {
   bug: ["fixed", "invalid", "duplicate", "wont_fix", "cannot_reproduce"],
   feature: ["completed", "rejected", "duplicate", "deferred"],
   improvement: ["completed", "wont_fix", "deferred"],
+  // Closing a milestone: all children done (completed), descoped (rejected), or
+  // pushed out (deferred). Required because closing is the manual override.
+  milestone: ["completed", "rejected", "deferred"],
 };
 
 interface TransitionDef {

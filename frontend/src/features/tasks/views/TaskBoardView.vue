@@ -11,6 +11,7 @@ import FilterBar from "../components/FilterBar.vue";
 import SavedViewsBar from "../components/SavedViewsBar.vue";
 import ViewToggle from "../components/ViewToggle.vue";
 import AssigneePicker from "../components/AssigneePicker.vue";
+import CloseTaskModal from "../components/CloseTaskModal.vue";
 import TaskListView from "./TaskListView.vue";
 import { useTaskFilters, toApiParams } from "../composables/useTaskFilters";
 import { useOnboardingTour } from "@/composables/useOnboardingTour";
@@ -50,6 +51,12 @@ function showError(message: string) {
 }
 
 const dragSourceStatusSlug = ref<string | null>(null);
+
+interface ClosePending {
+  taskId: string;
+  fromStatus: string;
+}
+const closePending = ref<ClosePending | null>(null);
 
 interface PickerState {
   taskId: string;
@@ -142,6 +149,12 @@ function clearDragState() {
 async function handleTaskDropped(taskId: string, fromStatus: string, toStatus: string) {
   clearDragState();
   if (fromStatus === toStatus) return;
+
+  if (toStatus === "closed") {
+    closePending.value = { taskId, fromStatus };
+    return;
+  }
+
   const idx = tasks.value.findIndex((t) => t.id === taskId);
   if (idx === -1) return;
   const original = tasks.value[idx];
@@ -164,6 +177,43 @@ async function handleTaskDropped(taskId: string, fromStatus: string, toStatus: s
     tasks.value = tasks.value.map((t, i) => (i === idx ? original : t));
     showError(extractErrorMessage(err, "Could not move task"));
   }
+}
+
+async function handleCloseConfirm(resolution: string, note: string) {
+  if (!closePending.value) return;
+  const { taskId } = closePending.value;
+  closePending.value = null;
+
+  const idx = tasks.value.findIndex((t) => t.id === taskId);
+  if (idx === -1) return;
+  const original = tasks.value[idx];
+  const targetStatus = statuses.value.find((s) => s.slug === "closed");
+  if (!targetStatus) return;
+
+  tasks.value = tasks.value.map((t, i) =>
+    i === idx
+      ? {
+          ...t,
+          currentStatus: { id: targetStatus.id, slug: targetStatus.slug, name: targetStatus.name },
+        }
+      : t
+  );
+
+  try {
+    await createTransition(taskId, {
+      toStatus: "closed",
+      note: note.trim() || "Closed via board",
+      resolution,
+    });
+    await loadTasks();
+  } catch (err) {
+    tasks.value = tasks.value.map((t, i) => (i === idx ? original : t));
+    showError(extractErrorMessage(err, "Could not close task"));
+  }
+}
+
+function handleCloseCancel() {
+  closePending.value = null;
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -317,6 +367,13 @@ onMounted(async () => {
         @request-assignee-pick="handleAssigneePick"
       />
     </div>
+
+    <CloseTaskModal
+      v-if="closePending"
+      :flow-slug="flowSlug"
+      @confirm="handleCloseConfirm"
+      @cancel="handleCloseCancel"
+    />
 
     <div
       v-if="picker"

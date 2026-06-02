@@ -63,6 +63,12 @@ const PERMISSIONS: Record<string, Record<string, Partial<Record<Action, boolean>
     user:     {},
     agent:    { create: true, view: true, comment: true, transition: true, edit: true },
   },
+  milestone: {
+    engineer: { create: true, view: true, comment: true, transition: true, edit: true, assign: true },
+    product:  { create: true, view: true, comment: true, transition: true, edit: true, assign: true, delete: true },
+    user:     { view: true, comment: true },
+    agent:    { create: true, view: true, comment: true, transition: true, edit: true },
+  },
   "grant-application": {
     engineer: { view: true, comment: true },
     product:  { create: true, view: true, comment: true, transition: true, edit: true, assign: true, delete: true },
@@ -101,6 +107,12 @@ const VIEW_SCOPES: Record<string, Record<string, ViewScope>> = {
     engineer: "all",
     product: "all",
     user: "none",
+    agent: "assigned",
+  },
+  milestone: {
+    engineer: "all",
+    product: "all",
+    user: "own_public",
     agent: "assigned",
   },
   "grant-application": {
@@ -150,6 +162,10 @@ const TRANSITION_PERMISSIONS: Record<string, Record<string, string[]>> = {
     implement: ["engineer", "agent"],
     validate:  ["engineer", "agent"],
     closed:    ["engineer"],
+  },
+  milestone: {
+    open:   ["engineer", "product", "agent"],
+    closed: ["engineer", "product", "agent"],
   },
   "grant-application": {
     research:  ["product"],

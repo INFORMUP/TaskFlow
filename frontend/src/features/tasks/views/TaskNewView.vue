@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { useRouter } from "vue-router";
+import { computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import TaskCreateForm from "@/features/tasks/components/TaskCreateForm.vue";
 import type { Task } from "@/api/tasks.api";
 
+const route = useRoute();
 const router = useRouter();
+
+const presetFlow = computed(() =>
+  typeof route.query.flow === "string" ? route.query.flow : undefined,
+);
+const presetParent = computed(() =>
+  typeof route.query.parent === "string" ? route.query.parent : undefined,
+);
 
 function handleCreated(task: Task) {
   router.push(`/tasks/${task.flow.slug}/${task.id}`);
@@ -22,7 +31,12 @@ function handleCancel() {
       created at the flow's first status by default — pick a different one to land
       somewhere else.
     </p>
-    <TaskCreateForm @created="handleCreated" @cancel="handleCancel" />
+    <TaskCreateForm
+      :flow="presetFlow"
+      :parent-id="presetParent"
+      @created="handleCreated"
+      @cancel="handleCancel"
+    />
   </section>
 </template>
 

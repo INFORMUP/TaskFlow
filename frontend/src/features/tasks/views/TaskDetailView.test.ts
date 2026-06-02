@@ -8,6 +8,7 @@ import type { Comment } from "@/api/comments.api";
 
 const getTask = vi.fn();
 const updateTask = vi.fn();
+const getTasks = vi.fn();
 const getTransitions = vi.fn();
 const getAvailableTransitions = vi.fn();
 const getComments = vi.fn();
@@ -16,6 +17,7 @@ const listOrgMembers = vi.fn();
 vi.mock("@/api/tasks.api", () => ({
   getTask: (...a: unknown[]) => getTask(...a),
   updateTask: (...a: unknown[]) => updateTask(...a),
+  getTasks: (...a: unknown[]) => getTasks(...a),
 }));
 vi.mock("@/api/transitions.api", () => ({
   getTransitions: (...a: unknown[]) => getTransitions(...a),
@@ -99,6 +101,11 @@ function makeRouter() {
         name: "task-board",
         component: { template: "<div />" },
       },
+      {
+        path: "/tasks/new",
+        name: "task-new",
+        component: { template: "<div />" },
+      },
     ],
   });
 }
@@ -116,6 +123,8 @@ async function mountDetail() {
 beforeEach(() => {
   getTask.mockReset();
   updateTask.mockReset();
+  getTasks.mockReset();
+  getTasks.mockResolvedValue({ data: [], pagination: { cursor: null, hasMore: false } });
   getTransitions.mockReset();
   getAvailableTransitions.mockReset();
   getComments.mockReset();
@@ -360,5 +369,102 @@ describe("TaskDetailView — standalone reassignment", () => {
     const err = wrapper.find("[data-testid='detail-assignee-error']");
     expect(err.exists()).toBe(true);
     expect(err.text()).toContain("Forbidden");
+  });
+});
+
+describe("TaskDetailView — parent controls (FEAT-116)", () => {
+  const CANDIDATE = {
+    id: "parent-id",
+    displayId: "FEAT-99",
+    title: "Parent task",
+    flow: { slug: "feature", name: "Feature" },
+    currentStatus: { slug: "discuss", name: "Discuss" },
+  };
+
+  it("sets a parent via the picker and updates the view", async () => {
+    getTasks.mockResolvedValue({
+      data: [CANDIDATE],
+      pagination: { cursor: null, hasMore: false },
+    });
+    updateTask.mockResolvedValue(
+      taskFixture({
+        spawnedFromTask: {
+          id: "parent-id",
+          displayId: "FEAT-99",
+          title: "Parent task",
+          flow: { slug: "feature" },
+        },
+      })
+    );
+    const wrapper = await mountDetail();
+
+    await wrapper.find("[data-testid='detail-set-parent-btn']").trigger("click");
+    await flushPromises();
+    const option = wrapper
+      .findAll(".picker__option")
+      .find((o) => o.text().includes("Parent task"))!;
+    expect(option).toBeTruthy();
+    await option.trigger("click");
+    await flushPromises();
+
+    expect(updateTask).toHaveBeenCalledWith("t-1", { spawnedFromTaskId: "parent-id" });
+    expect(wrapper.find(".detail__spawned-from").text()).toContain("FEAT-99");
+  });
+
+  it("surfaces a PARENT_CYCLE error inline", async () => {
+    getTasks.mockResolvedValue({
+      data: [CANDIDATE],
+      pagination: { cursor: null, hasMore: false },
+    });
+    updateTask.mockRejectedValue({
+      error: { code: "PARENT_CYCLE", message: "A task cannot be its own parent" },
+    });
+    const wrapper = await mountDetail();
+
+    await wrapper.find("[data-testid='detail-set-parent-btn']").trigger("click");
+    await flushPromises();
+    const option = wrapper
+      .findAll(".picker__option")
+      .find((o) => o.text().includes("Parent task"))!;
+    await option.trigger("click");
+    await flushPromises();
+
+    const err = wrapper.find("[data-testid='detail-parent-error']");
+    expect(err.exists()).toBe(true);
+    expect(err.text()).toContain("A task cannot be its own parent");
+  });
+
+  it("clears the parent with spawnedFromTaskId=null", async () => {
+    getTask.mockResolvedValue(
+      taskFixture({
+        spawnedFromTask: {
+          id: "parent-id",
+          displayId: "FEAT-99",
+          title: "Parent task",
+          flow: { slug: "feature" },
+        },
+      })
+    );
+    updateTask.mockResolvedValue(taskFixture({ spawnedFromTask: null }));
+    const wrapper = await mountDetail();
+
+    await wrapper.find("[data-testid='detail-clear-parent-btn']").trigger("click");
+    await flushPromises();
+
+    expect(updateTask).toHaveBeenCalledWith("t-1", { spawnedFromTaskId: null });
+  });
+
+  it("navigates to task-new with flow and parent query on spawn sub-task", async () => {
+    const wrapper = await mountDetail();
+    const router = wrapper.vm.$router;
+    const push = vi.spyOn(router, "push");
+
+    await wrapper.find("[data-testid='detail-spawn-subtask-btn']").trigger("click");
+    await flushPromises();
+
+    expect(push).toHaveBeenCalledWith({
+      name: "task-new",
+      query: { flow: "bug", parent: "t-1" },
+    });
   });
 });
