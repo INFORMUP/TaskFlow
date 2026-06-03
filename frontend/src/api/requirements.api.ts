@@ -28,6 +28,8 @@ export interface QuorumResult {
 
 export interface Requirement {
   id: string;
+  parentId: string | null;
+  number: string;
   ordinal: number;
   statement: string;
   rationale: string | null;
@@ -43,7 +45,7 @@ export function getRequirements(taskId: string): Promise<Requirement[]> {
 
 export function createRequirement(
   taskId: string,
-  body: { statement: string; rationale?: string; ordinal?: number }
+  body: { statement: string; rationale?: string; parentId?: string | null; ordinal?: number }
 ): Promise<Requirement> {
   return apiFetch(`/api/v1/tasks/${taskId}/requirements`, {
     method: "POST",

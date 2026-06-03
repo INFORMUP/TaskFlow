@@ -19,20 +19,24 @@ const requirements = ref<Requirement[]>([]);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
-// Add-requirement form
+// Top-level add form
 const showAddForm = ref(false);
 const newStatement = ref("");
 const newRationale = ref("");
 
-// Edit requirement inline
+// Inline edit
 const editingId = ref<string | null>(null);
 const editStatement = ref("");
 const editRationale = ref("");
 
-// Add-slot form: keyed by requirement id
+// Add-slot form
 const showSlotFormFor = ref<string | null>(null);
 const newSlotLabel = ref("");
 const newSlotActorType = ref<"" | "human" | "agent">("");
+
+// Add-child form: keyed by parent requirement id
+const addingChildFor = ref<string | null>(null);
+const childStatement = ref("");
 
 async function load() {
   error.value = null;
@@ -45,6 +49,15 @@ async function load() {
 
 watch(() => props.taskId, load, { immediate: true });
 
+function depthOf(number: string): number {
+  return number.split(".").length;
+}
+
+function indentStyle(number: string) {
+  const depth = depthOf(number);
+  return depth > 1 ? { paddingLeft: `${(depth - 1) * 1.5}rem` } : {};
+}
+
 async function handleAddRequirement() {
   if (!newStatement.value.trim()) return;
   busy.value = true;
@@ -56,6 +69,32 @@ async function handleAddRequirement() {
     newStatement.value = "";
     newRationale.value = "";
     showAddForm.value = false;
+    await load();
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to create requirement";
+  } finally {
+    busy.value = false;
+  }
+}
+
+function openChildForm(reqId: string) {
+  addingChildFor.value = reqId;
+  childStatement.value = "";
+  // Close other open forms
+  showAddForm.value = false;
+  showSlotFormFor.value = null;
+}
+
+async function handleAddChild(parentId: string) {
+  if (!childStatement.value.trim()) return;
+  busy.value = true;
+  try {
+    await createRequirement(props.taskId, {
+      statement: childStatement.value.trim(),
+      parentId,
+    });
+    addingChildFor.value = null;
+    childStatement.value = "";
     await load();
   } catch (e: any) {
     error.value = e?.error?.message ?? "Failed to create requirement";
@@ -176,7 +215,7 @@ function isSignedOff(slot: SignoffSlot): boolean {
         class="req-panel__add-btn"
         data-testid="add-req-btn"
         :disabled="busy"
-        @click="showAddForm = !showAddForm"
+        @click="showAddForm = !showAddForm; addingChildFor = null"
       >
         + Add requirement
       </button>
@@ -186,6 +225,7 @@ function isSignedOff(slot: SignoffSlot): boolean {
 
     <p v-if="error" class="req-panel__error" role="alert">{{ error }}</p>
 
+    <!-- Top-level add form -->
     <div v-if="showAddForm" class="req-panel__add-form">
       <input
         v-model="newStatement"
@@ -233,6 +273,8 @@ function isSignedOff(slot: SignoffSlot): boolean {
         :key="req.id"
         class="req-panel__item"
         :data-testid="`req-row-${req.id}`"
+        :data-depth="depthOf(req.number)"
+        :style="indentStyle(req.number)"
       >
         <!-- Editing inline -->
         <div v-if="editingId === req.id" class="req-panel__edit-form">
@@ -273,7 +315,12 @@ function isSignedOff(slot: SignoffSlot): boolean {
         <!-- Normal view -->
         <template v-else>
           <div class="req-panel__row">
-            <span class="req-panel__ordinal">#{{ req.ordinal }}</span>
+            <!-- Hierarchical number badge -->
+            <span
+              class="req-panel__number"
+              :data-testid="`req-number-${req.id}`"
+            >{{ req.number }}</span>
+
             <span class="req-panel__statement">{{ req.statement }}</span>
             <span
               class="req-panel__quorum"
@@ -291,6 +338,15 @@ function isSignedOff(slot: SignoffSlot): boolean {
               ⚠ not-distinct
             </span>
             <div class="req-panel__actions">
+              <button
+                type="button"
+                class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
+                :data-testid="`add-child-btn-${req.id}`"
+                :disabled="busy"
+                @click="openChildForm(req.id)"
+              >
+                + Child
+              </button>
               <button
                 type="button"
                 class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
@@ -313,6 +369,38 @@ function isSignedOff(slot: SignoffSlot): boolean {
           </div>
 
           <p v-if="req.rationale" class="req-panel__rationale">{{ req.rationale }}</p>
+
+          <!-- Add-child inline form -->
+          <div v-if="addingChildFor === req.id" class="req-panel__child-form">
+            <input
+              v-model="childStatement"
+              type="text"
+              placeholder="Child requirement statement"
+              class="req-panel__input"
+              :data-testid="`child-req-statement-${req.id}`"
+              :disabled="busy"
+              @keydown.enter="handleAddChild(req.id)"
+            />
+            <div class="req-panel__form-actions">
+              <button
+                type="button"
+                class="req-panel__btn req-panel__btn--sm"
+                :data-testid="`child-req-submit-${req.id}`"
+                :disabled="busy || !childStatement.trim()"
+                @click="handleAddChild(req.id)"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
+                :data-testid="`child-req-cancel-${req.id}`"
+                @click="addingChildFor = null"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
 
           <!-- Slots -->
           <ul v-if="req.slots.length" class="req-panel__slots">
@@ -464,7 +552,7 @@ function isSignedOff(slot: SignoffSlot): boolean {
 
 .req-panel__add-form,
 .req-panel__edit-form,
-.req-panel__slot-form {
+.req-panel__child-form {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -474,12 +562,21 @@ function isSignedOff(slot: SignoffSlot): boolean {
   border-radius: 4px;
 }
 
+.req-panel__child-form {
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+}
+
 .req-panel__slot-form {
+  display: flex;
   flex-direction: row;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.35rem;
   margin-top: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--color-bg-muted, #f8f8f8);
+  border-radius: 4px;
 }
 
 .req-panel__form-actions {
@@ -505,11 +602,18 @@ function isSignedOff(slot: SignoffSlot): boolean {
   flex-wrap: wrap;
 }
 
-.req-panel__ordinal {
-  font-family: monospace;
-  font-size: 0.8rem;
-  color: var(--color-text-muted, #888);
+/* Hierarchical number badge */
+.req-panel__number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary, #666);
+  background: var(--color-bg-muted, #f0f0f0);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
   flex-shrink: 0;
+  min-width: 1.8rem;
+  text-align: center;
 }
 
 .req-panel__statement {
@@ -551,12 +655,12 @@ function isSignedOff(slot: SignoffSlot): boolean {
 .req-panel__rationale {
   font-size: 0.8rem;
   color: var(--color-text-muted, #666);
-  margin: 0.25rem 0 0.5rem 1.5rem;
+  margin: 0.25rem 0 0.5rem 2.2rem;
 }
 
 .req-panel__slots {
   list-style: none;
-  padding: 0 0 0 1.5rem;
+  padding: 0 0 0 2.2rem;
   margin: 0.4rem 0 0;
 }
 
@@ -612,7 +716,7 @@ function isSignedOff(slot: SignoffSlot): boolean {
   color: var(--accent, #004de6);
   cursor: pointer;
   font-size: 0.8rem;
-  padding: 0.2rem 0 0.2rem 1.5rem;
+  padding: 0.2rem 0 0.2rem 2.2rem;
   margin-top: 0.25rem;
 }
 

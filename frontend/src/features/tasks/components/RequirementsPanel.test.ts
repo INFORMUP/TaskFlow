@@ -58,6 +58,8 @@ const SLOT_ANY = {
 
 const REQ_A = {
   id: "req-a",
+  parentId: null,
+  number: "1",
   ordinal: 1,
   statement: "Must display requirements list",
   rationale: "Core feature",
@@ -69,6 +71,8 @@ const REQ_A = {
 
 const REQ_B = {
   id: "req-b",
+  parentId: null,
+  number: "2",
   ordinal: 2,
   statement: "Must allow human sign-off",
   rationale: null,
@@ -80,6 +84,8 @@ const REQ_B = {
 
 const REQ_DISTINCT = {
   id: "req-c",
+  parentId: null,
+  number: "3",
   ordinal: 3,
   statement: "Self-review case",
   rationale: null,
@@ -87,6 +93,19 @@ const REQ_DISTINCT = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   slots: [SLOT_ANY],
   quorum: { verified: false, signed: 0, total: 1, missing: [], notDistinct: true },
+};
+
+const REQ_A_CHILD = {
+  id: "req-a1",
+  parentId: "req-a",
+  number: "1.1",
+  ordinal: 1,
+  statement: "Sub-requirement of A",
+  rationale: null,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  slots: [],
+  quorum: { verified: false, signed: 0, total: 0, missing: [], notDistinct: false },
 };
 
 beforeEach(() => {
@@ -157,7 +176,6 @@ describe("RequirementsPanel", () => {
   });
 
   it("shows cancel-sign-off button instead of sign-off when slot is already signed", async () => {
-    // REQ_B has SLOT_ANY which has a met attestation
     const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
     await flushPromises();
 
@@ -257,5 +275,63 @@ describe("RequirementsPanel", () => {
     await flushPromises();
 
     expect(deleteSlot).toHaveBeenCalledWith("task-1", "req-a", "slot-1");
+  });
+
+  // ── Nesting tests ──────────────────────────────────────────────────────────
+
+  it("displays hierarchical numbers as prefixes", async () => {
+    getRequirements.mockResolvedValueOnce([REQ_A, REQ_A_CHILD, REQ_B]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='req-number-req-a']").text()).toBe("1");
+    expect(wrapper.find("[data-testid='req-number-req-a1']").text()).toBe("1.1");
+    expect(wrapper.find("[data-testid='req-number-req-b']").text()).toBe("2");
+  });
+
+  it("indents child requirements visually", async () => {
+    getRequirements.mockResolvedValueOnce([REQ_A, REQ_A_CHILD]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    const childRow = wrapper.find("[data-testid='req-row-req-a1']");
+    expect(childRow.attributes("data-depth")).toBe("2");
+  });
+
+  it("shows add-child button on each requirement", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='add-child-btn-req-a']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='add-child-btn-req-b']").exists()).toBe(true);
+  });
+
+  it("creates a child requirement with parentId when add-child form is submitted", async () => {
+    createRequirement.mockResolvedValue({ ...REQ_A_CHILD });
+    getRequirements.mockResolvedValueOnce([REQ_A]).mockResolvedValueOnce([REQ_A, REQ_A_CHILD]);
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='add-child-btn-req-a']").trigger("click");
+    await wrapper.get("[data-testid='child-req-statement-req-a']").setValue("Sub-requirement of A");
+    await wrapper.get("[data-testid='child-req-submit-req-a']").trigger("click");
+    await flushPromises();
+
+    expect(createRequirement).toHaveBeenCalledWith(
+      "task-1",
+      { statement: "Sub-requirement of A", parentId: "req-a" }
+    );
+  });
+
+  it("closes add-child form on cancel", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='add-child-btn-req-a']").trigger("click");
+    expect(wrapper.find("[data-testid='child-req-statement-req-a']").exists()).toBe(true);
+
+    await wrapper.get("[data-testid='child-req-cancel-req-a']").trigger("click");
+    expect(wrapper.find("[data-testid='child-req-statement-req-a']").exists()).toBe(false);
   });
 });

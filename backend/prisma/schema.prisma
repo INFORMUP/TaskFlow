@@ -584,6 +584,7 @@ model TaskLabel {
 model Requirement {
   id        String   @id @default(uuid()) @db.Uuid
   taskId    String   @map("task_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
   ordinal   Int
   statement String   @db.Text
   rationale String?  @db.Text
@@ -592,12 +593,14 @@ model Requirement {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  task    Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  creator User       @relation("RequirementCreatedBy", fields: [createdBy], references: [id])
-  slots   SignoffSlot[]
+  task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  parent   Requirement?  @relation("RequirementChildren", fields: [parentId], references: [id])
+  children Requirement[] @relation("RequirementChildren")
+  creator  User          @relation("RequirementCreatedBy", fields: [createdBy], references: [id])
+  slots    SignoffSlot[]
 
-  @@unique([taskId, ordinal])
   @@index([taskId])
+  @@index([taskId, parentId])
   @@map("requirements")
 }
 

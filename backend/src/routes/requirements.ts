@@ -59,6 +59,8 @@ const QuorumShape = Type.Object(
 const RequirementShape = Type.Object(
   {
     id: Type.String({ format: "uuid" }),
+    parentId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
+    number: Type.String(),
     ordinal: Type.Number(),
     statement: Type.String(),
     rationale: Type.Union([Type.String(), Type.Null()]),
@@ -117,6 +119,38 @@ async function loadRequirements(taskId: string) {
   });
 }
 
+// Assign hierarchical decimal numbers (1, 1.1, 1.2, 2, 2.1 …) in-place.
+// Mutates each element's `number` property; returns depth-first ordered array.
+function assignNumbers(
+  flat: (ReturnType<typeof buildRequirementResponse> & { number?: string })[],
+  parentId: string | null = null,
+  prefix = ""
+): (ReturnType<typeof buildRequirementResponse> & { number: string })[] {
+  const children = flat
+    .filter((r) => (r.parentId ?? null) === parentId)
+    .sort((a, b) => a.ordinal - b.ordinal);
+
+  const result: (ReturnType<typeof buildRequirementResponse> & { number: string })[] = [];
+  children.forEach((r, i) => {
+    const num = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
+    (r as any).number = num;
+    result.push(r as any);
+    result.push(...assignNumbers(flat, r.id, num));
+  });
+  return result;
+}
+
+async function softDeleteTree(requirementId: string) {
+  await prisma.requirement.update({ where: { id: requirementId }, data: { isDeleted: true } });
+  const children = await prisma.requirement.findMany({
+    where: { parentId: requirementId, isDeleted: false },
+    select: { id: true },
+  });
+  for (const child of children) {
+    await softDeleteTree(child.id);
+  }
+}
+
 function buildRequirementResponse(req: Awaited<ReturnType<typeof loadRequirements>>[number]) {
   const quorum = computeQuorum(
     req.slots.map((s) => ({
@@ -155,7 +189,8 @@ export async function requirementRoutes(fastify: FastifyInstance) {
       if (!enforceScope(request, reply, "tasks:read")) return;
       const { id } = request.params as { id: string };
       const reqs = await loadRequirements(id);
-      return reply.send(reqs.map(buildRequirementResponse));
+      const withQuorum = reqs.map(buildRequirementResponse);
+      return reply.send(assignNumbers(withQuorum));
     }
   );
 
@@ -173,6 +208,7 @@ export async function requirementRoutes(fastify: FastifyInstance) {
         body: Type.Object({
           statement: Type.String({ minLength: 1 }),
           rationale: Type.Optional(Type.String()),
+          parentId: Type.Optional(Type.Union([Type.String({ format: "uuid" }), Type.Null()])),
           ordinal: Type.Optional(Type.Number()),
           slots: Type.Optional(
             Type.Array(
@@ -191,9 +227,10 @@ export async function requirementRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       if (!enforceScope(request, reply, "requirements:write")) return;
       const { id } = request.params as { id: string };
-      const { statement, rationale, ordinal, slots } = request.body as {
+      const { statement, rationale, parentId, ordinal, slots } = request.body as {
         statement: string;
         rationale?: string;
+        parentId?: string | null;
         ordinal?: number;
         slots?: Array<{
           label: string;
@@ -203,8 +240,9 @@ export async function requirementRoutes(fastify: FastifyInstance) {
         }>;
       };
 
+      const resolvedParentId = parentId ?? null;
       const maxOrdinal = await prisma.requirement.aggregate({
-        where: { taskId: id, isDeleted: false },
+        where: { taskId: id, parentId: resolvedParentId, isDeleted: false },
         _max: { ordinal: true },
       });
       const nextOrdinal = ordinal ?? (maxOrdinal._max.ordinal ?? 0) + 1;
@@ -212,6 +250,7 @@ export async function requirementRoutes(fastify: FastifyInstance) {
       const req = await prisma.requirement.create({
         data: {
           taskId: id,
+          parentId: resolvedParentId,
           statement,
           rationale: rationale ?? null,
           ordinal: nextOrdinal,
@@ -241,12 +280,11 @@ export async function requirementRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // Re-fetch to include any newly created slots.
-      const full = await prisma.requirement.findUnique({
-        where: { id: req.id },
-        include: { slots: { orderBy: { ordinal: "asc" }, include: { attestations: true } } },
-      });
-      return reply.status(201).send(buildRequirementResponse(full!));
+      // Re-fetch all requirements to compute the correct hierarchical number.
+      const allReqs = await loadRequirements(id);
+      const withNumbers = assignNumbers(allReqs.map(buildRequirementResponse));
+      const created = withNumbers.find((r) => r.id === req.id)!;
+      return reply.status(201).send(created);
     }
   );
 
@@ -302,7 +340,7 @@ export async function requirementRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       if (!enforceScope(request, reply, "requirements:write")) return;
       const { rid } = request.params as { rid: string };
-      await prisma.requirement.update({ where: { id: rid }, data: { isDeleted: true } });
+      await softDeleteTree(rid);
       return reply.status(204).send();
     }
   );
