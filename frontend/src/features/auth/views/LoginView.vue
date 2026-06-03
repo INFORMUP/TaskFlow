@@ -11,6 +11,8 @@ function isSafeRedirect(path: string): boolean {
 }
 
 
+const isDev = import.meta.env.DEV;
+
 const { login } = useAuth();
 const org = useOrg();
 const route = useRoute();
@@ -89,6 +91,19 @@ onMounted(async () => {
   }
 });
 
+async function handleDevLogin() {
+  try {
+    const res = await fetch(`${config.apiBaseUrl}/api/v1/dev-login`);
+    const data = await res.json();
+    login(data.accessToken, data.refreshToken);
+    await org.hydrate();
+    const redirect = route.query.redirect as string | undefined;
+    router.push(redirect && isSafeRedirect(redirect) ? redirect : "/");
+  } catch (e: unknown) {
+    errorMessage.value = `Dev login failed: ${e instanceof Error ? e.message : "unknown error"}`;
+  }
+}
+
 function handleGoogleLogin() {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const redirectUri = `${window.location.origin}/login`;
@@ -123,6 +138,14 @@ function handleGoogleLogin() {
     <button type="button" class="login__button" @click="handleGoogleLogin">
       Sign in with Google
     </button>
+    <button
+      v-if="isDev"
+      type="button"
+      class="login__button login__button--dev"
+      @click="handleDevLogin"
+    >
+      Dev login (bypass OAuth)
+    </button>
   </div>
 </template>
 
@@ -156,6 +179,18 @@ function handleGoogleLogin() {
 
 .login__button:hover {
   background: var(--accent-hover);
+}
+
+.login__button--dev {
+  margin-top: 0.5rem;
+  background: #444;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.login__button--dev:hover {
+  background: #222;
+  opacity: 1;
 }
 
 .login__error {
