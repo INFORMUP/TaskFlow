@@ -1,5 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { Type } from "@sinclair/typebox";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma-client.js";
 import { enforceScope } from "../services/permission.service.js";
 import { CommonErrorResponses } from "./_schemas.js";
@@ -70,17 +71,26 @@ export async function signoffPolicyRoutes(fastify: FastifyInstance) {
         projectId?: string | null;
       };
 
-      const policy = await prisma.signoffPolicy.create({
-        data: {
-          orgId: request.org.id,
-          slug,
-          name,
-          description: description ?? null,
-          projectId: projectId ?? null,
-        },
-        include: { slots: { orderBy: { ordinal: "asc" } } },
-      });
-      return reply.status(201).send(policy);
+      try {
+        const policy = await prisma.signoffPolicy.create({
+          data: {
+            orgId: request.org.id,
+            slug,
+            name,
+            description: description ?? null,
+            projectId: projectId ?? null,
+          },
+          include: { slots: { orderBy: { ordinal: "asc" } } },
+        });
+        return reply.status(201).send(policy);
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+          return reply.status(409).send({
+            error: { code: "CONFLICT", message: "A policy with this name already exists" },
+          });
+        }
+        throw err;
+      }
     }
   );
 
@@ -160,15 +170,24 @@ export async function signoffPolicyRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Policy not found" } });
       }
 
-      const policy = await prisma.signoffPolicy.update({
-        where: { id: policyId },
-        data: {
-          ...(body.name !== undefined && { name: body.name }),
-          ...(body.description !== undefined && { description: body.description }),
-        },
-        include: { slots: { orderBy: { ordinal: "asc" } } },
-      });
-      return reply.send(policy);
+      try {
+        const policy = await prisma.signoffPolicy.update({
+          where: { id: policyId },
+          data: {
+            ...(body.name !== undefined && { name: body.name }),
+            ...(body.description !== undefined && { description: body.description }),
+          },
+          include: { slots: { orderBy: { ordinal: "asc" } } },
+        });
+        return reply.send(policy);
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+          return reply.status(409).send({
+            error: { code: "CONFLICT", message: "A policy with this name already exists" },
+          });
+        }
+        throw err;
+      }
     }
   );
 
