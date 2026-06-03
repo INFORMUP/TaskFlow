@@ -145,8 +145,25 @@ async function handleSignOff(reqId: string, slotId: string) {
   }
 }
 
+async function handleCancelSignOff(reqId: string, slotId: string) {
+  busy.value = true;
+  try {
+    await createAttestation(props.taskId, reqId, slotId, { verdict: "not_met" });
+    await load();
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to cancel sign-off";
+  } finally {
+    busy.value = false;
+  }
+}
+
 function isAgentOnly(slot: SignoffSlot): boolean {
   return slot.requiredActorType === "agent";
+}
+
+function isSignedOff(slot: SignoffSlot): boolean {
+  const latest = slot.attestations.at(-1);
+  return latest?.verdict === "met";
 }
 </script>
 
@@ -323,24 +340,33 @@ function isAgentOnly(slot: SignoffSlot): boolean {
 
               <span class="req-panel__slot-attestations">
                 <span
-                  v-for="att in slot.attestations"
-                  :key="att.id"
+                  v-if="slot.attestations.length > 0"
                   class="req-panel__attestation"
-                  :class="att.verdict === 'met' ? 'att--met' : 'att--not-met'"
+                  :class="isSignedOff(slot) ? 'att--met' : 'att--not-met'"
                 >
-                  {{ att.verdict === "met" ? "✓" : "✗" }}
+                  {{ isSignedOff(slot) ? "✓" : "✗" }}
                 </span>
               </span>
 
               <button
-                v-if="!isAgentOnly(slot)"
+                v-if="!isAgentOnly(slot) && !isSignedOff(slot)"
                 type="button"
-                class="req-panel__btn req-panel__btn--sm"
+                class="req-panel__btn req-panel__btn--sm req-panel__btn--signoff"
                 :data-testid="`signoff-btn-${slot.id}`"
                 :disabled="busy"
                 @click="handleSignOff(req.id, slot.id)"
               >
                 Sign off
+              </button>
+              <button
+                v-if="!isAgentOnly(slot) && isSignedOff(slot)"
+                type="button"
+                class="req-panel__btn req-panel__btn--sm req-panel__btn--cancel-signoff"
+                :data-testid="`cancel-signoff-btn-${slot.id}`"
+                :disabled="busy"
+                @click="handleCancelSignOff(req.id, slot.id)"
+              >
+                Cancel sign off
               </button>
 
               <button
@@ -625,6 +651,28 @@ function isAgentOnly(slot: SignoffSlot): boolean {
   background: none;
   color: #c0392b;
   border-color: #c0392b;
+}
+
+.req-panel__btn--signoff {
+  background: #27ae60;
+  border-color: #27ae60;
+  color: white;
+}
+
+.req-panel__btn--signoff:hover:not(:disabled) {
+  background: #219150;
+  border-color: #219150;
+}
+
+.req-panel__btn--cancel-signoff {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: white;
+}
+
+.req-panel__btn--cancel-signoff:hover:not(:disabled) {
+  background: #a93226;
+  border-color: #a93226;
 }
 
 .req-panel__btn--sm {

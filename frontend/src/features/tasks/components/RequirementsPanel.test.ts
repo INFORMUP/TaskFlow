@@ -145,7 +145,7 @@ describe("RequirementsPanel", () => {
     expect(wrapper.text()).toContain("Agent review");
   });
 
-  it("shows sign-off button for human slots but not for agent-only slots", async () => {
+  it("shows sign-off button for unsigned human slots but not for agent-only slots", async () => {
     const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
     await flushPromises();
 
@@ -154,6 +154,34 @@ describe("RequirementsPanel", () => {
 
     expect(humanBtn.exists()).toBe(true);
     expect(agentBtn.exists()).toBe(false);
+  });
+
+  it("shows cancel-sign-off button instead of sign-off when slot is already signed", async () => {
+    // REQ_B has SLOT_ANY which has a met attestation
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='signoff-btn-slot-3']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='cancel-signoff-btn-slot-3']").exists()).toBe(true);
+  });
+
+  it("calls createAttestation with not_met on cancel sign-off", async () => {
+    createAttestation.mockResolvedValue({
+      id: "att-cancel",
+      actorId: "u1",
+      actorType: "human",
+      verdict: "not_met",
+      evidence: null,
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='cancel-signoff-btn-slot-3']").trigger("click");
+    await flushPromises();
+
+    expect(createAttestation).toHaveBeenCalledWith("task-1", "req-b", "slot-3", { verdict: "not_met" });
   });
 
   it("shows agent-only badge for agent slots", async () => {

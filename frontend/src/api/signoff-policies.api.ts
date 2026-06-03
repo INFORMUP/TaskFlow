@@ -62,3 +62,20 @@ export function setTaskDefaultPolicy(taskId: string, policyId: string | null): P
     body: JSON.stringify({ policyId }),
   });
 }
+
+export function setProjectDefaultPolicy(projectId: string, policyId: string | null): Promise<void> {
+  return apiFetch(`/api/v1/signoff-policies/defaults/projects/${projectId}`, {
+    method: "PUT",
+    body: JSON.stringify({ policyId }),
+  });
+}
+
+export function updatePolicy(
+  policyId: string,
+  body: { name?: string; description?: string }
+): Promise<SignoffPolicy> {
+  return apiFetch(`/api/v1/signoff-policies/${policyId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
