@@ -9,9 +9,10 @@ export function seedUuid(entity: string, key: string): string {
 export interface SeederResult {
   name: string;
   created: number;
+  updated: number;
   skipped: number;
 }
 
 export function makeResult(name: string): SeederResult {
-  return { name, created: 0, skipped: 0 };
+  return { name, created: 0, updated: 0, skipped: 0 };
 }
