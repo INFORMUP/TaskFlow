@@ -6,6 +6,8 @@ export const SCOPES = [
   { key: "tasks:write", description: "Create, edit, assign, and delete tasks" },
   { key: "transitions:write", description: "Transition tasks between statuses" },
   { key: "comments:write", description: "Post comments on tasks" },
+  { key: "requirements:write", description: "Create, edit, and delete requirements and signoff slots" },
+  { key: "attestations:write", description: "Submit attestations on signoff slots" },
 ] as const;
 
 export type ScopeKey = (typeof SCOPES)[number]["key"];

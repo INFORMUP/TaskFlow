@@ -1,0 +1,370 @@
+import { FastifyInstance } from "fastify";
+import { Type } from "@sinclair/typebox";
+import { prisma } from "../prisma-client.js";
+import { enforceScope } from "../services/permission.service.js";
+import { computeQuorum } from "../services/requirement.service.js";
+import { CommonErrorResponses } from "./_schemas.js";
+
+// ── Shared params ────────────────────────────────────────────────────────────
+
+const TaskParams = Type.Object({ id: Type.String({ format: "uuid" }) });
+const RequirementParams = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  rid: Type.String({ format: "uuid" }),
+});
+const SlotParams = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  rid: Type.String({ format: "uuid" }),
+  sid: Type.String({ format: "uuid" }),
+});
+
+// ── Shapes ───────────────────────────────────────────────────────────────────
+
+const AttestationShape = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    actorId: Type.String({ format: "uuid" }),
+    actorType: Type.String(),
+    verdict: Type.String(),
+    evidence: Type.Union([Type.String(), Type.Null()]),
+    createdAt: Type.String({ format: "date-time" }),
+  },
+  { additionalProperties: true }
+);
+
+const SlotShape = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    ordinal: Type.Number(),
+    label: Type.String(),
+    requiredActorType: Type.Union([Type.String(), Type.Null()]),
+    requiredUserId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
+    attestations: Type.Array(AttestationShape),
+  },
+  { additionalProperties: true }
+);
+
+const QuorumShape = Type.Object(
+  {
+    verified: Type.Boolean(),
+    signed: Type.Number(),
+    total: Type.Number(),
+    missing: Type.Array(Type.String()),
+    notDistinct: Type.Boolean(),
+  },
+  { additionalProperties: true }
+);
+
+const RequirementShape = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    ordinal: Type.Number(),
+    statement: Type.String(),
+    rationale: Type.Union([Type.String(), Type.Null()]),
+    createdAt: Type.String({ format: "date-time" }),
+    updatedAt: Type.String({ format: "date-time" }),
+    slots: Type.Array(SlotShape),
+    quorum: QuorumShape,
+  },
+  { additionalProperties: true }
+);
+
+// ── Channel enforcement ──────────────────────────────────────────────────────
+
+function enforceChannel(
+  request: { user: { scopes: string[] | null; actorType: string; id: string } },
+  reply: { status: (c: number) => { send: (b: unknown) => unknown } },
+  slot: { requiredActorType: string | null; requiredUserId: string | null }
+): boolean {
+  const { scopes, actorType, id: userId } = request.user;
+  const isApiToken = scopes !== null;
+
+  if (slot.requiredActorType === "agent") {
+    // Must be an API token session with actorType=agent
+    if (!isApiToken || actorType !== "agent") {
+      reply.status(403).send({ error: { code: "CHANNEL_MISMATCH", message: "Agent slot requires an agent API token session" } });
+      return false;
+    }
+  } else if (slot.requiredActorType === "human") {
+    // Must be an interactive (JWT) session — reject API tokens
+    if (isApiToken) {
+      reply.status(403).send({ error: { code: "CHANNEL_MISMATCH", message: "Human slot requires an interactive (JWT) session" } });
+      return false;
+    }
+  }
+
+  if (slot.requiredUserId && slot.requiredUserId !== userId) {
+    reply.status(403).send({ error: { code: "CHANNEL_MISMATCH", message: "This slot is reserved for a specific user" } });
+    return false;
+  }
+
+  return true;
+}
+
+// ── Route helpers ────────────────────────────────────────────────────────────
+
+async function loadRequirements(taskId: string) {
+  return prisma.requirement.findMany({
+    where: { taskId, isDeleted: false },
+    orderBy: { ordinal: "asc" },
+    include: {
+      slots: {
+        orderBy: { ordinal: "asc" },
+        include: { attestations: { orderBy: { createdAt: "asc" } } },
+      },
+    },
+  });
+}
+
+function buildRequirementResponse(req: Awaited<ReturnType<typeof loadRequirements>>[number]) {
+  const quorum = computeQuorum(
+    req.slots.map((s) => ({
+      id: s.id,
+      label: s.label,
+      requiredActorType: s.requiredActorType,
+      requiredUserId: s.requiredUserId,
+    })),
+    req.slots.flatMap((s) =>
+      s.attestations.map((a) => ({
+        slotId: s.id,
+        actorId: a.actorId,
+        actorType: a.actorType,
+        verdict: a.verdict,
+      }))
+    )
+  );
+  return { ...req, quorum };
+}
+
+// ── Routes ───────────────────────────────────────────────────────────────────
+
+export async function requirementRoutes(fastify: FastifyInstance) {
+  // GET /api/v1/tasks/:id/requirements
+  fastify.get(
+    "/api/v1/tasks/:id/requirements",
+    {
+      schema: {
+        summary: "List requirements for a task",
+        tags: ["requirements"],
+        params: TaskParams,
+        response: { 200: Type.Array(RequirementShape), ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "tasks:read")) return;
+      const { id } = request.params as { id: string };
+      const reqs = await loadRequirements(id);
+      return reply.send(reqs.map(buildRequirementResponse));
+    }
+  );
+
+  // POST /api/v1/tasks/:id/requirements
+  fastify.post(
+    "/api/v1/tasks/:id/requirements",
+    {
+      schema: {
+        summary: "Create a requirement on a task",
+        tags: ["requirements"],
+        params: TaskParams,
+        body: Type.Object({
+          statement: Type.String({ minLength: 1 }),
+          rationale: Type.Optional(Type.String()),
+          ordinal: Type.Optional(Type.Number()),
+        }),
+        response: { 201: RequirementShape, ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "requirements:write")) return;
+      const { id } = request.params as { id: string };
+      const { statement, rationale, ordinal } = request.body as {
+        statement: string;
+        rationale?: string;
+        ordinal?: number;
+      };
+
+      const maxOrdinal = await prisma.requirement.aggregate({
+        where: { taskId: id, isDeleted: false },
+        _max: { ordinal: true },
+      });
+      const nextOrdinal = ordinal ?? (maxOrdinal._max.ordinal ?? 0) + 1;
+
+      const req = await prisma.requirement.create({
+        data: {
+          taskId: id,
+          statement,
+          rationale: rationale ?? null,
+          ordinal: nextOrdinal,
+          createdBy: request.user.id,
+        },
+        include: { slots: { include: { attestations: true } } },
+      });
+      return reply.status(201).send(buildRequirementResponse(req));
+    }
+  );
+
+  // PATCH /api/v1/tasks/:id/requirements/:rid
+  fastify.patch(
+    "/api/v1/tasks/:id/requirements/:rid",
+    {
+      schema: {
+        summary: "Update a requirement",
+        tags: ["requirements"],
+        params: RequirementParams,
+        body: Type.Object({
+          statement: Type.Optional(Type.String({ minLength: 1 })),
+          rationale: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+          ordinal: Type.Optional(Type.Number()),
+        }),
+        response: { 200: RequirementShape, ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "requirements:write")) return;
+      const { rid } = request.params as { rid: string };
+      const body = request.body as {
+        statement?: string;
+        rationale?: string | null;
+        ordinal?: number;
+      };
+
+      const req = await prisma.requirement.update({
+        where: { id: rid },
+        data: {
+          ...(body.statement !== undefined && { statement: body.statement }),
+          ...(body.rationale !== undefined && { rationale: body.rationale }),
+          ...(body.ordinal !== undefined && { ordinal: body.ordinal }),
+        },
+        include: { slots: { include: { attestations: true } } },
+      });
+      return reply.send(buildRequirementResponse(req));
+    }
+  );
+
+  // DELETE /api/v1/tasks/:id/requirements/:rid
+  fastify.delete(
+    "/api/v1/tasks/:id/requirements/:rid",
+    {
+      schema: {
+        summary: "Soft-delete a requirement",
+        tags: ["requirements"],
+        params: RequirementParams,
+        response: { 204: Type.Null(), ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "requirements:write")) return;
+      const { rid } = request.params as { rid: string };
+      await prisma.requirement.update({ where: { id: rid }, data: { isDeleted: true } });
+      return reply.status(204).send();
+    }
+  );
+
+  // POST /api/v1/tasks/:id/requirements/:rid/slots
+  fastify.post(
+    "/api/v1/tasks/:id/requirements/:rid/slots",
+    {
+      schema: {
+        summary: "Add a signoff slot to a requirement",
+        tags: ["requirements"],
+        params: RequirementParams,
+        body: Type.Object({
+          label: Type.String({ minLength: 1 }),
+          ordinal: Type.Optional(Type.Number()),
+          requiredActorType: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+          requiredUserId: Type.Optional(Type.Union([Type.String({ format: "uuid" }), Type.Null()])),
+        }),
+        response: { 201: SlotShape, ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "requirements:write")) return;
+      const { rid } = request.params as { rid: string };
+      const { label, ordinal, requiredActorType, requiredUserId } = request.body as {
+        label: string;
+        ordinal?: number;
+        requiredActorType?: string | null;
+        requiredUserId?: string | null;
+      };
+
+      const maxOrdinal = await prisma.signoffSlot.aggregate({
+        where: { requirementId: rid },
+        _max: { ordinal: true },
+      });
+      const nextOrdinal = ordinal ?? (maxOrdinal._max.ordinal ?? 0) + 1;
+
+      const slot = await prisma.signoffSlot.create({
+        data: {
+          requirementId: rid,
+          label,
+          ordinal: nextOrdinal,
+          // AJV coerces JSON null to "" in string-union fields — normalize back to null
+          requiredActorType: requiredActorType || null,
+          requiredUserId: requiredUserId || null,
+        },
+        include: { attestations: true },
+      });
+      return reply.status(201).send(slot);
+    }
+  );
+
+  // DELETE /api/v1/tasks/:id/requirements/:rid/slots/:sid
+  fastify.delete(
+    "/api/v1/tasks/:id/requirements/:rid/slots/:sid",
+    {
+      schema: {
+        summary: "Remove a signoff slot",
+        tags: ["requirements"],
+        params: SlotParams,
+        response: { 204: Type.Null(), ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "requirements:write")) return;
+      const { sid } = request.params as { sid: string };
+      await prisma.signoffSlot.delete({ where: { id: sid } });
+      return reply.status(204).send();
+    }
+  );
+
+  // POST /api/v1/tasks/:id/requirements/:rid/slots/:sid/attestations
+  fastify.post(
+    "/api/v1/tasks/:id/requirements/:rid/slots/:sid/attestations",
+    {
+      schema: {
+        summary: "Submit an attestation on a signoff slot",
+        tags: ["requirements"],
+        params: SlotParams,
+        body: Type.Object({
+          verdict: Type.String({ enum: ["met", "not_met"] }),
+          evidence: Type.Optional(Type.String()),
+        }),
+        response: { 201: AttestationShape, ...CommonErrorResponses },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "attestations:write")) return;
+
+      const { sid } = request.params as { sid: string };
+      const { verdict, evidence } = request.body as { verdict: string; evidence?: string };
+
+      const slot = await prisma.signoffSlot.findUnique({ where: { id: sid } });
+      if (!slot) {
+        return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Slot not found" } });
+      }
+
+      if (!enforceChannel(request as any, reply as any, slot)) return;
+
+      const attestation = await prisma.attestation.create({
+        data: {
+          slotId: sid,
+          actorId: request.user.id,
+          actorType: request.user.actorType,
+          verdict,
+          evidence: evidence ?? null,
+        },
+      });
+      return reply.status(201).send(attestation);
+    }
+  );
+}

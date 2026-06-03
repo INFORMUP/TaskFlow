@@ -28,6 +28,7 @@ import { invitationRoutes } from "./routes/invitations.js";
 import { labelRoutes } from "./routes/labels.js";
 import { searchRoutes } from "./routes/search.js";
 import { githubWebhookRoutes } from "./routes/webhooks-github.js";
+import { requirementRoutes } from "./routes/requirements.js";
 import { config } from "./config.js";
 import "./types/index.js";
 
@@ -87,6 +88,7 @@ export function createApp() {
   app.register(labelRoutes);
   app.register(searchRoutes);
   app.register(githubWebhookRoutes);
+  app.register(requirementRoutes);
 
   return app;
 }
