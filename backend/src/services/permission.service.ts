@@ -135,60 +135,6 @@ const VIEW_SCOPES: Record<string, Record<string, ViewScope>> = {
   },
 };
 
-// Transition permissions: which teams can transition TO a given status
-// TRANSITION_PERMISSIONS[flow][toStatus] = allowed team slugs
-const TRANSITION_PERMISSIONS: Record<string, Record<string, string[]>> = {
-  bug: {
-    triage:      ["engineer", "product", "agent"],
-    investigate: ["engineer", "agent"],
-    approve:     ["engineer", "agent"],
-    resolve:     ["engineer"],
-    validate:    ["engineer", "agent"],
-    staging:     ["engineer", "product"],
-    closed:      ["engineer", "product"],
-  },
-  feature: {
-    discuss:   ["product", "user"],
-    design:    ["product"],
-    prototype: ["engineer", "agent"],
-    implement: ["engineer", "agent"],
-    validate:  ["engineer", "agent"],
-    staging:   ["engineer", "product"],
-    closed:    ["product", "engineer"],
-  },
-  improvement: {
-    propose:   ["engineer", "agent"],
-    approve:   ["engineer"],
-    implement: ["engineer", "agent"],
-    validate:  ["engineer", "agent"],
-    closed:    ["engineer"],
-  },
-  milestone: {
-    open:   ["engineer", "product", "agent"],
-    closed: ["engineer", "product", "agent"],
-  },
-  "grant-application": {
-    research:  ["product"],
-    draft:     ["product"],
-    submitted: ["product"],
-    awarded:   ["product"],
-    closed:    ["product"],
-  },
-  "donor-outreach": {
-    identify:  ["product"],
-    contact:   ["product"],
-    engaged:   ["product"],
-    committed: ["product"],
-    closed:    ["product"],
-  },
-  event: {
-    plan:    ["product"],
-    promote: ["product"],
-    host:    ["product"],
-    recap:   ["product"],
-    closed:  ["product"],
-  },
-};
 
 const SCOPE_PRIORITY: ViewScope[] = ["all", "own_public", "assigned", "none"];
 
@@ -228,22 +174,6 @@ export function canPerformAction(
   });
 }
 
-export function canTransitionToStatus(
-  teamSlugs: string[],
-  flowSlug: string,
-  toStatusSlug: string,
-  orgRole?: OrgRole,
-): boolean {
-  if (orgRoleGrantsAll(orgRole)) return true;
-
-  const flowTransitions = TRANSITION_PERMISSIONS[flowSlug];
-  if (!flowTransitions) return false;
-
-  const allowedTeams = flowTransitions[toStatusSlug];
-  if (!allowedTeams) return false;
-
-  return teamSlugs.some((team) => allowedTeams.includes(team));
-}
 
 export function getViewScope(
   teamSlugs: string[],
