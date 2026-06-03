@@ -5,13 +5,17 @@ export type TokenScope =
   | "tasks:read"
   | "tasks:write"
   | "transitions:write"
-  | "comments:write";
+  | "comments:write"
+  | "requirements:write"
+  | "attestations:write";
 
 export const ALL_TOKEN_SCOPES: TokenScope[] = [
   "tasks:read",
   "tasks:write",
   "transitions:write",
   "comments:write",
+  "requirements:write",
+  "attestations:write",
 ];
 
 // A session's effective scopes are the intersection of the token's scopes
