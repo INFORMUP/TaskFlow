@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
 import { Type, type Static } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
-import { canTransitionToStatus, enforceScope } from "../services/permission.service.js";
+import { enforceScope } from "../services/permission.service.js";
 import { resolveDefaultAssignee } from "../services/task.service.js";
 import { validateTransition, validateResolution } from "../services/transition.service.js";
 import { CommonErrorResponses, IdParams, UserSummary } from "./_schemas.js";
@@ -80,13 +80,6 @@ export async function transitionRoutes(fastify: FastifyInstance) {
       if (!targetStatus) {
         return reply.status(422).send({
           error: { code: "INVALID_STATUS", message: `Unknown status: ${toStatus}` },
-        });
-      }
-
-      const teamSlugs = request.user.teams.map((t) => t.slug);
-      if (!canTransitionToStatus(teamSlugs, task.flow.slug, targetStatus.slug, request.org.role)) {
-        return reply.status(403).send({
-          error: { code: "FORBIDDEN", message: "You do not have permission to transition to this status" },
         });
       }
 
@@ -221,9 +214,7 @@ export async function transitionRoutes(fastify: FastifyInstance) {
         },
       });
 
-      const teamSlugs = request.user.teams.map((t) => t.slug);
       const allowed = transitions
-        .filter((t) => canTransitionToStatus(teamSlugs, task.flow.slug, t.toStatus.slug, request.org.role))
         .map((t) => t.toStatus)
         .sort((a, b) => a.sortOrder - b.sortOrder);
 

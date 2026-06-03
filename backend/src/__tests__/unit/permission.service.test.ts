@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   canPerformAction,
-  canTransitionToStatus,
   getViewScope,
   buildTaskViewWhere,
 } from "../../services/permission.service.js";
@@ -111,99 +110,6 @@ describe("permission.service", () => {
     });
   });
 
-  describe("canTransitionToStatus — bug flow", () => {
-    it("engineer can transition to any bug status", () => {
-      expect(canTransitionToStatus(["engineer"], "bug", "triage")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "bug", "investigate")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "bug", "approve")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "bug", "resolve")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "bug", "validate")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "bug", "staging")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "bug", "closed")).toBe(true);
-    });
-
-    it("product can transition bug to triage, staging, and closed", () => {
-      expect(canTransitionToStatus(["product"], "bug", "triage")).toBe(true);
-      expect(canTransitionToStatus(["product"], "bug", "investigate")).toBe(false);
-      expect(canTransitionToStatus(["product"], "bug", "staging")).toBe(true);
-      expect(canTransitionToStatus(["product"], "bug", "closed")).toBe(true);
-    });
-
-    it("user cannot transition bug at all", () => {
-      expect(canTransitionToStatus(["user"], "bug", "triage")).toBe(false);
-      expect(canTransitionToStatus(["user"], "bug", "closed")).toBe(false);
-    });
-
-    it("agent can transition bug to triage, investigate, validate", () => {
-      expect(canTransitionToStatus(["agent"], "bug", "triage")).toBe(true);
-      expect(canTransitionToStatus(["agent"], "bug", "investigate")).toBe(true);
-      expect(canTransitionToStatus(["agent"], "bug", "validate")).toBe(true);
-    });
-
-    it("agent can transition bug to approve (surfaces to engineer)", () => {
-      expect(canTransitionToStatus(["agent"], "bug", "approve")).toBe(true);
-    });
-
-    it("agent cannot transition bug to resolve", () => {
-      expect(canTransitionToStatus(["agent"], "bug", "resolve")).toBe(false);
-    });
-
-    it("agent cannot transition bug to staging", () => {
-      expect(canTransitionToStatus(["agent"], "bug", "staging")).toBe(false);
-    });
-
-    it("user cannot transition bug to staging", () => {
-      expect(canTransitionToStatus(["user"], "bug", "staging")).toBe(false);
-    });
-  });
-
-  describe("canTransitionToStatus — feature flow", () => {
-    it("engineer can transition feature to implement and validate", () => {
-      expect(canTransitionToStatus(["engineer"], "feature", "implement")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "feature", "validate")).toBe(true);
-    });
-
-    it("product can transition feature to discuss, design, staging, closed", () => {
-      expect(canTransitionToStatus(["product"], "feature", "discuss")).toBe(true);
-      expect(canTransitionToStatus(["product"], "feature", "design")).toBe(true);
-      expect(canTransitionToStatus(["product"], "feature", "staging")).toBe(true);
-      expect(canTransitionToStatus(["product"], "feature", "closed")).toBe(true);
-    });
-
-    it("agent can transition feature to prototype, implement, validate", () => {
-      expect(canTransitionToStatus(["agent"], "feature", "prototype")).toBe(true);
-      expect(canTransitionToStatus(["agent"], "feature", "implement")).toBe(true);
-      expect(canTransitionToStatus(["agent"], "feature", "validate")).toBe(true);
-    });
-
-    it("user can only transition feature to discuss (on create)", () => {
-      expect(canTransitionToStatus(["user"], "feature", "discuss")).toBe(true);
-      expect(canTransitionToStatus(["user"], "feature", "design")).toBe(false);
-      expect(canTransitionToStatus(["user"], "feature", "closed")).toBe(false);
-    });
-  });
-
-  describe("canTransitionToStatus — improvement flow", () => {
-    it("engineer can transition to all improvement statuses", () => {
-      expect(canTransitionToStatus(["engineer"], "improvement", "propose")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "improvement", "approve")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "improvement", "implement")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "improvement", "validate")).toBe(true);
-      expect(canTransitionToStatus(["engineer"], "improvement", "closed")).toBe(true);
-    });
-
-    it("product cannot transition improvement", () => {
-      expect(canTransitionToStatus(["product"], "improvement", "propose")).toBe(false);
-      expect(canTransitionToStatus(["product"], "improvement", "closed")).toBe(false);
-    });
-
-    it("agent can transition improvement to implement and validate", () => {
-      expect(canTransitionToStatus(["agent"], "improvement", "implement")).toBe(true);
-      expect(canTransitionToStatus(["agent"], "improvement", "validate")).toBe(true);
-      expect(canTransitionToStatus(["agent"], "improvement", "approve")).toBe(false);
-    });
-  });
-
   describe("milestone flow", () => {
     it("engineer, product, and agent can create milestones; user cannot", () => {
       expect(canPerformAction(["engineer"], "create", "milestone")).toBe(true);
@@ -218,15 +124,6 @@ describe("permission.service", () => {
       expect(canPerformAction(["user"], "edit", "milestone")).toBe(false);
     });
 
-    it("engineer, product, and agent can transition open/closed; user cannot", () => {
-      for (const status of ["open", "closed"]) {
-        expect(canTransitionToStatus(["engineer"], "milestone", status)).toBe(true);
-        expect(canTransitionToStatus(["product"], "milestone", status)).toBe(true);
-        expect(canTransitionToStatus(["agent"], "milestone", status)).toBe(true);
-        expect(canTransitionToStatus(["user"], "milestone", status)).toBe(false);
-      }
-    });
-
     it("view scope mirrors feature: engineer/product all, user own_public, agent assigned", () => {
       expect(getViewScope(["engineer"], "milestone")).toBe("all");
       expect(getViewScope(["product"], "milestone")).toBe("all");
@@ -237,10 +134,7 @@ describe("permission.service", () => {
 
   describe("multi-team permissions", () => {
     it("user in engineer+product has union of permissions", () => {
-      // Engineer can create improvement, product cannot — union grants it
       expect(canPerformAction(["engineer", "product"], "create", "improvement")).toBe(true);
-      // Product can transition feature to discuss, engineer cannot — union grants it
-      expect(canTransitionToStatus(["engineer", "product"], "feature", "discuss")).toBe(true);
     });
   });
 
@@ -356,14 +250,5 @@ describe("permission.service", () => {
       expect(canPerformAction(["user"], "create", "improvement")).toBe(false);
     });
 
-    it("org owner/admin can transition regardless of team membership", () => {
-      expect(canTransitionToStatus([], "improvement", "approve", "owner")).toBe(true);
-      expect(canTransitionToStatus([], "feature", "design", "admin")).toBe(true);
-    });
-
-    it("org member does not bypass the transition matrix", () => {
-      expect(canTransitionToStatus(["user"], "improvement", "approve", "member")).toBe(false);
-      expect(canTransitionToStatus(["user"], "improvement", "approve")).toBe(false);
-    });
   });
 });
