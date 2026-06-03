@@ -3,6 +3,7 @@ import { Type } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { enforceScope } from "../services/permission.service.js";
 import { computeQuorum } from "../services/requirement.service.js";
+import { resolveEffectivePolicyId, materializePolicySlots } from "../services/signoff-policy.service.js";
 import { CommonErrorResponses } from "./_schemas.js";
 
 // ── Shared params ────────────────────────────────────────────────────────────
@@ -164,12 +165,25 @@ export async function requirementRoutes(fastify: FastifyInstance) {
     {
       schema: {
         summary: "Create a requirement on a task",
+        description:
+          "If `slots` is omitted, slots are materialized from the effective default policy (task → project → org). " +
+          "Pass an explicit `slots` array (even empty) to bypass the default.",
         tags: ["requirements"],
         params: TaskParams,
         body: Type.Object({
           statement: Type.String({ minLength: 1 }),
           rationale: Type.Optional(Type.String()),
           ordinal: Type.Optional(Type.Number()),
+          slots: Type.Optional(
+            Type.Array(
+              Type.Object({
+                label: Type.String({ minLength: 1 }),
+                ordinal: Type.Optional(Type.Number()),
+                requiredActorType: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+                requiredUserId: Type.Optional(Type.Union([Type.String({ format: "uuid" }), Type.Null()])),
+              })
+            )
+          ),
         }),
         response: { 201: RequirementShape, ...CommonErrorResponses },
       },
@@ -177,10 +191,16 @@ export async function requirementRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       if (!enforceScope(request, reply, "requirements:write")) return;
       const { id } = request.params as { id: string };
-      const { statement, rationale, ordinal } = request.body as {
+      const { statement, rationale, ordinal, slots } = request.body as {
         statement: string;
         rationale?: string;
         ordinal?: number;
+        slots?: Array<{
+          label: string;
+          ordinal?: number;
+          requiredActorType?: string | null;
+          requiredUserId?: string | null;
+        }>;
       };
 
       const maxOrdinal = await prisma.requirement.aggregate({
@@ -199,7 +219,34 @@ export async function requirementRoutes(fastify: FastifyInstance) {
         },
         include: { slots: { include: { attestations: true } } },
       });
-      return reply.status(201).send(buildRequirementResponse(req));
+
+      if (slots !== undefined) {
+        // Explicit slots provided — create them by value (bypasses default policy).
+        if (slots.length > 0) {
+          await prisma.signoffSlot.createMany({
+            data: slots.map((s, i) => ({
+              requirementId: req.id,
+              ordinal: s.ordinal ?? i + 1,
+              label: s.label,
+              requiredActorType: s.requiredActorType ?? null,
+              requiredUserId: s.requiredUserId ?? null,
+            })),
+          });
+        }
+      } else {
+        // No explicit slots — materialize from effective default policy if one exists.
+        const policyId = await resolveEffectivePolicyId(id);
+        if (policyId) {
+          await materializePolicySlots(policyId, req.id);
+        }
+      }
+
+      // Re-fetch to include any newly created slots.
+      const full = await prisma.requirement.findUnique({
+        where: { id: req.id },
+        include: { slots: { orderBy: { ordinal: "asc" }, include: { attestations: true } } },
+      });
+      return reply.status(201).send(buildRequirementResponse(full!));
     }
   );
 
