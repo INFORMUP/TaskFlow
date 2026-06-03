@@ -1,12 +1,3 @@
--- AlterTable
-ALTER TABLE "projects" ALTER COLUMN "search_vector" DROP DEFAULT;
-
--- AlterTable
-ALTER TABLE "task_dependencies" ALTER COLUMN "id" DROP DEFAULT;
-
--- AlterTable
-ALTER TABLE "tasks" ALTER COLUMN "search_vector" DROP DEFAULT;
-
 -- CreateTable
 CREATE TABLE "requirements" (
     "id" UUID NOT NULL,
