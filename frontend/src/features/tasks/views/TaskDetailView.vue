@@ -18,6 +18,7 @@ import ActorLabel from "@/components/ActorLabel.vue";
 import AssigneePicker from "@/features/tasks/components/AssigneePicker.vue";
 import TaskPicker from "@/features/tasks/components/TaskPicker.vue";
 import LabelPicker from "@/features/labels/components/LabelPicker.vue";
+import RequirementsPanel from "@/features/tasks/components/RequirementsPanel.vue";
 import { attachLabelToTask, detachLabelFromTask } from "@/api/labels.api";
 
 const route = useRoute();
@@ -279,6 +280,11 @@ onMounted(async () => {
       :source="task.description"
       class="detail__description"
     />
+
+    <!-- Requirements & sign-off panel -->
+    <div class="detail__section">
+      <RequirementsPanel :task-id="taskId" />
+    </div>
 
     <div class="detail__meta">
       <div>Created by: <ActorLabel :actor="task.creator" /></div>
