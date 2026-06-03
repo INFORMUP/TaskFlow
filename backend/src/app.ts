@@ -29,6 +29,7 @@ import { labelRoutes } from "./routes/labels.js";
 import { searchRoutes } from "./routes/search.js";
 import { githubWebhookRoutes } from "./routes/webhooks-github.js";
 import { requirementRoutes } from "./routes/requirements.js";
+import { signoffPolicyRoutes } from "./routes/signoff-policies.js";
 import { config } from "./config.js";
 import "./types/index.js";
 
@@ -89,6 +90,7 @@ export function createApp() {
   app.register(searchRoutes);
   app.register(githubWebhookRoutes);
   app.register(requirementRoutes);
+  app.register(signoffPolicyRoutes);
 
   return app;
 }

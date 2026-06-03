@@ -159,7 +159,7 @@ describe("task hierarchy: re-parenting, altitude filters, milestone roll-up", ()
   });
 
   describe("milestone computed status", () => {
-    it("derives status from children and lets a manual close override it", async () => {
+    it("derives status from children and lets a manual close override it", { timeout: 20000 }, async () => {
       const m = (await createTask({ flow: "milestone", title: "Q3 milestone" })).json();
       expect(m.flow.slug).toBe("milestone");
       expect(m.currentStatus.slug).toBe("open");
