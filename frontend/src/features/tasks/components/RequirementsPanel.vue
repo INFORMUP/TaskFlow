@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import DefaultPolicySection from "./DefaultPolicySection.vue";
 import {
   getRequirements,
   createRequirement,
@@ -163,6 +164,8 @@ function isAgentOnly(slot: SignoffSlot): boolean {
         + Add requirement
       </button>
     </div>
+
+    <DefaultPolicySection :task-id="taskId" @changed="load" />
 
     <p v-if="error" class="req-panel__error" role="alert">{{ error }}</p>
 
