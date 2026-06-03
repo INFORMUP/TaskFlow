@@ -102,7 +102,12 @@ export async function seedFlowStatuses(prisma: PrismaClient): Promise<SeederResu
       const id = seedUuid("flow_status", `${flowSlug}:${status.slug}`);
       const existing = await prisma.flowStatus.findUnique({ where: { id } });
       if (existing) {
-        result.skipped++;
+        if (existing.sortOrder !== i + 1) {
+          await prisma.flowStatus.update({ where: { id }, data: { sortOrder: i + 1 } });
+          result.updated++;
+        } else {
+          result.skipped++;
+        }
         continue;
       }
       await prisma.flowStatus.create({

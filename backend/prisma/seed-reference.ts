@@ -30,7 +30,7 @@ async function main() {
     await seedScopes(prisma),
   ];
   for (const r of results) {
-    console.log(`  ${r.name}: ${r.created} created, ${r.skipped} skipped`);
+    console.log(`  ${r.name}: ${r.created} created, ${r.updated ?? 0} updated, ${r.skipped} skipped`);
   }
 
   console.log("\nReference seed complete.");
