@@ -111,6 +111,9 @@ model User {
   invitationsRevoked  Invitation[]      @relation("InvitationRevokedBy")
   savedViews          SavedView[]
   taskDependenciesCreated TaskDependency[] @relation("TaskDependencyCreatedBy")
+  requirementsCreated     Requirement[]    @relation("RequirementCreatedBy")
+  signoffSlotsRequired    SignoffSlot[]    @relation("SignoffSlotRequiredUser")
+  attestations            Attestation[]    @relation("AttestationActor")
 
   @@map("users")
 }
@@ -238,6 +241,7 @@ model Task {
   labels        TaskLabel[]
   blockedBy     TaskDependency[] @relation("TaskDependencyBlocked")
   blocks        TaskDependency[] @relation("TaskDependencyBlocking")
+  requirements  Requirement[]
 
   @@index([flowId, currentStatusId])
   @@index([assigneeId])
@@ -565,4 +569,56 @@ model TaskLabel {
   @@id([taskId, labelId])
   @@index([labelId])
   @@map("task_labels")
+}
+
+model Requirement {
+  id        String   @id @default(uuid()) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  ordinal   Int
+  statement String   @db.Text
+  rationale String?  @db.Text
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  task    Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  creator User       @relation("RequirementCreatedBy", fields: [createdBy], references: [id])
+  slots   SignoffSlot[]
+
+  @@unique([taskId, ordinal])
+  @@index([taskId])
+  @@map("requirements")
+}
+
+model SignoffSlot {
+  id                String  @id @default(uuid()) @db.Uuid
+  requirementId     String  @map("requirement_id") @db.Uuid
+  ordinal           Int
+  label             String
+  requiredActorType String? @map("required_actor_type")
+  requiredUserId    String? @map("required_user_id") @db.Uuid
+
+  requirement  Requirement   @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  requiredUser User?         @relation("SignoffSlotRequiredUser", fields: [requiredUserId], references: [id])
+  attestations Attestation[]
+
+  @@index([requirementId])
+  @@map("signoff_slots")
+}
+
+model Attestation {
+  id        String   @id @default(uuid()) @db.Uuid
+  slotId    String   @map("slot_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  actorType String   @map("actor_type")
+  verdict   String
+  evidence  String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  slot  SignoffSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  actor User        @relation("AttestationActor", fields: [actorId], references: [id])
+
+  @@index([slotId])
+  @@map("attestations")
 }
