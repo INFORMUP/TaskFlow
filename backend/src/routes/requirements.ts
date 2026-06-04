@@ -322,29 +322,27 @@ export async function requirementRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       if (!enforceScope(request, reply, "requirements:write")) return;
-      const { rid } = request.params as { rid: string };
+      const { id, rid } = request.params as { id: string; rid: string };
       const body = request.body as {
         statement?: string;
         rationale?: string | null;
         ordinal?: number;
       };
 
-      const req = await prisma.requirement.update({
+      await prisma.requirement.update({
         where: { id: rid },
         data: {
           ...(body.statement !== undefined && { statement: body.statement }),
           ...(body.rationale !== undefined && { rationale: body.rationale }),
           ...(body.ordinal !== undefined && { ordinal: body.ordinal }),
         },
-        include: {
-          slots: { include: { attestations: true } },
-          images: {
-            orderBy: { createdAt: "asc" as const },
-            select: { id: true, filename: true, mimeType: true, size: true, createdAt: true },
-          },
-        },
       });
-      return reply.send(buildRequirementResponse(req));
+
+      // Re-fetch all to compute correct hierarchical number (same as POST)
+      const allReqs = await loadRequirements(id);
+      const withNumbers = assignNumbers(allReqs.map(buildRequirementResponse));
+      const updated = withNumbers.find((r) => r.id === rid)!;
+      return reply.send(updated);
     }
   );
 
