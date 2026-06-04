@@ -14,16 +14,17 @@ model Organization {
   name      String
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
-  members     OrgMember[]
-  teams       Team[]
-  projects    Project[]
-  flows       Flow[]
-  apiTokens   ApiToken[]
-  appSettings AppSetting[]
-  feedback    Feedback[]
-  invitations Invitation[]
-  savedViews  SavedView[]
-  labels      Label[]
+  members          OrgMember[]
+  teams            Team[]
+  projects         Project[]
+  flows            Flow[]
+  apiTokens        ApiToken[]
+  appSettings      AppSetting[]
+  feedback         Feedback[]
+  invitations      Invitation[]
+  savedViews       SavedView[]
+  labels           Label[]
+  signoffPolicies  SignoffPolicy[]
 
   @@map("organizations")
 }
@@ -111,6 +112,11 @@ model User {
   invitationsRevoked  Invitation[]      @relation("InvitationRevokedBy")
   savedViews          SavedView[]
   taskDependenciesCreated TaskDependency[] @relation("TaskDependencyCreatedBy")
+  requirementsCreated     Requirement[]      @relation("RequirementCreatedBy")
+  imagesUploaded          Image[]            @relation("ImageUploadedBy")
+  signoffSlotsRequired    SignoffSlot[]      @relation("SignoffSlotRequiredUser")
+  policySlotRequired      SignoffPolicySlot[] @relation("PolicySlotRequiredUser")
+  attestations            Attestation[]      @relation("AttestationActor")
 
   @@map("users")
 }
@@ -219,31 +225,35 @@ model Task {
   dueDate         DateTime? @map("due_date") @db.Date
   isDeleted       Boolean   @default(false) @map("is_deleted")
   spawnedFromTaskId String? @map("spawned_from_task_id") @db.Uuid
+  defaultSignoffPolicyId String? @map("default_signoff_policy_id") @db.Uuid
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
   searchVector    Unsupported("tsvector")? @map("search_vector")
 
-  flow          Flow             @relation(fields: [flowId], references: [id])
-  currentStatus FlowStatus       @relation(fields: [currentStatusId], references: [id])
-  creator       User             @relation("TaskCreatedBy", fields: [createdBy], references: [id])
-  assignee      User?            @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  spawnedFrom   Task?            @relation("TaskSpawnedFrom", fields: [spawnedFromTaskId], references: [id], onDelete: SetNull)
-  spawnedTasks  Task[]           @relation("TaskSpawnedFrom")
-  transitions   TaskTransition[]
-  comments      Comment[]
-  projects      TaskProject[]
-  feedback      Feedback?
-  commits       TaskCommit[]
-  pullRequests  TaskPullRequest[]
-  labels        TaskLabel[]
-  blockedBy     TaskDependency[] @relation("TaskDependencyBlocked")
-  blocks        TaskDependency[] @relation("TaskDependencyBlocking")
+  flow                 Flow             @relation(fields: [flowId], references: [id])
+  currentStatus        FlowStatus       @relation(fields: [currentStatusId], references: [id])
+  creator              User             @relation("TaskCreatedBy", fields: [createdBy], references: [id])
+  assignee             User?            @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  spawnedFrom          Task?            @relation("TaskSpawnedFrom", fields: [spawnedFromTaskId], references: [id], onDelete: SetNull)
+  spawnedTasks         Task[]           @relation("TaskSpawnedFrom")
+  defaultSignoffPolicy SignoffPolicy?   @relation("TaskDefaultPolicy", fields: [defaultSignoffPolicyId], references: [id])
+  transitions          TaskTransition[]
+  comments             Comment[]
+  projects             TaskProject[]
+  feedback             Feedback?
+  commits              TaskCommit[]
+  pullRequests         TaskPullRequest[]
+  labels               TaskLabel[]
+  blockedBy            TaskDependency[] @relation("TaskDependencyBlocked")
+  blocks               TaskDependency[] @relation("TaskDependencyBlocking")
+  requirements         Requirement[]
 
   @@index([flowId, currentStatusId])
   @@index([assigneeId])
   @@index([createdBy])
   @@index([dueDate])
   @@index([spawnedFromTaskId])
+  @@index([defaultSignoffPolicyId])
   @@index([searchVector], type: Gin)
   @@map("tasks")
 }
@@ -295,24 +305,27 @@ model Project {
   ownerUserId           String    @map("owner_user_id") @db.Uuid
   defaultAssigneeUserId String?   @map("default_assignee_user_id") @db.Uuid
   defaultFlowId         String?   @map("default_flow_id") @db.Uuid
+  defaultSignoffPolicyId String?  @map("default_signoff_policy_id") @db.Uuid
   color                 String?
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   archivedAt            DateTime? @map("archived_at") @db.Timestamptz()
   searchVector         Unsupported("tsvector")? @map("search_vector")
 
-  org             Organization                   @relation(fields: [orgId], references: [id])
-  owner           User                           @relation("ProjectOwner", fields: [ownerUserId], references: [id])
-  defaultAssignee User?                          @relation("ProjectDefaultAssignee", fields: [defaultAssigneeUserId], references: [id])
-  defaultFlow     Flow?                          @relation(fields: [defaultFlowId], references: [id])
-  teams           ProjectTeam[]
-  tasks           TaskProject[]
-  flows           ProjectFlow[]
-  statusDefaults  ProjectStatusDefaultAssignee[]
-  repositories    ProjectRepository[]
+  org                  Organization                   @relation(fields: [orgId], references: [id])
+  owner                User                           @relation("ProjectOwner", fields: [ownerUserId], references: [id])
+  defaultAssignee      User?                          @relation("ProjectDefaultAssignee", fields: [defaultAssigneeUserId], references: [id])
+  defaultFlow          Flow?                          @relation(fields: [defaultFlowId], references: [id])
+  defaultSignoffPolicy SignoffPolicy?                 @relation("ProjectDefaultPolicy", fields: [defaultSignoffPolicyId], references: [id])
+  teams                ProjectTeam[]
+  tasks                TaskProject[]
+  flows                ProjectFlow[]
+  statusDefaults       ProjectStatusDefaultAssignee[]
+  repositories         ProjectRepository[]
 
   @@unique([orgId, key])
   @@index([ownerUserId])
   @@index([archivedAt])
+  @@index([defaultSignoffPolicyId])
   @@index([searchVector], type: Gin)
   @@map("projects")
 }
@@ -433,12 +446,14 @@ model ProjectStatusDefaultAssignee {
 }
 
 model AppSetting {
-  orgId         String   @id @map("org_id") @db.Uuid
-  defaultFlowId String?  @map("default_flow_id") @db.Uuid
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+  orgId                  String   @id @map("org_id") @db.Uuid
+  defaultFlowId          String?  @map("default_flow_id") @db.Uuid
+  defaultSignoffPolicyId String?  @map("default_signoff_policy_id") @db.Uuid
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  defaultFlow Flow?        @relation(fields: [defaultFlowId], references: [id])
+  org                  Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  defaultFlow          Flow?         @relation(fields: [defaultFlowId], references: [id])
+  defaultSignoffPolicy SignoffPolicy? @relation("OrgDefaultPolicy", fields: [defaultSignoffPolicyId], references: [id])
 
   @@map("app_settings")
 }
@@ -565,4 +580,114 @@ model TaskLabel {
   @@id([taskId, labelId])
   @@index([labelId])
   @@map("task_labels")
+}
+
+model Requirement {
+  id        String   @id @default(uuid()) @db.Uuid
+  taskId    String   @map("task_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
+  ordinal   Int
+  statement String   @db.Text
+  rationale String?  @db.Text
+  isDeleted Boolean  @default(false) @map("is_deleted")
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  parent   Requirement?  @relation("RequirementChildren", fields: [parentId], references: [id])
+  children Requirement[] @relation("RequirementChildren")
+  creator  User          @relation("RequirementCreatedBy", fields: [createdBy], references: [id])
+  slots    SignoffSlot[]
+  images   Image[]       @relation("RequirementImages")
+
+  @@index([taskId])
+  @@index([taskId, parentId])
+  @@map("requirements")
+}
+
+model SignoffSlot {
+  id                String  @id @default(uuid()) @db.Uuid
+  requirementId     String  @map("requirement_id") @db.Uuid
+  ordinal           Int
+  label             String
+  requiredActorType String? @map("required_actor_type")
+  requiredUserId    String? @map("required_user_id") @db.Uuid
+
+  requirement  Requirement   @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  requiredUser User?         @relation("SignoffSlotRequiredUser", fields: [requiredUserId], references: [id])
+  attestations Attestation[]
+
+  @@index([requirementId])
+  @@map("signoff_slots")
+}
+
+model SignoffPolicy {
+  id          String   @id @default(uuid()) @db.Uuid
+  orgId       String   @map("org_id") @db.Uuid
+  projectId   String?  @map("project_id") @db.Uuid
+  slug        String
+  name        String
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  org             Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  slots           SignoffPolicySlot[]
+  orgDefaults     AppSetting[]       @relation("OrgDefaultPolicy")
+  projectDefaults Project[]          @relation("ProjectDefaultPolicy")
+  taskDefaults    Task[]             @relation("TaskDefaultPolicy")
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+  @@index([projectId])
+  @@map("signoff_policies")
+}
+
+model SignoffPolicySlot {
+  id                String  @id @default(uuid()) @db.Uuid
+  policyId          String  @map("policy_id") @db.Uuid
+  ordinal           Int
+  label             String
+  requiredActorType String? @map("required_actor_type")
+  requiredUserId    String? @map("required_user_id") @db.Uuid
+
+  policy       SignoffPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  requiredUser User?         @relation("PolicySlotRequiredUser", fields: [requiredUserId], references: [id])
+
+  @@index([policyId])
+  @@map("signoff_policy_slots")
+}
+
+model Image {
+  id              String   @id @default(uuid()) @db.Uuid
+  requirementId   String?  @map("requirement_id") @db.Uuid
+  filename        String
+  mimeType        String   @map("mime_type")
+  size            Int
+  data            Bytes    @db.ByteA
+  uploadedBy      String   @map("uploaded_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  uploader    User         @relation("ImageUploadedBy", fields: [uploadedBy], references: [id])
+  requirement Requirement? @relation("RequirementImages", fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@index([requirementId])
+  @@map("images")
+}
+
+model Attestation {
+  id        String   @id @default(uuid()) @db.Uuid
+  slotId    String   @map("slot_id") @db.Uuid
+  actorId   String   @map("actor_id") @db.Uuid
+  actorType String   @map("actor_type")
+  verdict   String
+  evidence  String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  slot  SignoffSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  actor User        @relation("AttestationActor", fields: [actorId], references: [id])
+
+  @@index([slotId])
+  @@map("attestations")
 }

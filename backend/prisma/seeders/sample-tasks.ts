@@ -137,7 +137,7 @@ async function seedFlowTasks(
   const statuses = await prisma.flowStatus.findMany({ where: { flowId: flow.id } });
   const statusMap = new Map(statuses.map((s) => [s.slug, s.id]));
 
-  let counter = result.created + result.skipped;
+  let counter = result.created + (result.updated ?? 0) + result.skipped;
 
   for (const task of tasks) {
     const id = seedUuid("task", task.key);

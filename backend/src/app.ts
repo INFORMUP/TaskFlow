@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
@@ -28,6 +29,9 @@ import { invitationRoutes } from "./routes/invitations.js";
 import { labelRoutes } from "./routes/labels.js";
 import { searchRoutes } from "./routes/search.js";
 import { githubWebhookRoutes } from "./routes/webhooks-github.js";
+import { requirementRoutes } from "./routes/requirements.js";
+import { signoffPolicyRoutes } from "./routes/signoff-policies.js";
+import { imageRoutes } from "./routes/images.js";
 import { config } from "./config.js";
 import "./types/index.js";
 
@@ -38,6 +42,7 @@ export function createApp() {
     origin: config.corsOrigins,
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
+  app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } }); // 10 MB cap
   app.register(errorHandler);
   app.register(authPlugin);
   app.register(rateLimitPlugin);
@@ -87,6 +92,9 @@ export function createApp() {
   app.register(labelRoutes);
   app.register(searchRoutes);
   app.register(githubWebhookRoutes);
+  app.register(requirementRoutes);
+  app.register(signoffPolicyRoutes);
+  app.register(imageRoutes);
 
   return app;
 }

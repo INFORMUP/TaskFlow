@@ -256,4 +256,62 @@ export async function authRoutes(fastify: FastifyInstance) {
       return { accessToken };
     }
   );
+
+  // Dev-only bypass — never available in production
+  if (process.env.NODE_ENV !== "production") {
+    const DEV_USER_ID = "00000000-dead-beef-0000-000000000001";
+    const DEV_USER_EMAIL = "dev@localhost";
+    const DEV_USER_NAME = "Dev User";
+
+    fastify.get(
+      "/api/v1/dev-login",
+      {
+        schema: {
+          summary: "Dev-only: mint a session without Google OAuth",
+          tags: ["auth"],
+          response: { 200: CallbackResponse, ...CommonErrorResponses },
+        },
+      },
+      async (_request, reply) => {
+        // Upsert stable dev user
+        await prisma.user.upsert({
+          where: { id: DEV_USER_ID },
+          create: { id: DEV_USER_ID, email: DEV_USER_EMAIL, displayName: DEV_USER_NAME, actorType: "human", status: "active" },
+          update: {},
+        });
+
+        // Ensure org membership
+        await prisma.orgMember.upsert({
+          where: { orgId_userId: { orgId: DEFAULT_ORG_ID, userId: DEV_USER_ID } },
+          create: { orgId: DEFAULT_ORG_ID, userId: DEV_USER_ID, role: "member" },
+          update: {},
+        });
+
+        // Ensure engineer team membership
+        const engineerTeam = await prisma.team.findFirst({
+          where: { slug: "engineer", orgId: DEFAULT_ORG_ID },
+        });
+        if (engineerTeam) {
+          await prisma.userTeam.upsert({
+            where: { userId_teamId: { userId: DEV_USER_ID, teamId: engineerTeam.id } },
+            create: { userId: DEV_USER_ID, teamId: engineerTeam.id, isPrimary: true },
+            update: {},
+          });
+        }
+
+        const accessToken = jwt.sign(
+          { sub: DEV_USER_ID, type: "access", orgId: DEFAULT_ORG_ID, orgRole: "member" },
+          config.jwtSecret,
+          { expiresIn: "24h" }
+        );
+        const refreshToken = jwt.sign(
+          { sub: DEV_USER_ID, type: "refresh" },
+          config.jwtRefreshSecret,
+          { expiresIn: "30d" }
+        );
+
+        return reply.send({ accessToken, refreshToken });
+      }
+    );
+  }
 }

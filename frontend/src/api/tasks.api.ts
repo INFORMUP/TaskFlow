@@ -43,6 +43,7 @@ export interface Task {
   spawnedTasks?: SpawnedTaskRef[];
   blockerCount?: number;
   openBlockerCount?: number;
+  defaultSignoffPolicyId?: string | null;
   createdAt: string;
   updatedAt: string;
 }

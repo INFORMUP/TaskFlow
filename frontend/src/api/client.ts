@@ -35,7 +35,10 @@ export async function apiFetch<T>(
   let token = localStorage.getItem("accessToken");
 
   const headers: Record<string, string> = {
-    ...(options.body != null ? { "Content-Type": "application/json" } : {}),
+    // Let the browser set Content-Type for FormData (multipart boundary auto-generated)
+    ...(options.body != null && !(options.body instanceof FormData)
+      ? { "Content-Type": "application/json" }
+      : {}),
     ...(options.headers as Record<string, string>),
   };
 

@@ -60,11 +60,8 @@ describe("transitions API", () => {
 
   describe("POST /api/v1/tasks/:id/transitions", () => {
     it("lets an org owner with no team membership transition a task", async () => {
-      // Owners/admins implicitly hold every team-level permission, so a
-      // team-less owner must be able to move a task between stages. The route
-      // has to forward request.org.role into canTransitionToStatus for the
-      // override to fire — without it the owner falls through to the (empty)
-      // team check and is wrongly 403'd.
+      // Transitions no longer have team gating, so a team-less owner can move
+      // tasks the same as any other authenticated user.
       await prisma.user.upsert({
         where: { id: OWNER_ID },
         update: {},
@@ -190,7 +187,7 @@ describe("transitions API", () => {
       expect(body.error.code).toBe("TRANSITION_NOT_ALLOWED");
     });
 
-    it("rejects transition without permission (user cannot transition bug)", async () => {
+    it("allows any authenticated user to transition (no team gating)", async () => {
       const app = await buildApp();
       const task = await createBugTask(app, engineerToken);
 
@@ -200,7 +197,7 @@ describe("transitions API", () => {
         headers: { authorization: `Bearer ${userToken}` },
         payload: { toStatus: "investigate", note: "I want to help" },
       });
-      expect(response.statusCode).toBe(403);
+      expect(response.statusCode).toBe(201);
     });
 
     it("requires resolution when closing", async () => {
@@ -360,11 +357,11 @@ describe("transitions API", () => {
       }
     });
 
-    it("filters out statuses the user lacks permission to transition to", async () => {
+    it("returns the full flow-graph set with no team filtering", async () => {
       const app = await buildApp();
       const task = await createBugTask(app, engineerToken);
 
-      // Move to approve so the next forward step is "resolve" (engineer-only)
+      // Move to approve so resolve is a legal forward step
       await app.inject({
         method: "POST",
         url: `/api/v1/tasks/${task.id}/transitions`,
@@ -378,27 +375,17 @@ describe("transitions API", () => {
         payload: { toStatus: "approve" },
       });
 
-      // Engineer sees the full graph (resolve forward, investigate backward, closed any-to).
-      const engineerRes = await app.inject({
-        method: "GET",
-        url: `/api/v1/tasks/${task.id}/available-transitions`,
-        headers: { authorization: `Bearer ${engineerToken}` },
-      });
-      expect(engineerRes.statusCode).toBe(200);
-      const engineerSlugs = engineerRes.json().data.map((s: any) => s.slug).sort();
-      expect(engineerSlugs).toEqual(["closed", "investigate", "resolve"]);
-
-      // Agent lacks permission to resolve (engineer-only) and to close (engineer/product) — only investigate remains.
-      const agentRes = await app.inject({
-        method: "GET",
-        url: `/api/v1/tasks/${task.id}/available-transitions`,
-        headers: { authorization: `Bearer ${agentToken}` },
-      });
-      expect(agentRes.statusCode).toBe(200);
-      const agentSlugs = agentRes.json().data.map((s: any) => s.slug).sort();
-      expect(agentSlugs).not.toContain("resolve");
-      expect(agentSlugs).not.toContain("closed");
-      expect(agentSlugs).toContain("investigate");
+      // Both engineer and agent see the full flow-graph set — no team filter.
+      for (const token of [engineerToken, agentToken]) {
+        const res = await app.inject({
+          method: "GET",
+          url: `/api/v1/tasks/${task.id}/available-transitions`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(res.statusCode).toBe(200);
+        const slugs = res.json().data.map((s: any) => s.slug).sort();
+        expect(slugs).toEqual(["closed", "investigate", "resolve"]);
+      }
     });
 
     it("returns 404 for unknown task", async () => {
