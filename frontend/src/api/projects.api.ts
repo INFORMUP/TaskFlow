@@ -29,6 +29,7 @@ export interface Project {
   color: string | null;
   createdAt: string;
   archivedAt: string | null;
+  defaultSignoffPolicyId: string | null;
 }
 
 export interface CreateProjectPayload {

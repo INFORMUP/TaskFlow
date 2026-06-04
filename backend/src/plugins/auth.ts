@@ -111,6 +111,7 @@ export const authPlugin = fp(async function authPlugin(fastify: FastifyInstance)
       "/api/v1/auth/refresh",
       "/api/v1/webhooks/",
       "/docs",
+      ...(process.env.NODE_ENV !== "production" ? ["/api/v1/dev-login"] : []),
     ];
 
     if (PUBLIC_ROUTES.some((route) => request.url.startsWith(route))) {

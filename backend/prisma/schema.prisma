@@ -113,6 +113,7 @@ model User {
   savedViews          SavedView[]
   taskDependenciesCreated TaskDependency[] @relation("TaskDependencyCreatedBy")
   requirementsCreated     Requirement[]      @relation("RequirementCreatedBy")
+  imagesUploaded          Image[]            @relation("ImageUploadedBy")
   signoffSlotsRequired    SignoffSlot[]      @relation("SignoffSlotRequiredUser")
   policySlotRequired      SignoffPolicySlot[] @relation("PolicySlotRequiredUser")
   attestations            Attestation[]      @relation("AttestationActor")
@@ -584,6 +585,7 @@ model TaskLabel {
 model Requirement {
   id        String   @id @default(uuid()) @db.Uuid
   taskId    String   @map("task_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
   ordinal   Int
   statement String   @db.Text
   rationale String?  @db.Text
@@ -592,12 +594,15 @@ model Requirement {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  task    Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  creator User       @relation("RequirementCreatedBy", fields: [createdBy], references: [id])
-  slots   SignoffSlot[]
+  task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  parent   Requirement?  @relation("RequirementChildren", fields: [parentId], references: [id])
+  children Requirement[] @relation("RequirementChildren")
+  creator  User          @relation("RequirementCreatedBy", fields: [createdBy], references: [id])
+  slots    SignoffSlot[]
+  images   Image[]       @relation("RequirementImages")
 
-  @@unique([taskId, ordinal])
   @@index([taskId])
+  @@index([taskId, parentId])
   @@map("requirements")
 }
 
@@ -652,6 +657,23 @@ model SignoffPolicySlot {
 
   @@index([policyId])
   @@map("signoff_policy_slots")
+}
+
+model Image {
+  id              String   @id @default(uuid()) @db.Uuid
+  requirementId   String?  @map("requirement_id") @db.Uuid
+  filename        String
+  mimeType        String   @map("mime_type")
+  size            Int
+  data            Bytes    @db.ByteA
+  uploadedBy      String   @map("uploaded_by") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  uploader    User         @relation("ImageUploadedBy", fields: [uploadedBy], references: [id])
+  requirement Requirement? @relation("RequirementImages", fields: [requirementId], references: [id], onDelete: Cascade)
+
+  @@index([requirementId])
+  @@map("images")
 }
 
 model Attestation {

@@ -6,6 +6,7 @@ import ProjectFlowsSection from "@/features/projects/components/ProjectFlowsSect
 import ProjectRepositoriesSection from "@/features/projects/components/ProjectRepositoriesSection.vue";
 import ProjectCodeActivitySection from "@/features/projects/components/ProjectCodeActivitySection.vue";
 import ProjectStatusDefaultsSection from "@/features/projects/components/ProjectStatusDefaultsSection.vue";
+import ProjectSignoffPoliciesSection from "@/features/projects/components/ProjectSignoffPoliciesSection.vue";
 import {
   archiveProject,
   getProject,
@@ -115,6 +116,8 @@ async function toggleArchive() {
       :default-flow-id="project.defaultFlow?.id ?? null"
       :users="users"
     />
+
+    <ProjectSignoffPoliciesSection :project-id="project.id" />
 
     <ProjectRepositoriesSection :project-id="project.id" />
 

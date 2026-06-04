@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import DefaultPolicySection from "./DefaultPolicySection.vue";
 import {
   getRequirements,
   createRequirement,
@@ -8,8 +9,12 @@ import {
   createSlot,
   deleteSlot,
   createAttestation,
+  uploadRequirementImage,
+  deleteRequirementImage,
+  getImageBlobUrl,
   type Requirement,
   type SignoffSlot,
+  type ImageMeta,
 } from "@/api/requirements.api";
 
 const props = defineProps<{ taskId: string }>();
@@ -18,31 +23,35 @@ const requirements = ref<Requirement[]>([]);
 const error = ref<string | null>(null);
 const busy = ref(false);
 
-// Add-requirement form
+// Top-level add form
 const showAddForm = ref(false);
 const newStatement = ref("");
 const newRationale = ref("");
 
-// Edit requirement inline
+// Inline edit
 const editingId = ref<string | null>(null);
 const editStatement = ref("");
 const editRationale = ref("");
 
-// Add-slot form: keyed by requirement id
+// Add-slot form
 const showSlotFormFor = ref<string | null>(null);
 const newSlotLabel = ref("");
 const newSlotActorType = ref<"" | "human" | "agent">("");
 
-async function load() {
-  error.value = null;
-  try {
-    requirements.value = await getRequirements(props.taskId);
-  } catch (e: any) {
-    error.value = e?.error?.message ?? "Failed to load requirements";
-  }
-}
+// Add-child form: keyed by parent requirement id
+const addingChildFor = ref<string | null>(null);
+const childStatement = ref("");
 
 watch(() => props.taskId, load, { immediate: true });
+
+function depthOf(number: string): number {
+  return number.split(".").length;
+}
+
+function indentStyle(number: string) {
+  const depth = depthOf(number);
+  return depth > 1 ? { paddingLeft: `${(depth - 1) * 1.5}rem` } : {};
+}
 
 async function handleAddRequirement() {
   if (!newStatement.value.trim()) return;
@@ -55,6 +64,32 @@ async function handleAddRequirement() {
     newStatement.value = "";
     newRationale.value = "";
     showAddForm.value = false;
+    await load();
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to create requirement";
+  } finally {
+    busy.value = false;
+  }
+}
+
+function openChildForm(reqId: string) {
+  addingChildFor.value = reqId;
+  childStatement.value = "";
+  // Close other open forms
+  showAddForm.value = false;
+  showSlotFormFor.value = null;
+}
+
+async function handleAddChild(parentId: string) {
+  if (!childStatement.value.trim()) return;
+  busy.value = true;
+  try {
+    await createRequirement(props.taskId, {
+      statement: childStatement.value.trim(),
+      parentId,
+    });
+    addingChildFor.value = null;
+    childStatement.value = "";
     await load();
   } catch (e: any) {
     error.value = e?.error?.message ?? "Failed to create requirement";
@@ -144,8 +179,80 @@ async function handleSignOff(reqId: string, slotId: string) {
   }
 }
 
+async function handleCancelSignOff(reqId: string, slotId: string) {
+  busy.value = true;
+  try {
+    await createAttestation(props.taskId, reqId, slotId, { verdict: "not_met" });
+    await load();
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to cancel sign-off";
+  } finally {
+    busy.value = false;
+  }
+}
+
 function isAgentOnly(slot: SignoffSlot): boolean {
   return slot.requiredActorType === "agent";
+}
+
+function isSignedOff(slot: SignoffSlot): boolean {
+  const latest = slot.attestations.at(-1);
+  return latest?.verdict === "met";
+}
+
+// ── Images ───────────────────────────────────────────────────────────────────
+
+const imageBlobUrls = ref<Record<string, string>>({});
+
+async function loadImageUrls(images: ImageMeta[]) {
+  for (const img of images) {
+    if (!imageBlobUrls.value[img.id]) {
+      imageBlobUrls.value[img.id] = await getImageBlobUrl(img.id);
+    }
+  }
+}
+
+async function load() {
+  error.value = null;
+  try {
+    requirements.value = await getRequirements(props.taskId);
+    for (const req of requirements.value) {
+      if (req.images.length) await loadImageUrls(req.images);
+    }
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to load requirements";
+  }
+}
+
+async function handleUploadImage(reqId: string, event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  busy.value = true;
+  try {
+    await uploadRequirementImage(props.taskId, reqId, file);
+    await load();
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to upload image";
+  } finally {
+    busy.value = false;
+    input.value = "";
+  }
+}
+
+async function handleDeleteImage(reqId: string, imageId: string) {
+  busy.value = true;
+  try {
+    await deleteRequirementImage(props.taskId, reqId, imageId);
+    const url = imageBlobUrls.value[imageId];
+    if (url) URL.revokeObjectURL(url);
+    delete imageBlobUrls.value[imageId];
+    await load();
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to delete image";
+  } finally {
+    busy.value = false;
+  }
 }
 </script>
 
@@ -158,14 +265,17 @@ function isAgentOnly(slot: SignoffSlot): boolean {
         class="req-panel__add-btn"
         data-testid="add-req-btn"
         :disabled="busy"
-        @click="showAddForm = !showAddForm"
+        @click="showAddForm = !showAddForm; addingChildFor = null"
       >
         + Add requirement
       </button>
     </div>
 
+    <DefaultPolicySection :task-id="taskId" @changed="load" />
+
     <p v-if="error" class="req-panel__error" role="alert">{{ error }}</p>
 
+    <!-- Top-level add form -->
     <div v-if="showAddForm" class="req-panel__add-form">
       <input
         v-model="newStatement"
@@ -213,6 +323,8 @@ function isAgentOnly(slot: SignoffSlot): boolean {
         :key="req.id"
         class="req-panel__item"
         :data-testid="`req-row-${req.id}`"
+        :data-depth="depthOf(req.number)"
+        :style="indentStyle(req.number)"
       >
         <!-- Editing inline -->
         <div v-if="editingId === req.id" class="req-panel__edit-form">
@@ -253,7 +365,12 @@ function isAgentOnly(slot: SignoffSlot): boolean {
         <!-- Normal view -->
         <template v-else>
           <div class="req-panel__row">
-            <span class="req-panel__ordinal">#{{ req.ordinal }}</span>
+            <!-- Hierarchical number badge -->
+            <span
+              class="req-panel__number"
+              :data-testid="`req-number-${req.id}`"
+            >{{ req.number }}</span>
+
             <span class="req-panel__statement">{{ req.statement }}</span>
             <span
               class="req-panel__quorum"
@@ -271,6 +388,15 @@ function isAgentOnly(slot: SignoffSlot): boolean {
               ⚠ not-distinct
             </span>
             <div class="req-panel__actions">
+              <button
+                type="button"
+                class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
+                :data-testid="`add-child-btn-${req.id}`"
+                :disabled="busy"
+                @click="openChildForm(req.id)"
+              >
+                + Child
+              </button>
               <button
                 type="button"
                 class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
@@ -293,6 +419,80 @@ function isAgentOnly(slot: SignoffSlot): boolean {
           </div>
 
           <p v-if="req.rationale" class="req-panel__rationale">{{ req.rationale }}</p>
+
+          <!-- Images -->
+          <div v-if="req.images.length" class="req-panel__images">
+            <div
+              v-for="img in req.images"
+              :key="img.id"
+              class="req-panel__image-wrap"
+            >
+              <img
+                v-if="imageBlobUrls[img.id]"
+                :src="imageBlobUrls[img.id]"
+                :alt="img.filename"
+                :data-testid="`req-image-${img.id}`"
+                class="req-panel__image-thumb"
+              />
+              <button
+                type="button"
+                class="req-panel__image-delete"
+                :data-testid="`delete-image-${img.id}`"
+                :disabled="busy"
+                @click="handleDeleteImage(req.id, img.id)"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          <div class="req-panel__image-upload">
+            <label
+              :data-testid="`upload-image-btn-${req.id}`"
+              class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm req-panel__upload-label"
+            >
+              + Image
+              <input
+                type="file"
+                accept="image/*"
+                class="req-panel__file-input"
+                :data-testid="`image-file-input-${req.id}`"
+                :disabled="busy"
+                @change="handleUploadImage(req.id, $event)"
+              />
+            </label>
+          </div>
+
+          <!-- Add-child inline form -->
+          <div v-if="addingChildFor === req.id" class="req-panel__child-form">
+            <input
+              v-model="childStatement"
+              type="text"
+              placeholder="Child requirement statement"
+              class="req-panel__input"
+              :data-testid="`child-req-statement-${req.id}`"
+              :disabled="busy"
+              @keydown.enter="handleAddChild(req.id)"
+            />
+            <div class="req-panel__form-actions">
+              <button
+                type="button"
+                class="req-panel__btn req-panel__btn--sm"
+                :data-testid="`child-req-submit-${req.id}`"
+                :disabled="busy || !childStatement.trim()"
+                @click="handleAddChild(req.id)"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
+                :data-testid="`child-req-cancel-${req.id}`"
+                @click="addingChildFor = null"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
 
           <!-- Slots -->
           <ul v-if="req.slots.length" class="req-panel__slots">
@@ -320,24 +520,33 @@ function isAgentOnly(slot: SignoffSlot): boolean {
 
               <span class="req-panel__slot-attestations">
                 <span
-                  v-for="att in slot.attestations"
-                  :key="att.id"
+                  v-if="slot.attestations.length > 0"
                   class="req-panel__attestation"
-                  :class="att.verdict === 'met' ? 'att--met' : 'att--not-met'"
+                  :class="isSignedOff(slot) ? 'att--met' : 'att--not-met'"
                 >
-                  {{ att.verdict === "met" ? "✓" : "✗" }}
+                  {{ isSignedOff(slot) ? "✓" : "✗" }}
                 </span>
               </span>
 
               <button
-                v-if="!isAgentOnly(slot)"
+                v-if="!isAgentOnly(slot) && !isSignedOff(slot)"
                 type="button"
-                class="req-panel__btn req-panel__btn--sm"
+                class="req-panel__btn req-panel__btn--sm req-panel__btn--signoff"
                 :data-testid="`signoff-btn-${slot.id}`"
                 :disabled="busy"
                 @click="handleSignOff(req.id, slot.id)"
               >
                 Sign off
+              </button>
+              <button
+                v-if="!isAgentOnly(slot) && isSignedOff(slot)"
+                type="button"
+                class="req-panel__btn req-panel__btn--sm req-panel__btn--cancel-signoff"
+                :data-testid="`cancel-signoff-btn-${slot.id}`"
+                :disabled="busy"
+                @click="handleCancelSignOff(req.id, slot.id)"
+              >
+                Cancel sign off
               </button>
 
               <button
@@ -435,7 +644,7 @@ function isAgentOnly(slot: SignoffSlot): boolean {
 
 .req-panel__add-form,
 .req-panel__edit-form,
-.req-panel__slot-form {
+.req-panel__child-form {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
@@ -445,12 +654,21 @@ function isAgentOnly(slot: SignoffSlot): boolean {
   border-radius: 4px;
 }
 
+.req-panel__child-form {
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+}
+
 .req-panel__slot-form {
+  display: flex;
   flex-direction: row;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.35rem;
   margin-top: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--color-bg-muted, #f8f8f8);
+  border-radius: 4px;
 }
 
 .req-panel__form-actions {
@@ -476,11 +694,18 @@ function isAgentOnly(slot: SignoffSlot): boolean {
   flex-wrap: wrap;
 }
 
-.req-panel__ordinal {
-  font-family: monospace;
-  font-size: 0.8rem;
-  color: var(--color-text-muted, #888);
+/* Hierarchical number badge */
+.req-panel__number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary, #666);
+  background: var(--color-bg-muted, #f0f0f0);
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
   flex-shrink: 0;
+  min-width: 1.8rem;
+  text-align: center;
 }
 
 .req-panel__statement {
@@ -522,12 +747,12 @@ function isAgentOnly(slot: SignoffSlot): boolean {
 .req-panel__rationale {
   font-size: 0.8rem;
   color: var(--color-text-muted, #666);
-  margin: 0.25rem 0 0.5rem 1.5rem;
+  margin: 0.25rem 0 0.5rem 2.2rem;
 }
 
 .req-panel__slots {
   list-style: none;
-  padding: 0 0 0 1.5rem;
+  padding: 0 0 0 2.2rem;
   margin: 0.4rem 0 0;
 }
 
@@ -583,7 +808,7 @@ function isAgentOnly(slot: SignoffSlot): boolean {
   color: var(--accent, #004de6);
   cursor: pointer;
   font-size: 0.8rem;
-  padding: 0.2rem 0 0.2rem 1.5rem;
+  padding: 0.2rem 0 0.2rem 2.2rem;
   margin-top: 0.25rem;
 }
 
@@ -624,6 +849,28 @@ function isAgentOnly(slot: SignoffSlot): boolean {
   border-color: #c0392b;
 }
 
+.req-panel__btn--signoff {
+  background: #27ae60;
+  border-color: #27ae60;
+  color: white;
+}
+
+.req-panel__btn--signoff:hover:not(:disabled) {
+  background: #219150;
+  border-color: #219150;
+}
+
+.req-panel__btn--cancel-signoff {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: white;
+}
+
+.req-panel__btn--cancel-signoff:hover:not(:disabled) {
+  background: #a93226;
+  border-color: #a93226;
+}
+
 .req-panel__btn--sm {
   font-size: 0.75rem;
   padding: 0.15rem 0.4rem;
@@ -645,5 +892,60 @@ function isAgentOnly(slot: SignoffSlot): boolean {
   border: 1px solid var(--color-border, #ccc);
   border-radius: 4px;
   font-size: 0.8rem;
+}
+
+.req-panel__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0.4rem 2.2rem;
+}
+
+.req-panel__image-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.req-panel__image-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--color-border, #ddd);
+  cursor: pointer;
+}
+
+.req-panel__image-delete {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: #c0392b;
+  color: white;
+  font-size: 0.65rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.req-panel__image-upload {
+  margin: 0.25rem 0 0 2.2rem;
+}
+
+.req-panel__upload-label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.req-panel__file-input {
+  display: none;
 }
 </style>

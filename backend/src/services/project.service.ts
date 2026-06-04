@@ -68,6 +68,7 @@ export function formatProject(project: any) {
     color: project.color ?? null,
     createdAt: project.createdAt,
     archivedAt: project.archivedAt,
+    defaultSignoffPolicyId: project.defaultSignoffPolicyId ?? null,
   };
 }
 

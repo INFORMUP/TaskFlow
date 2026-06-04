@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiFetchBlob } from "./client";
 
 export interface Attestation {
   id: string;
@@ -26,8 +26,18 @@ export interface QuorumResult {
   notDistinct: boolean;
 }
 
+export interface ImageMeta {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+}
+
 export interface Requirement {
   id: string;
+  parentId: string | null;
+  number: string;
   ordinal: number;
   statement: string;
   rationale: string | null;
@@ -35,6 +45,7 @@ export interface Requirement {
   updatedAt: string;
   slots: SignoffSlot[];
   quorum: QuorumResult;
+  images: ImageMeta[];
 }
 
 export function getRequirements(taskId: string): Promise<Requirement[]> {
@@ -43,7 +54,7 @@ export function getRequirements(taskId: string): Promise<Requirement[]> {
 
 export function createRequirement(
   taskId: string,
-  body: { statement: string; rationale?: string; ordinal?: number }
+  body: { statement: string; rationale?: string; parentId?: string | null; ordinal?: number }
 ): Promise<Requirement> {
   return apiFetch(`/api/v1/tasks/${taskId}/requirements`, {
     method: "POST",
@@ -83,6 +94,34 @@ export function deleteSlot(taskId: string, rid: string, sid: string): Promise<vo
   return apiFetch(`/api/v1/tasks/${taskId}/requirements/${rid}/slots/${sid}`, {
     method: "DELETE",
   });
+}
+
+export function uploadRequirementImage(
+  taskId: string,
+  rid: string,
+  file: File
+): Promise<ImageMeta> {
+  const form = new FormData();
+  form.append("file", file);
+  return apiFetch(`/api/v1/tasks/${taskId}/requirements/${rid}/images`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+export function deleteRequirementImage(
+  taskId: string,
+  rid: string,
+  imageId: string
+): Promise<void> {
+  return apiFetch(`/api/v1/tasks/${taskId}/requirements/${rid}/images/${imageId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getImageBlobUrl(imageId: string): Promise<string> {
+  const blob = await apiFetchBlob(`/api/v1/images/${imageId}`);
+  return URL.createObjectURL(blob);
 }
 
 export function createAttestation(

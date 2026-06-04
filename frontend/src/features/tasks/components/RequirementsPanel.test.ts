@@ -9,6 +9,9 @@ const deleteRequirement = vi.fn();
 const createSlot = vi.fn();
 const deleteSlot = vi.fn();
 const createAttestation = vi.fn();
+const uploadRequirementImage = vi.fn();
+const deleteRequirementImage = vi.fn();
+const getImageBlobUrl = vi.fn();
 
 vi.mock("@/api/requirements.api", () => ({
   getRequirements: (...a: unknown[]) => getRequirements(...a),
@@ -18,6 +21,9 @@ vi.mock("@/api/requirements.api", () => ({
   createSlot: (...a: unknown[]) => createSlot(...a),
   deleteSlot: (...a: unknown[]) => deleteSlot(...a),
   createAttestation: (...a: unknown[]) => createAttestation(...a),
+  uploadRequirementImage: (...a: unknown[]) => uploadRequirementImage(...a),
+  deleteRequirementImage: (...a: unknown[]) => deleteRequirementImage(...a),
+  getImageBlobUrl: (...a: unknown[]) => getImageBlobUrl(...a),
 }));
 
 const SLOT_HUMAN = {
@@ -58,6 +64,8 @@ const SLOT_ANY = {
 
 const REQ_A = {
   id: "req-a",
+  parentId: null,
+  number: "1",
   ordinal: 1,
   statement: "Must display requirements list",
   rationale: "Core feature",
@@ -65,10 +73,13 @@ const REQ_A = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   slots: [SLOT_HUMAN, SLOT_AGENT],
   quorum: { verified: false, signed: 0, total: 2, missing: ["Implementer sign-off", "Agent review"], notDistinct: false },
+  images: [],
 };
 
 const REQ_B = {
   id: "req-b",
+  parentId: null,
+  number: "2",
   ordinal: 2,
   statement: "Must allow human sign-off",
   rationale: null,
@@ -76,10 +87,13 @@ const REQ_B = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   slots: [SLOT_ANY],
   quorum: { verified: true, signed: 1, total: 1, missing: [], notDistinct: false },
+  images: [],
 };
 
 const REQ_DISTINCT = {
   id: "req-c",
+  parentId: null,
+  number: "3",
   ordinal: 3,
   statement: "Self-review case",
   rationale: null,
@@ -87,6 +101,29 @@ const REQ_DISTINCT = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   slots: [SLOT_ANY],
   quorum: { verified: false, signed: 0, total: 1, missing: [], notDistinct: true },
+  images: [],
+};
+
+const REQ_A_CHILD = {
+  id: "req-a1",
+  parentId: "req-a",
+  number: "1.1",
+  ordinal: 1,
+  statement: "Sub-requirement of A",
+  rationale: null,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+  slots: [],
+  quorum: { verified: false, signed: 0, total: 0, missing: [], notDistinct: false },
+  images: [],
+};
+
+const IMAGE_META = {
+  id: "img-1",
+  filename: "diagram.png",
+  mimeType: "image/png",
+  size: 1024,
+  createdAt: "2026-01-01T00:00:00.000Z",
 };
 
 beforeEach(() => {
@@ -97,6 +134,9 @@ beforeEach(() => {
   createSlot.mockReset();
   deleteSlot.mockReset();
   createAttestation.mockReset();
+  uploadRequirementImage.mockReset();
+  deleteRequirementImage.mockReset();
+  getImageBlobUrl.mockReset();
   getRequirements.mockResolvedValue([REQ_A, REQ_B]);
 });
 
@@ -145,7 +185,7 @@ describe("RequirementsPanel", () => {
     expect(wrapper.text()).toContain("Agent review");
   });
 
-  it("shows sign-off button for human slots but not for agent-only slots", async () => {
+  it("shows sign-off button for unsigned human slots but not for agent-only slots", async () => {
     const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
     await flushPromises();
 
@@ -154,6 +194,33 @@ describe("RequirementsPanel", () => {
 
     expect(humanBtn.exists()).toBe(true);
     expect(agentBtn.exists()).toBe(false);
+  });
+
+  it("shows cancel-sign-off button instead of sign-off when slot is already signed", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='signoff-btn-slot-3']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='cancel-signoff-btn-slot-3']").exists()).toBe(true);
+  });
+
+  it("calls createAttestation with not_met on cancel sign-off", async () => {
+    createAttestation.mockResolvedValue({
+      id: "att-cancel",
+      actorId: "u1",
+      actorType: "human",
+      verdict: "not_met",
+      evidence: null,
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='cancel-signoff-btn-slot-3']").trigger("click");
+    await flushPromises();
+
+    expect(createAttestation).toHaveBeenCalledWith("task-1", "req-b", "slot-3", { verdict: "not_met" });
   });
 
   it("shows agent-only badge for agent slots", async () => {
@@ -229,5 +296,120 @@ describe("RequirementsPanel", () => {
     await flushPromises();
 
     expect(deleteSlot).toHaveBeenCalledWith("task-1", "req-a", "slot-1");
+  });
+
+  // ── Nesting tests ──────────────────────────────────────────────────────────
+
+  it("displays hierarchical numbers as prefixes", async () => {
+    getRequirements.mockResolvedValueOnce([REQ_A, REQ_A_CHILD, REQ_B]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='req-number-req-a']").text()).toBe("1");
+    expect(wrapper.find("[data-testid='req-number-req-a1']").text()).toBe("1.1");
+    expect(wrapper.find("[data-testid='req-number-req-b']").text()).toBe("2");
+  });
+
+  it("indents child requirements visually", async () => {
+    getRequirements.mockResolvedValueOnce([REQ_A, REQ_A_CHILD]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    const childRow = wrapper.find("[data-testid='req-row-req-a1']");
+    expect(childRow.attributes("data-depth")).toBe("2");
+  });
+
+  it("shows add-child button on each requirement", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='add-child-btn-req-a']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='add-child-btn-req-b']").exists()).toBe(true);
+  });
+
+  it("creates a child requirement with parentId when add-child form is submitted", async () => {
+    createRequirement.mockResolvedValue({ ...REQ_A_CHILD });
+    getRequirements.mockResolvedValueOnce([REQ_A]).mockResolvedValueOnce([REQ_A, REQ_A_CHILD]);
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='add-child-btn-req-a']").trigger("click");
+    await wrapper.get("[data-testid='child-req-statement-req-a']").setValue("Sub-requirement of A");
+    await wrapper.get("[data-testid='child-req-submit-req-a']").trigger("click");
+    await flushPromises();
+
+    expect(createRequirement).toHaveBeenCalledWith(
+      "task-1",
+      { statement: "Sub-requirement of A", parentId: "req-a" }
+    );
+  });
+
+  it("closes add-child form on cancel", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='add-child-btn-req-a']").trigger("click");
+    expect(wrapper.find("[data-testid='child-req-statement-req-a']").exists()).toBe(true);
+
+    await wrapper.get("[data-testid='child-req-cancel-req-a']").trigger("click");
+    expect(wrapper.find("[data-testid='child-req-statement-req-a']").exists()).toBe(false);
+  });
+
+  // ── Image tests ────────────────────────────────────────────────────────────
+
+  it("shows image thumbnails for requirements that have images", async () => {
+    getRequirements.mockResolvedValueOnce([{ ...REQ_A, images: [IMAGE_META] }, REQ_B]);
+    getImageBlobUrl.mockResolvedValue("blob:fake-url");
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(getImageBlobUrl).toHaveBeenCalledWith("img-1");
+    expect(wrapper.find("[data-testid='req-image-img-1']").exists()).toBe(true);
+  });
+
+  it("shows upload-image button on each requirement", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='upload-image-btn-req-a']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='upload-image-btn-req-b']").exists()).toBe(true);
+  });
+
+  it("calls uploadRequirementImage and refreshes when a file is selected", async () => {
+    uploadRequirementImage.mockResolvedValue(IMAGE_META);
+    getRequirements.mockResolvedValueOnce([REQ_A, REQ_B]).mockResolvedValueOnce([
+      { ...REQ_A, images: [IMAGE_META] },
+      REQ_B,
+    ]);
+    getImageBlobUrl.mockResolvedValue("blob:fake-url");
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    const input = wrapper.find("[data-testid='image-file-input-req-a']");
+    expect(input.exists()).toBe(true);
+
+    const file = new File(["data"], "test.png", { type: "image/png" });
+    Object.defineProperty(input.element, "files", { value: [file] });
+    await input.trigger("change");
+    await flushPromises();
+
+    expect(uploadRequirementImage).toHaveBeenCalledWith("task-1", "req-a", file);
+  });
+
+  it("calls deleteRequirementImage and refreshes on delete image click", async () => {
+    getRequirements.mockResolvedValueOnce([{ ...REQ_A, images: [IMAGE_META] }, REQ_B]);
+    getImageBlobUrl.mockResolvedValue("blob:fake-url");
+    deleteRequirementImage.mockResolvedValue(undefined);
+    getRequirements.mockResolvedValueOnce([REQ_A, REQ_B]);
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='delete-image-img-1']").trigger("click");
+    await flushPromises();
+
+    expect(deleteRequirementImage).toHaveBeenCalledWith("task-1", "req-a", "img-1");
   });
 });
