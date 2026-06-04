@@ -9,8 +9,12 @@ import {
   createSlot,
   deleteSlot,
   createAttestation,
+  uploadRequirementImage,
+  deleteRequirementImage,
+  getImageBlobUrl,
   type Requirement,
   type SignoffSlot,
+  type ImageMeta,
 } from "@/api/requirements.api";
 
 const props = defineProps<{ taskId: string }>();
@@ -37,15 +41,6 @@ const newSlotActorType = ref<"" | "human" | "agent">("");
 // Add-child form: keyed by parent requirement id
 const addingChildFor = ref<string | null>(null);
 const childStatement = ref("");
-
-async function load() {
-  error.value = null;
-  try {
-    requirements.value = await getRequirements(props.taskId);
-  } catch (e: any) {
-    error.value = e?.error?.message ?? "Failed to load requirements";
-  }
-}
 
 watch(() => props.taskId, load, { immediate: true });
 
@@ -203,6 +198,61 @@ function isAgentOnly(slot: SignoffSlot): boolean {
 function isSignedOff(slot: SignoffSlot): boolean {
   const latest = slot.attestations.at(-1);
   return latest?.verdict === "met";
+}
+
+// ── Images ───────────────────────────────────────────────────────────────────
+
+const imageBlobUrls = ref<Record<string, string>>({});
+
+async function loadImageUrls(images: ImageMeta[]) {
+  for (const img of images) {
+    if (!imageBlobUrls.value[img.id]) {
+      imageBlobUrls.value[img.id] = await getImageBlobUrl(img.id);
+    }
+  }
+}
+
+async function load() {
+  error.value = null;
+  try {
+    requirements.value = await getRequirements(props.taskId);
+    for (const req of requirements.value) {
+      if (req.images.length) await loadImageUrls(req.images);
+    }
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to load requirements";
+  }
+}
+
+async function handleUploadImage(reqId: string, event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  busy.value = true;
+  try {
+    await uploadRequirementImage(props.taskId, reqId, file);
+    await load();
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to upload image";
+  } finally {
+    busy.value = false;
+    input.value = "";
+  }
+}
+
+async function handleDeleteImage(reqId: string, imageId: string) {
+  busy.value = true;
+  try {
+    await deleteRequirementImage(props.taskId, reqId, imageId);
+    const url = imageBlobUrls.value[imageId];
+    if (url) URL.revokeObjectURL(url);
+    delete imageBlobUrls.value[imageId];
+    await load();
+  } catch (e: any) {
+    error.value = e?.error?.message ?? "Failed to delete image";
+  } finally {
+    busy.value = false;
+  }
 }
 </script>
 
@@ -369,6 +419,48 @@ function isSignedOff(slot: SignoffSlot): boolean {
           </div>
 
           <p v-if="req.rationale" class="req-panel__rationale">{{ req.rationale }}</p>
+
+          <!-- Images -->
+          <div v-if="req.images.length" class="req-panel__images">
+            <div
+              v-for="img in req.images"
+              :key="img.id"
+              class="req-panel__image-wrap"
+            >
+              <img
+                v-if="imageBlobUrls[img.id]"
+                :src="imageBlobUrls[img.id]"
+                :alt="img.filename"
+                :data-testid="`req-image-${img.id}`"
+                class="req-panel__image-thumb"
+              />
+              <button
+                type="button"
+                class="req-panel__image-delete"
+                :data-testid="`delete-image-${img.id}`"
+                :disabled="busy"
+                @click="handleDeleteImage(req.id, img.id)"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          <div class="req-panel__image-upload">
+            <label
+              :data-testid="`upload-image-btn-${req.id}`"
+              class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm req-panel__upload-label"
+            >
+              + Image
+              <input
+                type="file"
+                accept="image/*"
+                class="req-panel__file-input"
+                :data-testid="`image-file-input-${req.id}`"
+                :disabled="busy"
+                @change="handleUploadImage(req.id, $event)"
+              />
+            </label>
+          </div>
 
           <!-- Add-child inline form -->
           <div v-if="addingChildFor === req.id" class="req-panel__child-form">
@@ -800,5 +892,60 @@ function isSignedOff(slot: SignoffSlot): boolean {
   border: 1px solid var(--color-border, #ccc);
   border-radius: 4px;
   font-size: 0.8rem;
+}
+
+.req-panel__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0.4rem 2.2rem;
+}
+
+.req-panel__image-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.req-panel__image-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--color-border, #ddd);
+  cursor: pointer;
+}
+
+.req-panel__image-delete {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: #c0392b;
+  color: white;
+  font-size: 0.65rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.req-panel__image-upload {
+  margin: 0.25rem 0 0 2.2rem;
+}
+
+.req-panel__upload-label {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.req-panel__file-input {
+  display: none;
 }
 </style>

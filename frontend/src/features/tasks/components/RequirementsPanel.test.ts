@@ -9,6 +9,9 @@ const deleteRequirement = vi.fn();
 const createSlot = vi.fn();
 const deleteSlot = vi.fn();
 const createAttestation = vi.fn();
+const uploadRequirementImage = vi.fn();
+const deleteRequirementImage = vi.fn();
+const getImageBlobUrl = vi.fn();
 
 vi.mock("@/api/requirements.api", () => ({
   getRequirements: (...a: unknown[]) => getRequirements(...a),
@@ -18,6 +21,9 @@ vi.mock("@/api/requirements.api", () => ({
   createSlot: (...a: unknown[]) => createSlot(...a),
   deleteSlot: (...a: unknown[]) => deleteSlot(...a),
   createAttestation: (...a: unknown[]) => createAttestation(...a),
+  uploadRequirementImage: (...a: unknown[]) => uploadRequirementImage(...a),
+  deleteRequirementImage: (...a: unknown[]) => deleteRequirementImage(...a),
+  getImageBlobUrl: (...a: unknown[]) => getImageBlobUrl(...a),
 }));
 
 const SLOT_HUMAN = {
@@ -67,6 +73,7 @@ const REQ_A = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   slots: [SLOT_HUMAN, SLOT_AGENT],
   quorum: { verified: false, signed: 0, total: 2, missing: ["Implementer sign-off", "Agent review"], notDistinct: false },
+  images: [],
 };
 
 const REQ_B = {
@@ -80,6 +87,7 @@ const REQ_B = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   slots: [SLOT_ANY],
   quorum: { verified: true, signed: 1, total: 1, missing: [], notDistinct: false },
+  images: [],
 };
 
 const REQ_DISTINCT = {
@@ -93,6 +101,7 @@ const REQ_DISTINCT = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   slots: [SLOT_ANY],
   quorum: { verified: false, signed: 0, total: 1, missing: [], notDistinct: true },
+  images: [],
 };
 
 const REQ_A_CHILD = {
@@ -106,6 +115,15 @@ const REQ_A_CHILD = {
   updatedAt: "2026-01-01T00:00:00.000Z",
   slots: [],
   quorum: { verified: false, signed: 0, total: 0, missing: [], notDistinct: false },
+  images: [],
+};
+
+const IMAGE_META = {
+  id: "img-1",
+  filename: "diagram.png",
+  mimeType: "image/png",
+  size: 1024,
+  createdAt: "2026-01-01T00:00:00.000Z",
 };
 
 beforeEach(() => {
@@ -116,6 +134,9 @@ beforeEach(() => {
   createSlot.mockReset();
   deleteSlot.mockReset();
   createAttestation.mockReset();
+  uploadRequirementImage.mockReset();
+  deleteRequirementImage.mockReset();
+  getImageBlobUrl.mockReset();
   getRequirements.mockResolvedValue([REQ_A, REQ_B]);
 });
 
@@ -333,5 +354,62 @@ describe("RequirementsPanel", () => {
 
     await wrapper.get("[data-testid='child-req-cancel-req-a']").trigger("click");
     expect(wrapper.find("[data-testid='child-req-statement-req-a']").exists()).toBe(false);
+  });
+
+  // ── Image tests ────────────────────────────────────────────────────────────
+
+  it("shows image thumbnails for requirements that have images", async () => {
+    getRequirements.mockResolvedValueOnce([{ ...REQ_A, images: [IMAGE_META] }, REQ_B]);
+    getImageBlobUrl.mockResolvedValue("blob:fake-url");
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(getImageBlobUrl).toHaveBeenCalledWith("img-1");
+    expect(wrapper.find("[data-testid='req-image-img-1']").exists()).toBe(true);
+  });
+
+  it("shows upload-image button on each requirement", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='upload-image-btn-req-a']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='upload-image-btn-req-b']").exists()).toBe(true);
+  });
+
+  it("calls uploadRequirementImage and refreshes when a file is selected", async () => {
+    uploadRequirementImage.mockResolvedValue(IMAGE_META);
+    getRequirements.mockResolvedValueOnce([REQ_A, REQ_B]).mockResolvedValueOnce([
+      { ...REQ_A, images: [IMAGE_META] },
+      REQ_B,
+    ]);
+    getImageBlobUrl.mockResolvedValue("blob:fake-url");
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    const input = wrapper.find("[data-testid='image-file-input-req-a']");
+    expect(input.exists()).toBe(true);
+
+    const file = new File(["data"], "test.png", { type: "image/png" });
+    Object.defineProperty(input.element, "files", { value: [file] });
+    await input.trigger("change");
+    await flushPromises();
+
+    expect(uploadRequirementImage).toHaveBeenCalledWith("task-1", "req-a", file);
+  });
+
+  it("calls deleteRequirementImage and refreshes on delete image click", async () => {
+    getRequirements.mockResolvedValueOnce([{ ...REQ_A, images: [IMAGE_META] }, REQ_B]);
+    getImageBlobUrl.mockResolvedValue("blob:fake-url");
+    deleteRequirementImage.mockResolvedValue(undefined);
+    getRequirements.mockResolvedValueOnce([REQ_A, REQ_B]);
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='delete-image-img-1']").trigger("click");
+    await flushPromises();
+
+    expect(deleteRequirementImage).toHaveBeenCalledWith("task-1", "req-a", "img-1");
   });
 });

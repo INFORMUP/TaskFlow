@@ -56,6 +56,17 @@ const QuorumShape = Type.Object(
   { additionalProperties: true }
 );
 
+const ImageMetaShape = Type.Object(
+  {
+    id: Type.String({ format: "uuid" }),
+    filename: Type.String(),
+    mimeType: Type.String(),
+    size: Type.Number(),
+    createdAt: Type.String({ format: "date-time" }),
+  },
+  { additionalProperties: true }
+);
+
 const RequirementShape = Type.Object(
   {
     id: Type.String({ format: "uuid" }),
@@ -68,6 +79,7 @@ const RequirementShape = Type.Object(
     updatedAt: Type.String({ format: "date-time" }),
     slots: Type.Array(SlotShape),
     quorum: QuorumShape,
+    images: Type.Array(ImageMetaShape),
   },
   { additionalProperties: true }
 );
@@ -114,6 +126,10 @@ async function loadRequirements(taskId: string) {
       slots: {
         orderBy: { ordinal: "asc" },
         include: { attestations: { orderBy: { createdAt: "asc" } } },
+      },
+      images: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, filename: true, mimeType: true, size: true, createdAt: true },
       },
     },
   });
@@ -320,7 +336,13 @@ export async function requirementRoutes(fastify: FastifyInstance) {
           ...(body.rationale !== undefined && { rationale: body.rationale }),
           ...(body.ordinal !== undefined && { ordinal: body.ordinal }),
         },
-        include: { slots: { include: { attestations: true } } },
+        include: {
+          slots: { include: { attestations: true } },
+          images: {
+            orderBy: { createdAt: "asc" as const },
+            select: { id: true, filename: true, mimeType: true, size: true, createdAt: true },
+          },
+        },
       });
       return reply.send(buildRequirementResponse(req));
     }
