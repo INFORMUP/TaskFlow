@@ -19,7 +19,9 @@ import AssigneePicker from "@/features/tasks/components/AssigneePicker.vue";
 import TaskPicker from "@/features/tasks/components/TaskPicker.vue";
 import LabelPicker from "@/features/labels/components/LabelPicker.vue";
 import RequirementsPanel from "@/features/tasks/components/RequirementsPanel.vue";
+import AttachmentStrip from "@/features/tasks/components/AttachmentStrip.vue";
 import { attachLabelToTask, detachLabelFromTask } from "@/api/labels.api";
+import { uploadTaskAttachment, deleteTaskAttachment, uploadCommentAttachment, deleteCommentAttachment } from "@/api/attachments.api";
 
 const route = useRoute();
 const router = useRouter();
@@ -40,6 +42,9 @@ const transitionError = ref("");
 
 // Comment form state
 const newComment = ref("");
+const attachmentBusy = ref(false);
+// Per-comment pending images (held in local state until comment is posted, then uploaded)
+const pendingCommentImages = ref<Record<string, File[]>>({});
 
 // Users (for reassign dropdown and standalone picker)
 const users = ref<OrgMember[]>([]);
@@ -123,6 +128,48 @@ async function handleDeleteComment(commentId: string) {
   await deleteComment(taskId, commentId);
   const c = await getComments(taskId);
   comments.value = c.data;
+}
+
+async function handleTaskAttachmentUpload(file: File) {
+  attachmentBusy.value = true;
+  try {
+    await uploadTaskAttachment(taskId, file);
+    task.value = await getTask(taskId);
+  } finally {
+    attachmentBusy.value = false;
+  }
+}
+
+async function handleTaskAttachmentDelete(imageId: string) {
+  attachmentBusy.value = true;
+  try {
+    await deleteTaskAttachment(taskId, imageId);
+    task.value = await getTask(taskId);
+  } finally {
+    attachmentBusy.value = false;
+  }
+}
+
+async function handleCommentAttachmentUpload(commentId: string, file: File) {
+  attachmentBusy.value = true;
+  try {
+    await uploadCommentAttachment(taskId, commentId, file);
+    const c = await getComments(taskId);
+    comments.value = c.data;
+  } finally {
+    attachmentBusy.value = false;
+  }
+}
+
+async function handleCommentAttachmentDelete(commentId: string, imageId: string) {
+  attachmentBusy.value = true;
+  try {
+    await deleteCommentAttachment(taskId, commentId, imageId);
+    const c = await getComments(taskId);
+    comments.value = c.data;
+  } finally {
+    attachmentBusy.value = false;
+  }
 }
 
 function openAssigneePicker() {
@@ -279,6 +326,14 @@ onMounted(async () => {
       v-if="task.description"
       :source="task.description"
       class="detail__description"
+    />
+
+    <!-- Task-level image attachments -->
+    <AttachmentStrip
+      :images="task.images ?? []"
+      :busy="attachmentBusy"
+      @upload="handleTaskAttachmentUpload"
+      @delete="handleTaskAttachmentDelete"
     />
 
     <!-- Requirements & sign-off panel -->
@@ -470,6 +525,12 @@ onMounted(async () => {
             >Delete</button>
           </div>
           <MarkdownView :source="c.body" class="comment__body" />
+          <AttachmentStrip
+            :images="c.images ?? []"
+            :busy="attachmentBusy"
+            @upload="(file) => handleCommentAttachmentUpload(c.id, file)"
+            @delete="(imageId) => handleCommentAttachmentDelete(c.id, imageId)"
+          />
         </div>
       </div>
       <div class="comment-form">

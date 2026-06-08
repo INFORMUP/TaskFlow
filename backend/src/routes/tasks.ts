@@ -748,6 +748,15 @@ function formatTask(task: any, rollup?: ChildRollup) {
   };
 
   // Detail-only fields, present only when taskDetailInclude was used.
+  if ("images" in task) {
+    base.images = (task.images ?? []).map((img: any) => ({
+      id: img.id,
+      filename: img.filename,
+      mimeType: img.mimeType,
+      size: img.size,
+      createdAt: img.createdAt.toISOString(),
+    }));
+  }
   if ("spawnedFrom" in task) {
     base.spawnedFromTask = task.spawnedFrom
       ? {

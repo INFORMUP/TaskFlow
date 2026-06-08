@@ -247,6 +247,7 @@ model Task {
   blockedBy            TaskDependency[] @relation("TaskDependencyBlocked")
   blocks               TaskDependency[] @relation("TaskDependencyBlocking")
   requirements         Requirement[]
+  images               Image[]          @relation("TaskImages")
 
   @@index([flowId, currentStatusId])
   @@index([assigneeId])
@@ -531,8 +532,9 @@ model Comment {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  task   Task @relation(fields: [taskId], references: [id])
-  author User @relation(fields: [authorId], references: [id])
+  task   Task    @relation(fields: [taskId], references: [id])
+  author User    @relation(fields: [authorId], references: [id])
+  images Image[] @relation("CommentImages")
 
   @@index([taskId, createdAt])
   @@map("comments")
@@ -662,6 +664,8 @@ model SignoffPolicySlot {
 model Image {
   id              String   @id @default(uuid()) @db.Uuid
   requirementId   String?  @map("requirement_id") @db.Uuid
+  taskId          String?  @map("task_id") @db.Uuid
+  commentId       String?  @map("comment_id") @db.Uuid
   filename        String
   mimeType        String   @map("mime_type")
   size            Int
@@ -671,8 +675,12 @@ model Image {
 
   uploader    User         @relation("ImageUploadedBy", fields: [uploadedBy], references: [id])
   requirement Requirement? @relation("RequirementImages", fields: [requirementId], references: [id], onDelete: Cascade)
+  task        Task?        @relation("TaskImages", fields: [taskId], references: [id], onDelete: Cascade)
+  comment     Comment?     @relation("CommentImages", fields: [commentId], references: [id], onDelete: Cascade)
 
   @@index([requirementId])
+  @@index([taskId])
+  @@index([commentId])
   @@map("images")
 }
 

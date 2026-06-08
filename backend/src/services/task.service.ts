@@ -258,6 +258,11 @@ export const taskInclude = {
 
 export const taskDetailInclude = {
   ...taskInclude,
+  images: {
+    where: { taskId: { not: null } },
+    select: { id: true, filename: true, mimeType: true, size: true, createdAt: true },
+    orderBy: { createdAt: "asc" as const },
+  },
   spawnedFrom: {
     select: {
       id: true,
