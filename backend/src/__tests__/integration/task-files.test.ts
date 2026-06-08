@@ -121,7 +121,7 @@ describe("task file attachments API", () => {
       expect(response.statusCode).toBe(404);
     });
 
-    it("returns 400 when no file is provided", async () => {
+    it("returns 4xx when no file is provided", async () => {
       const app = await buildApp();
       const task = await createTask(app, engineerToken);
 
@@ -132,7 +132,8 @@ describe("task file attachments API", () => {
         payload: {},
       });
 
-      expect(response.statusCode).toBe(400);
+      // multipart plugin rejects non-multipart requests with 406 before the handler runs
+      expect(response.statusCode).toBe(406);
     });
   });
 
