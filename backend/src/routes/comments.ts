@@ -28,6 +28,32 @@ const CommentParams = Type.Object({
   commentId: Type.String({ format: "uuid" }),
 });
 
+const commentImageInclude = {
+  commentImages: {
+    orderBy: { image: { createdAt: "asc" as const } },
+    include: {
+      image: { select: { id: true, filename: true, mimeType: true, size: true, createdAt: true } },
+    },
+  },
+} as const;
+
+function formatComment(c: any) {
+  return {
+    id: c.id,
+    body: c.body,
+    author: c.author,
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+    images: (c.commentImages ?? []).map((ci: any) => ({
+      id: ci.image.id,
+      filename: ci.image.filename,
+      mimeType: ci.image.mimeType,
+      size: ci.image.size,
+      createdAt: ci.image.createdAt.toISOString(),
+    })),
+  };
+}
+
 export async function commentRoutes(fastify: FastifyInstance) {
   fastify.post<{ Params: { id: string }; Body: Static<typeof CreateCommentBody> }>(
     "/api/v1/tasks/:id/comments",
@@ -72,16 +98,11 @@ export async function commentRoutes(fastify: FastifyInstance) {
         },
         include: {
           author: { select: { id: true, displayName: true, actorType: true } },
+          ...commentImageInclude,
         },
       });
 
-      return reply.status(201).send({
-        id: comment.id,
-        body: comment.body,
-        author: comment.author,
-        createdAt: comment.createdAt.toISOString(),
-        updatedAt: comment.updatedAt.toISOString(),
-      });
+      return reply.status(201).send(formatComment(comment));
     }
   );
 
@@ -120,19 +141,12 @@ export async function commentRoutes(fastify: FastifyInstance) {
         where: { taskId: id, isDeleted: false },
         include: {
           author: { select: { id: true, displayName: true, actorType: true } },
+          ...commentImageInclude,
         },
         orderBy: { createdAt: "asc" },
       });
 
-      return {
-        data: comments.map((c) => ({
-          id: c.id,
-          body: c.body,
-          author: c.author,
-          createdAt: c.createdAt.toISOString(),
-          updatedAt: c.updatedAt.toISOString(),
-        })),
-      };
+      return { data: comments.map(formatComment) };
     }
   );
 
@@ -174,16 +188,11 @@ export async function commentRoutes(fastify: FastifyInstance) {
         data: { body: body ?? comment.body },
         include: {
           author: { select: { id: true, displayName: true, actorType: true } },
+          ...commentImageInclude,
         },
       });
 
-      return {
-        id: updated.id,
-        body: updated.body,
-        author: updated.author,
-        createdAt: updated.createdAt.toISOString(),
-        updatedAt: updated.updatedAt.toISOString(),
-      };
+      return formatComment(updated);
     }
   );
 

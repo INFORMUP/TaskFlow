@@ -727,6 +727,7 @@ function formatTask(task: any, rollup?: ChildRollup) {
     resolution: task.resolution,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
     isDeleted: task.isDeleted,
+    defaultSignoffPolicyId: task.defaultSignoffPolicyId ?? null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     flow: { id: task.flow.id, slug: task.flow.slug, name: task.flow.name, icon: task.flow.icon ?? null },
@@ -748,6 +749,15 @@ function formatTask(task: any, rollup?: ChildRollup) {
   };
 
   // Detail-only fields, present only when taskDetailInclude was used.
+  if ("taskImages" in task) {
+    base.images = (task.taskImages ?? []).map((ti: any) => ({
+      id: ti.image.id,
+      filename: ti.image.filename,
+      mimeType: ti.image.mimeType,
+      size: ti.image.size,
+      createdAt: ti.image.createdAt.toISOString(),
+    }));
+  }
   if ("spawnedFrom" in task) {
     base.spawnedFromTask = task.spawnedFrom
       ? {

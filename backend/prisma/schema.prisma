@@ -247,6 +247,7 @@ model Task {
   blockedBy            TaskDependency[] @relation("TaskDependencyBlocked")
   blocks               TaskDependency[] @relation("TaskDependencyBlocking")
   requirements         Requirement[]
+  taskImages           TaskImage[]
 
   @@index([flowId, currentStatusId])
   @@index([assigneeId])
@@ -531,8 +532,9 @@ model Comment {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
-  task   Task @relation(fields: [taskId], references: [id])
-  author User @relation(fields: [authorId], references: [id])
+  task         Task          @relation(fields: [taskId], references: [id])
+  author       User          @relation(fields: [authorId], references: [id])
+  commentImages CommentImage[]
 
   @@index([taskId, createdAt])
   @@map("comments")
@@ -597,9 +599,9 @@ model Requirement {
   task     Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
   parent   Requirement?  @relation("RequirementChildren", fields: [parentId], references: [id])
   children Requirement[] @relation("RequirementChildren")
-  creator  User          @relation("RequirementCreatedBy", fields: [createdBy], references: [id])
-  slots    SignoffSlot[]
-  images   Image[]       @relation("RequirementImages")
+  creator           User               @relation("RequirementCreatedBy", fields: [createdBy], references: [id])
+  slots             SignoffSlot[]
+  requirementImages RequirementImage[]
 
   @@index([taskId])
   @@index([taskId, parentId])
@@ -660,20 +662,53 @@ model SignoffPolicySlot {
 }
 
 model Image {
-  id              String   @id @default(uuid()) @db.Uuid
-  requirementId   String?  @map("requirement_id") @db.Uuid
-  filename        String
-  mimeType        String   @map("mime_type")
-  size            Int
-  data            Bytes    @db.ByteA
-  uploadedBy      String   @map("uploaded_by") @db.Uuid
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  id         String   @id @default(uuid()) @db.Uuid
+  filename   String
+  mimeType   String   @map("mime_type")
+  size       Int
+  data       Bytes    @db.ByteA
+  uploadedBy String   @map("uploaded_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
-  uploader    User         @relation("ImageUploadedBy", fields: [uploadedBy], references: [id])
-  requirement Requirement? @relation("RequirementImages", fields: [requirementId], references: [id], onDelete: Cascade)
+  uploader          User               @relation("ImageUploadedBy", fields: [uploadedBy], references: [id])
+  taskImages        TaskImage[]
+  commentImages     CommentImage[]
+  requirementImages RequirementImage[]
 
-  @@index([requirementId])
   @@map("images")
+}
+
+model TaskImage {
+  taskId  String @map("task_id") @db.Uuid
+  imageId String @map("image_id") @db.Uuid
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  image Image @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, imageId])
+  @@map("task_images")
+}
+
+model CommentImage {
+  commentId String @map("comment_id") @db.Uuid
+  imageId   String @map("image_id") @db.Uuid
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  image   Image   @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, imageId])
+  @@map("comment_images")
+}
+
+model RequirementImage {
+  requirementId String @map("requirement_id") @db.Uuid
+  imageId       String @map("image_id") @db.Uuid
+
+  requirement Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  image       Image       @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@id([requirementId, imageId])
+  @@map("requirement_images")
 }
 
 model Attestation {

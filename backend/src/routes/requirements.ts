@@ -127,9 +127,11 @@ async function loadRequirements(taskId: string) {
         orderBy: { ordinal: "asc" },
         include: { attestations: { orderBy: { createdAt: "asc" } } },
       },
-      images: {
-        orderBy: { createdAt: "asc" },
-        select: { id: true, filename: true, mimeType: true, size: true, createdAt: true },
+      requirementImages: {
+        orderBy: { image: { createdAt: "asc" } },
+        include: {
+          image: { select: { id: true, filename: true, mimeType: true, size: true, createdAt: true } },
+        },
       },
     },
   });
@@ -184,7 +186,14 @@ function buildRequirementResponse(req: Awaited<ReturnType<typeof loadRequirement
       }))
     )
   );
-  return { ...req, quorum };
+  const images = req.requirementImages.map((ri) => ({
+    id: ri.image.id,
+    filename: ri.image.filename,
+    mimeType: ri.image.mimeType,
+    size: ri.image.size,
+    createdAt: ri.image.createdAt.toISOString(),
+  }));
+  return { ...req, quorum, images };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
