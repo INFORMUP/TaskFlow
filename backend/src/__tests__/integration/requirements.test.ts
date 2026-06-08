@@ -435,61 +435,6 @@ describe("requirements API", () => {
       expect(res.statusCode).toBe(403);
       expect(res.json().error.code).toBe("INSUFFICIENT_SCOPE");
     });
-
-    it("evidenceImageId: attesting with a valid image ID stores the reference", async () => {
-      const app = await buildApp();
-      const task = await createTask(app, engineerToken);
-      const req = (await createRequirement(app, engineerToken, task.id)).json();
-      const slot = (await addSlot(app, engineerToken, task.id, req.id)).json();
-
-      // Upload an image to the requirement via raw multipart
-      const boundary = "----TestBoundary";
-      const body = [
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="file"; filename="screenshot.png"',
-        "Content-Type: image/png",
-        "",
-        "fake-png-data",
-        `--${boundary}--`,
-      ].join("\r\n");
-      const uploadRes = await app.inject({
-        method: "POST",
-        url: `/api/v1/tasks/${task.id}/requirements/${req.id}/images`,
-        headers: {
-          authorization: `Bearer ${engineerToken}`,
-          "content-type": `multipart/form-data; boundary=${boundary}`,
-        },
-        payload: body,
-      });
-      expect(uploadRes.statusCode).toBe(201);
-      const imageId = uploadRes.json().id;
-
-      // Attest with evidenceImageId
-      const attestRes = await app.inject({
-        method: "POST",
-        url: `/api/v1/tasks/${task.id}/requirements/${req.id}/slots/${slot.id}/attestations`,
-        headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { verdict: "met", evidenceImageId: imageId },
-      });
-      expect(attestRes.statusCode).toBe(201);
-      expect(attestRes.json().evidenceImageId).toBe(imageId);
-    });
-
-    it("evidenceImageId: unknown image ID returns 404", async () => {
-      const app = await buildApp();
-      const task = await createTask(app, engineerToken);
-      const req = (await createRequirement(app, engineerToken, task.id)).json();
-      const slot = (await addSlot(app, engineerToken, task.id, req.id)).json();
-
-      const res = await app.inject({
-        method: "POST",
-        url: `/api/v1/tasks/${task.id}/requirements/${req.id}/slots/${slot.id}/attestations`,
-        headers: { authorization: `Bearer ${engineerToken}` },
-        payload: { verdict: "met", evidenceImageId: "00000000-0000-0000-0000-000000000099" },
-      });
-      expect(res.statusCode).toBe(404);
-      expect(res.json().error.code).toBe("NOT_FOUND");
-    });
   });
 
   // ── Quorum computation ───────────────────────────────────────────────────────

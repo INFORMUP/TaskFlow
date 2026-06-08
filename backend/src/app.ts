@@ -32,6 +32,7 @@ import { githubWebhookRoutes } from "./routes/webhooks-github.js";
 import { requirementRoutes } from "./routes/requirements.js";
 import { signoffPolicyRoutes } from "./routes/signoff-policies.js";
 import { imageRoutes } from "./routes/images.js";
+import { taskAttachmentRoutes } from "./routes/task-attachments.js";
 import { config } from "./config.js";
 import "./types/index.js";
 
@@ -95,6 +96,7 @@ export function createApp() {
   app.register(requirementRoutes);
   app.register(signoffPolicyRoutes);
   app.register(imageRoutes);
+  app.register(taskAttachmentRoutes);
 
   return app;
 }

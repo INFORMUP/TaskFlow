@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import type { ImageMeta } from "./attachments.api";
 
 export interface TaskProjectChip {
   id: string;
@@ -44,6 +45,7 @@ export interface Task {
   blockerCount?: number;
   openBlockerCount?: number;
   defaultSignoffPolicyId?: string | null;
+  images?: ImageMeta[];
   createdAt: string;
   updatedAt: string;
 }

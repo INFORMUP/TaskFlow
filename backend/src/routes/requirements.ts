@@ -28,7 +28,6 @@ const AttestationShape = Type.Object(
     actorType: Type.String(),
     verdict: Type.String(),
     evidence: Type.Union([Type.String(), Type.Null()]),
-    evidenceImageId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
     createdAt: Type.String({ format: "date-time" }),
   },
   { additionalProperties: true }
@@ -128,9 +127,11 @@ async function loadRequirements(taskId: string) {
         orderBy: { ordinal: "asc" },
         include: { attestations: { orderBy: { createdAt: "asc" } } },
       },
-      images: {
-        orderBy: { createdAt: "asc" },
-        select: { id: true, filename: true, mimeType: true, size: true, createdAt: true },
+      requirementImages: {
+        orderBy: { image: { createdAt: "asc" } },
+        include: {
+          image: { select: { id: true, filename: true, mimeType: true, size: true, createdAt: true } },
+        },
       },
     },
   });
@@ -185,7 +186,14 @@ function buildRequirementResponse(req: Awaited<ReturnType<typeof loadRequirement
       }))
     )
   );
-  return { ...req, quorum };
+  const images = req.requirementImages.map((ri) => ({
+    id: ri.image.id,
+    filename: ri.image.filename,
+    mimeType: ri.image.mimeType,
+    size: ri.image.size,
+    createdAt: ri.image.createdAt.toISOString(),
+  }));
+  return { ...req, quorum, images };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -444,7 +452,6 @@ export async function requirementRoutes(fastify: FastifyInstance) {
         body: Type.Object({
           verdict: Type.String({ enum: ["met", "not_met"] }),
           evidence: Type.Optional(Type.String()),
-          evidenceImageId: Type.Optional(Type.Union([Type.String({ format: "uuid" }), Type.Null()])),
         }),
         response: { 201: AttestationShape, ...CommonErrorResponses },
       },
@@ -453,11 +460,7 @@ export async function requirementRoutes(fastify: FastifyInstance) {
       if (!enforceScope(request, reply, "attestations:write")) return;
 
       const { sid } = request.params as { sid: string };
-      const { verdict, evidence, evidenceImageId } = request.body as {
-        verdict: string;
-        evidence?: string;
-        evidenceImageId?: string | null;
-      };
+      const { verdict, evidence } = request.body as { verdict: string; evidence?: string };
 
       const slot = await prisma.signoffSlot.findUnique({ where: { id: sid } });
       if (!slot) {
@@ -466,13 +469,6 @@ export async function requirementRoutes(fastify: FastifyInstance) {
 
       if (!enforceChannel(request as any, reply as any, slot)) return;
 
-      if (evidenceImageId) {
-        const image = await prisma.image.findUnique({ where: { id: evidenceImageId } });
-        if (!image) {
-          return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Evidence image not found" } });
-        }
-      }
-
       const attestation = await prisma.attestation.create({
         data: {
           slotId: sid,
@@ -480,7 +476,6 @@ export async function requirementRoutes(fastify: FastifyInstance) {
           actorType: request.user.actorType,
           verdict,
           evidence: evidence ?? null,
-          evidenceImageId: evidenceImageId ?? null,
         },
       });
       return reply.status(201).send(attestation);
