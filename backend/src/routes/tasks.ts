@@ -727,6 +727,7 @@ function formatTask(task: any, rollup?: ChildRollup) {
     resolution: task.resolution,
     dueDate: task.dueDate ? task.dueDate.toISOString() : null,
     isDeleted: task.isDeleted,
+    defaultSignoffPolicyId: task.defaultSignoffPolicyId ?? null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     flow: { id: task.flow.id, slug: task.flow.slug, name: task.flow.name, icon: task.flow.icon ?? null },
