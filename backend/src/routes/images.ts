@@ -27,6 +27,17 @@ const RequirementImageDeleteParams = Type.Object({
   imageId: Type.String({ format: "uuid" }),
 });
 
+async function deleteImageIfOrphaned(imageId: string) {
+  const [ti, ci, ri] = await Promise.all([
+    prisma.taskImage.count({ where: { imageId } }),
+    prisma.commentImage.count({ where: { imageId } }),
+    prisma.requirementImage.count({ where: { imageId } }),
+  ]);
+  if (ti + ci + ri === 0) {
+    await prisma.image.delete({ where: { id: imageId } });
+  }
+}
+
 export async function imageRoutes(fastify: FastifyInstance) {
   // POST /api/v1/tasks/:id/requirements/:rid/images
   fastify.post(
@@ -84,17 +95,17 @@ export async function imageRoutes(fastify: FastifyInstance) {
 
       const image = await prisma.image.create({
         data: {
-          requirementId: rid,
           filename: file.filename,
           mimeType,
           size: data.length,
           data,
           uploadedBy: request.user.id,
+          requirementImages: { create: { requirementId: rid } },
         },
         select: { id: true, filename: true, mimeType: true, size: true, createdAt: true },
       });
 
-      return reply.status(201).send(image);
+      return reply.status(201).send({ ...image, createdAt: image.createdAt.toISOString() });
     }
   );
 
@@ -146,16 +157,21 @@ export async function imageRoutes(fastify: FastifyInstance) {
 
       const { rid, imageId } = request.params as { id: string; rid: string; imageId: string };
 
-      const image = await prisma.image.findFirst({
-        where: { id: imageId, requirementId: rid },
-        select: { id: true },
+      const join = await prisma.requirementImage.findUnique({
+        where: { requirementId_imageId: { requirementId: rid, imageId } },
       });
-      if (!image) {
+      if (!join) {
         return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Image not found" } });
       }
 
-      await prisma.image.delete({ where: { id: imageId } });
+      await prisma.requirementImage.delete({
+        where: { requirementId_imageId: { requirementId: rid, imageId } },
+      });
+      await deleteImageIfOrphaned(imageId);
+
       return reply.status(204).send();
     }
   );
 }
+
+export { deleteImageIfOrphaned };

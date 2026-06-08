@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import type { ImageMeta } from "./attachments.api";
 
 export interface Comment {
   id: string;
@@ -6,6 +7,7 @@ export interface Comment {
   author: { id: string; displayName: string; actorType: string };
   createdAt: string;
   updatedAt: string;
+  images: ImageMeta[];
 }
 
 export function getComments(taskId: string): Promise<{ data: Comment[] }> {
