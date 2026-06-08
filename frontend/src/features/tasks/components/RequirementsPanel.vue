@@ -42,6 +42,14 @@ const newSlotActorType = ref<"" | "human" | "agent">("");
 const addingChildFor = ref<string | null>(null);
 const childStatement = ref("");
 
+// Pending attestation inline form
+const pendingAttestation = ref<{
+  reqId: string;
+  slotId: string;
+  verdict: "met" | "not_met";
+  comment: string;
+} | null>(null);
+
 watch(() => props.taskId, load, { immediate: true });
 
 function depthOf(number: string): number {
@@ -167,25 +175,27 @@ async function handleDeleteSlot(reqId: string, slot: SignoffSlot) {
   }
 }
 
-async function handleSignOff(reqId: string, slotId: string) {
-  busy.value = true;
-  try {
-    await createAttestation(props.taskId, reqId, slotId, { verdict: "met" });
-    await load();
-  } catch (e: any) {
-    error.value = e?.error?.message ?? "Failed to record sign-off";
-  } finally {
-    busy.value = false;
-  }
+function handleSignOff(reqId: string, slotId: string) {
+  pendingAttestation.value = { reqId, slotId, verdict: "met", comment: "" };
 }
 
-async function handleCancelSignOff(reqId: string, slotId: string) {
+function handleCancelSignOff(reqId: string, slotId: string) {
+  pendingAttestation.value = { reqId, slotId, verdict: "not_met", comment: "" };
+}
+
+async function submitAttestation() {
+  if (!pendingAttestation.value) return;
+  const { reqId, slotId, verdict, comment } = pendingAttestation.value;
   busy.value = true;
   try {
-    await createAttestation(props.taskId, reqId, slotId, { verdict: "not_met" });
+    await createAttestation(props.taskId, reqId, slotId, {
+      verdict,
+      comment: comment.trim() || undefined,
+    });
+    pendingAttestation.value = null;
     await load();
   } catch (e: any) {
-    error.value = e?.error?.message ?? "Failed to cancel sign-off";
+    error.value = e?.error?.message ?? "Failed to record attestation";
   } finally {
     busy.value = false;
   }
@@ -502,62 +512,121 @@ async function handleDeleteImage(reqId: string, imageId: string) {
               class="req-panel__slot"
               :data-testid="`slot-row-${slot.id}`"
             >
-              <span class="req-panel__slot-label">{{ slot.label }}</span>
+              <div class="req-panel__slot-main">
+                <span class="req-panel__slot-label">{{ slot.label }}</span>
 
-              <span
-                v-if="isAgentOnly(slot)"
-                class="req-panel__slot-badge req-panel__slot-badge--agent"
-                :data-testid="`agent-only-${slot.id}`"
-              >
-                agent only
-              </span>
-              <span
-                v-else-if="slot.requiredActorType === 'human'"
-                class="req-panel__slot-badge req-panel__slot-badge--human"
-              >
-                human
-              </span>
-
-              <span class="req-panel__slot-attestations">
                 <span
-                  v-if="slot.attestations.length > 0"
-                  class="req-panel__attestation"
-                  :class="isSignedOff(slot) ? 'att--met' : 'att--not-met'"
+                  v-if="isAgentOnly(slot)"
+                  class="req-panel__slot-badge req-panel__slot-badge--agent"
+                  :data-testid="`agent-only-${slot.id}`"
                 >
-                  {{ isSignedOff(slot) ? "✓" : "✗" }}
+                  agent only
                 </span>
-              </span>
+                <span
+                  v-else-if="slot.requiredActorType === 'human'"
+                  class="req-panel__slot-badge req-panel__slot-badge--human"
+                >
+                  human
+                </span>
 
-              <button
-                v-if="!isAgentOnly(slot) && !isSignedOff(slot)"
-                type="button"
-                class="req-panel__btn req-panel__btn--sm req-panel__btn--signoff"
-                :data-testid="`signoff-btn-${slot.id}`"
-                :disabled="busy"
-                @click="handleSignOff(req.id, slot.id)"
-              >
-                Sign off
-              </button>
-              <button
-                v-if="!isAgentOnly(slot) && isSignedOff(slot)"
-                type="button"
-                class="req-panel__btn req-panel__btn--sm req-panel__btn--cancel-signoff"
-                :data-testid="`cancel-signoff-btn-${slot.id}`"
-                :disabled="busy"
-                @click="handleCancelSignOff(req.id, slot.id)"
-              >
-                Cancel sign off
-              </button>
+                <span class="req-panel__slot-attestations">
+                  <span
+                    v-if="slot.attestations.length > 0"
+                    class="req-panel__attestation"
+                    :class="isSignedOff(slot) ? 'att--met' : 'att--not-met'"
+                    :title="slot.attestations.at(-1)?.comment ?? undefined"
+                    :data-testid="`attestation-status-${slot.id}`"
+                  >
+                    {{ isSignedOff(slot) ? "✓" : "✗" }}
+                  </span>
+                </span>
 
-              <button
-                type="button"
-                class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
-                :data-testid="`delete-slot-${slot.id}`"
-                :disabled="busy"
-                @click="handleDeleteSlot(req.id, slot)"
+                <template v-if="pendingAttestation?.slotId !== slot.id">
+                  <button
+                    v-if="!isAgentOnly(slot) && !isSignedOff(slot)"
+                    type="button"
+                    class="req-panel__btn req-panel__btn--sm req-panel__btn--signoff"
+                    :data-testid="`signoff-btn-${slot.id}`"
+                    :disabled="busy"
+                    @click="handleSignOff(req.id, slot.id)"
+                  >
+                    Sign off
+                  </button>
+                  <button
+                    v-if="!isAgentOnly(slot) && isSignedOff(slot)"
+                    type="button"
+                    class="req-panel__btn req-panel__btn--sm req-panel__btn--cancel-signoff"
+                    :data-testid="`cancel-signoff-btn-${slot.id}`"
+                    :disabled="busy"
+                    @click="handleCancelSignOff(req.id, slot.id)"
+                  >
+                    Cancel sign off
+                  </button>
+                </template>
+
+                <button
+                  type="button"
+                  class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
+                  :data-testid="`delete-slot-${slot.id}`"
+                  :disabled="busy"
+                  @click="handleDeleteSlot(req.id, slot)"
+                >
+                  ×
+                </button>
+              </div>
+
+              <!-- Inline attestation comment form -->
+              <div
+                v-if="pendingAttestation?.slotId === slot.id"
+                class="req-panel__attest-form"
+                :data-testid="`attest-form-${slot.id}`"
               >
-                ×
-              </button>
+                <textarea
+                  v-model="pendingAttestation.comment"
+                  class="req-panel__attest-comment"
+                  :data-testid="`attest-comment-${slot.id}`"
+                  rows="2"
+                  :placeholder="pendingAttestation.verdict === 'not_met'
+                    ? 'What still needs to be done? (optional)'
+                    : 'Add a note (optional)'"
+                  :disabled="busy"
+                />
+                <div class="req-panel__form-actions">
+                  <button
+                    type="button"
+                    :class="[
+                      'req-panel__btn',
+                      'req-panel__btn--sm',
+                      pendingAttestation.verdict === 'met'
+                        ? 'req-panel__btn--signoff'
+                        : 'req-panel__btn--cancel-signoff',
+                    ]"
+                    :data-testid="`attest-submit-${slot.id}`"
+                    :disabled="busy"
+                    @click="submitAttestation"
+                  >
+                    {{ pendingAttestation.verdict === "met" ? "Confirm sign off" : "Confirm cancel" }}
+                  </button>
+                  <button
+                    type="button"
+                    class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
+                    :data-testid="`attest-cancel-${slot.id}`"
+                    :disabled="busy"
+                    @click="pendingAttestation = null"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+
+              <!-- Attestation comment display -->
+              <p
+                v-if="slot.attestations.at(-1)?.comment"
+                class="req-panel__attest-note"
+                :data-testid="`attest-note-${slot.id}`"
+              >
+                {{ slot.attestations.at(-1)?.comment }}
+              </p>
             </li>
           </ul>
 
@@ -757,11 +826,42 @@ async function handleDeleteImage(reqId: string, imageId: string) {
 }
 
 .req-panel__slot {
+  padding: 0.25rem 0;
+}
+
+.req-panel__slot-main {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.25rem 0;
   flex-wrap: wrap;
+}
+
+.req-panel__attest-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  background: var(--color-bg-muted, #f8f8f8);
+  border-radius: 4px;
+}
+
+.req-panel__attest-comment {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 4px;
+  font-size: 0.82rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.req-panel__attest-note {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #666);
+  margin: 0.2rem 0 0;
+  font-style: italic;
 }
 
 .req-panel__slot-label {

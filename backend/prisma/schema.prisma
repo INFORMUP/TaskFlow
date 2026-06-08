@@ -746,6 +746,7 @@ model Attestation {
   actorType String   @map("actor_type")
   verdict   String
   evidence  String?  @db.Text
+  comment   String?  @db.Text
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
 
   slot  SignoffSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
