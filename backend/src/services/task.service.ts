@@ -264,6 +264,12 @@ export const taskDetailInclude = {
       image: { select: { id: true, filename: true, mimeType: true, size: true, createdAt: true } },
     },
   },
+  taskFiles: {
+    orderBy: { file: { createdAt: "asc" as const } },
+    include: {
+      file: { select: { id: true, filename: true, mimeType: true, size: true, createdAt: true } },
+    },
+  },
   spawnedFrom: {
     select: {
       id: true,

@@ -1,5 +1,6 @@
 import { apiFetch } from "./client";
 import type { ImageMeta } from "./attachments.api";
+import type { FileMeta } from "./files.api";
 
 export interface TaskProjectChip {
   id: string;
@@ -46,6 +47,7 @@ export interface Task {
   openBlockerCount?: number;
   defaultSignoffPolicyId?: string | null;
   images?: ImageMeta[];
+  files?: FileMeta[];
   createdAt: string;
   updatedAt: string;
 }

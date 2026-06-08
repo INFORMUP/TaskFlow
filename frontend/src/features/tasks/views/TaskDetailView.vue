@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getTask, updateTask, type Task } from "@/api/tasks.api";
 import {
@@ -20,8 +20,10 @@ import TaskPicker from "@/features/tasks/components/TaskPicker.vue";
 import LabelPicker from "@/features/labels/components/LabelPicker.vue";
 import RequirementsPanel from "@/features/tasks/components/RequirementsPanel.vue";
 import AttachmentStrip from "@/features/tasks/components/AttachmentStrip.vue";
+import FileStrip from "@/features/tasks/components/FileStrip.vue";
 import { attachLabelToTask, detachLabelFromTask } from "@/api/labels.api";
 import { uploadTaskAttachment, deleteTaskAttachment, uploadCommentAttachment, deleteCommentAttachment } from "@/api/attachments.api";
+import { uploadTaskFile, deleteTaskFile } from "@/api/files.api";
 
 const route = useRoute();
 const router = useRouter();
@@ -172,6 +174,28 @@ async function handleCommentAttachmentDelete(commentId: string, imageId: string)
   }
 }
 
+const fileBusy = ref(false);
+
+async function handleTaskFileUpload(file: File) {
+  fileBusy.value = true;
+  try {
+    await uploadTaskFile(taskId, file);
+    task.value = await getTask(taskId);
+  } finally {
+    fileBusy.value = false;
+  }
+}
+
+async function handleTaskFileDelete(fileId: string) {
+  fileBusy.value = true;
+  try {
+    await deleteTaskFile(taskId, fileId);
+    task.value = await getTask(taskId);
+  } finally {
+    fileBusy.value = false;
+  }
+}
+
 function openAssigneePicker() {
   assigneeError.value = "";
   showAssigneePicker.value = true;
@@ -231,6 +255,12 @@ function handleSpawnSubtask() {
 
 function goBack() {
   router.push(`/tasks/${route.params.flow}`);
+}
+
+const activeTab = computed(() => (route.query.tab as string) || "overview");
+
+function setTab(tab: string) {
+  router.replace({ query: { tab } });
 }
 
 onMounted(async () => {
@@ -322,26 +352,39 @@ onMounted(async () => {
       </div>
     </div>
 
-    <MarkdownView
-      v-if="task.description"
-      :source="task.description"
-      class="detail__description"
-    />
+    <nav class="detail__tabs" role="tablist">
+      <button
+        v-for="tab in ['overview', 'requirements', 'activity', 'work']"
+        :key="tab"
+        role="tab"
+        :aria-selected="activeTab === tab"
+        class="detail__tab"
+        :class="{ 'detail__tab--active': activeTab === tab }"
+        @click="setTab(tab)"
+      >{{ tab.charAt(0).toUpperCase() + tab.slice(1) }}</button>
+    </nav>
 
-    <!-- Task-level image attachments -->
-    <AttachmentStrip
-      :images="task.images ?? []"
-      :busy="attachmentBusy"
-      @upload="handleTaskAttachmentUpload"
-      @delete="handleTaskAttachmentDelete"
-    />
-
-    <!-- Requirements & sign-off panel -->
-    <div class="detail__section">
-      <RequirementsPanel :task-id="taskId" />
-    </div>
-
-    <div class="detail__meta">
+    <!-- Overview tab -->
+    <div v-show="activeTab === 'overview'">
+      <MarkdownView
+        v-if="task.description"
+        :source="task.description"
+        class="detail__description"
+      />
+      <AttachmentStrip
+        :images="task.images ?? []"
+        :busy="attachmentBusy"
+        @upload="handleTaskAttachmentUpload"
+        @delete="handleTaskAttachmentDelete"
+      />
+      <FileStrip
+        :task-id="taskId"
+        :files="task.files ?? []"
+        :busy="fileBusy"
+        @upload="handleTaskFileUpload"
+        @delete="handleTaskFileDelete"
+      />
+      <div class="detail__meta">
       <div>Created by: <ActorLabel :actor="task.creator" /></div>
       <div class="detail__assignee-wrap">
         <span>Assigned to:</span>
@@ -383,6 +426,15 @@ onMounted(async () => {
         />
       </div>
     </div>
+    </div><!-- end overview tab -->
+
+    <!-- Requirements tab -->
+    <div v-show="activeTab === 'requirements'" class="detail__tab-body">
+      <RequirementsPanel :task-id="taskId" />
+    </div>
+
+    <!-- Activity tab -->
+    <div v-show="activeTab === 'activity'">
 
     <!-- Transition form -->
     <div class="detail__section" v-if="task.currentStatus.slug !== 'closed'">
@@ -453,23 +505,6 @@ onMounted(async () => {
       </button>
     </div>
 
-    <!-- Linked commits and pull requests -->
-    <div class="detail__section">
-      <TaskCodeLinksSection :task-id="task.id" />
-    </div>
-
-    <!-- Blockers / blocked-by relationships -->
-    <div class="detail__section">
-      <TaskBlockersSection :task-id="task.id" @changed="loadAll" />
-      <router-link
-        class="detail__graph-link"
-        :to="`/tasks/${task.flow.slug}/${task.id}/dependencies`"
-        data-testid="task-dependencies-link"
-      >
-        Open dependencies view →
-      </router-link>
-    </div>
-
     <!-- Transition history -->
     <div class="detail__section">
       <h3>History</h3>
@@ -492,19 +527,6 @@ onMounted(async () => {
           <div class="timeline__note">{{ t.note }}</div>
         </div>
       </div>
-    </div>
-
-    <!-- Follow-ups (tasks spawned from this one) -->
-    <div v-if="task.spawnedTasks && task.spawnedTasks.length" class="detail__section">
-      <h3>Follow-ups</h3>
-      <ul class="detail__followups">
-        <li v-for="f in task.spawnedTasks" :key="f.id">
-          <router-link :to="`/tasks/${f.flow.slug}/${f.id}`">
-            {{ f.displayId }} — {{ f.title }}
-          </router-link>
-          <span class="detail__followup-status">{{ f.currentStatus.name }}</span>
-        </li>
-      </ul>
     </div>
 
     <!-- Comments -->
@@ -552,6 +574,40 @@ onMounted(async () => {
         </button>
       </div>
     </div>
+    </div><!-- end activity tab -->
+
+    <!-- Work tab -->
+    <div v-show="activeTab === 'work'">
+      <!-- Linked commits and pull requests -->
+      <div class="detail__section">
+        <TaskCodeLinksSection :task-id="task.id" />
+      </div>
+
+      <!-- Blockers / blocked-by relationships -->
+      <div class="detail__section">
+        <TaskBlockersSection :task-id="task.id" @changed="loadAll" />
+        <router-link
+          class="detail__graph-link"
+          :to="`/tasks/${task.flow.slug}/${task.id}/dependencies`"
+          data-testid="task-dependencies-link"
+        >
+          Open dependencies view →
+        </router-link>
+      </div>
+
+      <!-- Follow-ups (tasks spawned from this one) -->
+      <div v-if="task.spawnedTasks && task.spawnedTasks.length" class="detail__section">
+        <h3>Follow-ups</h3>
+        <ul class="detail__followups">
+          <li v-for="f in task.spawnedTasks" :key="f.id">
+            <router-link :to="`/tasks/${f.flow.slug}/${f.id}`">
+              {{ f.displayId }} — {{ f.title }}
+            </router-link>
+            <span class="detail__followup-status">{{ f.currentStatus.name }}</span>
+          </li>
+        </ul>
+      </div>
+    </div><!-- end work tab -->
   </div>
 </template>
 
@@ -744,6 +800,41 @@ onMounted(async () => {
   top: 100%;
   left: 0;
   margin-top: 0.25rem;
+}
+
+.detail__tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border-primary);
+  margin-top: 1.25rem;
+  margin-bottom: 0;
+}
+
+.detail__tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.detail__tab:hover {
+  color: var(--text-primary);
+}
+
+.detail__tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.detail__tab-body {
+  margin-top: 1.5rem;
 }
 
 .detail__section {
