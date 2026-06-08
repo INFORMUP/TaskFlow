@@ -20,8 +20,10 @@ import TaskPicker from "@/features/tasks/components/TaskPicker.vue";
 import LabelPicker from "@/features/labels/components/LabelPicker.vue";
 import RequirementsPanel from "@/features/tasks/components/RequirementsPanel.vue";
 import AttachmentStrip from "@/features/tasks/components/AttachmentStrip.vue";
+import FileStrip from "@/features/tasks/components/FileStrip.vue";
 import { attachLabelToTask, detachLabelFromTask } from "@/api/labels.api";
 import { uploadTaskAttachment, deleteTaskAttachment, uploadCommentAttachment, deleteCommentAttachment } from "@/api/attachments.api";
+import { uploadTaskFile, deleteTaskFile } from "@/api/files.api";
 
 const route = useRoute();
 const router = useRouter();
@@ -169,6 +171,28 @@ async function handleCommentAttachmentDelete(commentId: string, imageId: string)
     comments.value = c.data;
   } finally {
     attachmentBusy.value = false;
+  }
+}
+
+const fileBusy = ref(false);
+
+async function handleTaskFileUpload(file: File) {
+  fileBusy.value = true;
+  try {
+    await uploadTaskFile(taskId, file);
+    task.value = await getTask(taskId);
+  } finally {
+    fileBusy.value = false;
+  }
+}
+
+async function handleTaskFileDelete(fileId: string) {
+  fileBusy.value = true;
+  try {
+    await deleteTaskFile(taskId, fileId);
+    task.value = await getTask(taskId);
+  } finally {
+    fileBusy.value = false;
   }
 }
 
@@ -352,6 +376,13 @@ onMounted(async () => {
         :busy="attachmentBusy"
         @upload="handleTaskAttachmentUpload"
         @delete="handleTaskAttachmentDelete"
+      />
+      <FileStrip
+        :task-id="taskId"
+        :files="task.files ?? []"
+        :busy="fileBusy"
+        @upload="handleTaskFileUpload"
+        @delete="handleTaskFileDelete"
       />
       <div class="detail__meta">
       <div>Created by: <ActorLabel :actor="task.creator" /></div>

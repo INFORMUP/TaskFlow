@@ -758,6 +758,15 @@ function formatTask(task: any, rollup?: ChildRollup) {
       createdAt: ti.image.createdAt.toISOString(),
     }));
   }
+  if ("taskFiles" in task) {
+    base.files = (task.taskFiles ?? []).map((tf: any) => ({
+      id: tf.file.id,
+      filename: tf.file.filename,
+      mimeType: tf.file.mimeType,
+      size: tf.file.size,
+      createdAt: tf.file.createdAt.toISOString(),
+    }));
+  }
   if ("spawnedFrom" in task) {
     base.spawnedFromTask = task.spawnedFrom
       ? {
