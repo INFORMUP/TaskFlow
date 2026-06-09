@@ -28,6 +28,7 @@ const AttestationShape = Type.Object(
     actorType: Type.String(),
     verdict: Type.String(),
     evidence: Type.Union([Type.String(), Type.Null()]),
+    comment: Type.Union([Type.String(), Type.Null()]),
     createdAt: Type.String({ format: "date-time" }),
   },
   { additionalProperties: true }
@@ -452,6 +453,7 @@ export async function requirementRoutes(fastify: FastifyInstance) {
         body: Type.Object({
           verdict: Type.String({ enum: ["met", "not_met"] }),
           evidence: Type.Optional(Type.String()),
+          comment: Type.Optional(Type.String()),
         }),
         response: { 201: AttestationShape, ...CommonErrorResponses },
       },
@@ -460,7 +462,7 @@ export async function requirementRoutes(fastify: FastifyInstance) {
       if (!enforceScope(request, reply, "attestations:write")) return;
 
       const { sid } = request.params as { sid: string };
-      const { verdict, evidence } = request.body as { verdict: string; evidence?: string };
+      const { verdict, evidence, comment } = request.body as { verdict: string; evidence?: string; comment?: string };
 
       const slot = await prisma.signoffSlot.findUnique({ where: { id: sid } });
       if (!slot) {
@@ -476,6 +478,7 @@ export async function requirementRoutes(fastify: FastifyInstance) {
           actorType: request.user.actorType,
           verdict,
           evidence: evidence ?? null,
+          comment: comment ?? null,
         },
       });
       return reply.status(201).send(attestation);

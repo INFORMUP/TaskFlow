@@ -6,6 +6,7 @@ export interface Attestation {
   actorType: string;
   verdict: string;
   evidence: string | null;
+  comment: string | null;
   createdAt: string;
 }
 
@@ -128,7 +129,7 @@ export function createAttestation(
   taskId: string,
   rid: string,
   sid: string,
-  body: { verdict: "met" | "not_met"; evidence?: string }
+  body: { verdict: "met" | "not_met"; evidence?: string; comment?: string }
 ): Promise<Attestation> {
   return apiFetch(`/api/v1/tasks/${taskId}/requirements/${rid}/slots/${sid}/attestations`, {
     method: "POST",
