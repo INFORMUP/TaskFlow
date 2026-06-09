@@ -403,6 +403,87 @@ describe("RequirementsPanel", () => {
     expect(wrapper.find("[data-testid='attest-thread-slot-3']").text()).toContain("AL");
   });
 
+  // ── "Not met" button for pending slots ───────────────────────────────────────
+
+  it("shows not-met button for a pending human slot", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='not-met-btn-slot-1']").exists()).toBe(true);
+  });
+
+  it("does not show not-met button for an agent-only slot", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='not-met-btn-slot-2']").exists()).toBe(false);
+  });
+
+  it("does not show not-met button when slot is already met (cancel sign-off shown instead)", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='not-met-btn-slot-3']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='cancel-signoff-btn-slot-3']").exists()).toBe(true);
+  });
+
+  it("does not show not-met button when slot is already not_met", async () => {
+    const notMetSlot = {
+      ...SLOT_HUMAN,
+      attestations: [
+        {
+          id: "att-nm",
+          actorId: "user-1",
+          actorType: "human",
+          verdict: "not_met",
+          evidence: null,
+          comment: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    getRequirements.mockResolvedValueOnce([{ ...REQ_A, slots: [notMetSlot] }]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='not-met-btn-slot-1']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='signoff-btn-slot-1']").exists()).toBe(true);
+  });
+
+  it("shows attestation form with not_met placeholder on not-met click", async () => {
+    getRequirements.mockResolvedValue([REQ_A]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='not-met-btn-slot-1']").trigger("click");
+
+    expect(wrapper.find("[data-testid='attest-form-slot-1']").exists()).toBe(true);
+    const placeholder = wrapper.find("[data-testid='attest-comment-slot-1']").attributes("placeholder");
+    expect(placeholder).toContain("still needs to be done");
+  });
+
+  it("calls createAttestation with not_met verdict on not-met confirm", async () => {
+    getRequirements.mockResolvedValue([REQ_A]);
+    createAttestation.mockResolvedValue({
+      id: "att-nm",
+      actorId: "u1",
+      actorType: "human",
+      verdict: "not_met",
+      evidence: null,
+      comment: null,
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='not-met-btn-slot-1']").trigger("click");
+    await wrapper.get("[data-testid='attest-submit-slot-1']").trigger("click");
+    await flushPromises();
+
+    expect(createAttestation).toHaveBeenCalledWith("task-1", "req-a", "slot-1", { verdict: "not_met" });
+  });
+
   // ── State-forward styling ─────────────────────────────────────────────────────
 
   it("marks a signed-off slot row with the met state class", async () => {
