@@ -125,6 +125,21 @@ export async function getImageBlobUrl(imageId: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
+export async function uploadAttestationEvidenceImage(
+  taskId: string,
+  rid: string,
+  sid: string,
+  file: File
+): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const result = await apiFetch<{ imageId: string }>(
+    `/api/v1/tasks/${taskId}/requirements/${rid}/slots/${sid}/attestations/evidence-image`,
+    { method: "POST", body: form }
+  );
+  return result.imageId;
+}
+
 export function createAttestation(
   taskId: string,
   rid: string,
