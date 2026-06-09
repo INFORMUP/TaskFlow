@@ -16,6 +16,9 @@ vi.mock("@/api/flows.api", () => ({
   listFlows: (...a: unknown[]) => listFlows(...a),
   listFlowStatuses: (...a: unknown[]) => listFlowStatuses(...a),
 }));
+vi.mock("../components/FilterBar.vue", () => ({
+  default: { template: "<div />" },
+}));
 
 const HUMAN = { id: "u-1", displayName: "Alice", actorType: "human" };
 
@@ -33,6 +36,7 @@ function task(overrides: Partial<Task> = {}): Task {
     creator: HUMAN,
     assignee: HUMAN,
     projects: [],
+    labels: [],
     createdAt: "2026-04-10T10:00:00.000Z",
     updatedAt: "2026-04-10T10:00:00.000Z",
     ...overrides,
@@ -242,9 +246,10 @@ describe("MyWorkView", () => {
       pagination: { cursor: null, hasMore: false },
     });
 
-    const { wrapper } = await mountView();
+    const { wrapper, router } = await mountView();
 
-    await wrapper.find("[data-testid='my-work-filter-project']").setValue("p-a");
+    await router.push({ query: { projectId: "p-a" } });
+    await flushPromises();
 
     expect(wrapper.find("[data-testid='my-work-card-FEAT-100']").exists()).toBe(true);
     expect(wrapper.find("[data-testid='my-work-card-FEAT-200']").exists()).toBe(false);
@@ -252,6 +257,82 @@ describe("MyWorkView", () => {
 
     // Up next still surfaces the overdue task in Project B.
     expect(wrapper.find("[data-testid='my-work-up-next-FEAT-300']").exists()).toBe(true);
+  });
+
+  it("q filter narrows status groups but does not affect Up next", async () => {
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    getTasks.mockResolvedValue({
+      data: [
+        task({ id: "t-login", displayId: "FEAT-401", title: "Fix the login bug" }),
+        task({ id: "t-dark", displayId: "FEAT-402", title: "Add dark mode" }),
+        task({ id: "t-overdue", displayId: "FEAT-403", title: "Overdue task", dueDate: yesterday }),
+      ],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper, router } = await mountView();
+
+    await router.push({ query: { q: "login" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='my-work-card-FEAT-401']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='my-work-card-FEAT-402']").exists()).toBe(false);
+    // Up next still surfaces the overdue task even though its title doesn't match q.
+    expect(wrapper.find("[data-testid='my-work-up-next-FEAT-403']").exists()).toBe(true);
+  });
+
+  it("priority filter narrows displayed tasks", async () => {
+    getTasks.mockResolvedValue({
+      data: [
+        task({ id: "t-crit", displayId: "FEAT-410", priority: "critical" }),
+        task({ id: "t-med", displayId: "FEAT-411", priority: "medium" }),
+      ],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper, router } = await mountView();
+
+    await router.push({ query: { priority: "critical" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='my-work-card-FEAT-410']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='my-work-card-FEAT-411']").exists()).toBe(false);
+  });
+
+  it("status filter narrows displayed tasks to those in the selected status", async () => {
+    getTasks.mockResolvedValue({
+      data: [
+        task({ id: "t-design", displayId: "FEAT-420", currentStatus: { id: "s-design", slug: "design", name: "Design" } }),
+        task({ id: "t-impl", displayId: "FEAT-421", currentStatus: { id: "s-implement", slug: "implement", name: "Implement" } }),
+      ],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper, router } = await mountView();
+
+    await router.push({ query: { status: "design" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='my-work-card-FEAT-420']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='my-work-card-FEAT-421']").exists()).toBe(false);
+  });
+
+  it("label filter narrows displayed tasks to those with the selected label", async () => {
+    getTasks.mockResolvedValue({
+      data: [
+        task({ id: "t-labeled", displayId: "FEAT-430", labels: [{ id: "l-1", name: "bug", color: "#ff0000" }] }),
+        task({ id: "t-unlabeled", displayId: "FEAT-431", labels: [] }),
+      ],
+      pagination: { cursor: null, hasMore: false },
+    });
+
+    const { wrapper, router } = await mountView();
+
+    await router.push({ query: { label: "l-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='my-work-card-FEAT-430']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='my-work-card-FEAT-431']").exists()).toBe(false);
   });
 
   it("clicking a card navigates to the task detail route", async () => {
