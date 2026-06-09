@@ -257,6 +257,72 @@ function goBack() {
   router.push(`/tasks/${route.params.flow}`);
 }
 
+// Title inline editing
+const editingTitle = ref(false);
+const titleDraft = ref("");
+const titleError = ref("");
+
+function startEditTitle() {
+  if (!task.value) return;
+  titleDraft.value = task.value.title;
+  titleError.value = "";
+  editingTitle.value = true;
+}
+
+function cancelEditTitle() {
+  editingTitle.value = false;
+  titleError.value = "";
+}
+
+async function saveTitle() {
+  if (!titleDraft.value.trim()) {
+    titleError.value = "Title cannot be blank";
+    return;
+  }
+  try {
+    const updated = await updateTask(taskId, { title: titleDraft.value.trim() });
+    task.value = updated;
+    editingTitle.value = false;
+    titleError.value = "";
+  } catch (e: any) {
+    titleError.value = e?.error?.message ?? "Failed to update title";
+  }
+}
+
+function handleTitleKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter") saveTitle();
+  if (e.key === "Escape") cancelEditTitle();
+}
+
+// Description editing
+const editingDescription = ref(false);
+const descriptionDraft = ref("");
+const descriptionError = ref("");
+
+function startEditDescription() {
+  if (!task.value) return;
+  descriptionDraft.value = task.value.description ?? "";
+  descriptionError.value = "";
+  editingDescription.value = true;
+}
+
+function cancelEditDescription() {
+  editingDescription.value = false;
+  descriptionError.value = "";
+}
+
+async function saveDescription() {
+  if (!task.value) return;
+  try {
+    const updated = await updateTask(taskId, { description: descriptionDraft.value });
+    task.value = updated;
+    editingDescription.value = false;
+    descriptionError.value = "";
+  } catch (e: any) {
+    descriptionError.value = e?.error?.message ?? "Failed to update description";
+  }
+}
+
 const activeTab = computed(() => (route.query.tab as string) || "overview");
 
 function setTab(tab: string) {
@@ -286,7 +352,31 @@ onMounted(async () => {
       </span>
     </div>
 
-    <h1 class="detail__title">{{ task.title }}</h1>
+    <div class="detail__title-row">
+      <h1 v-if="!editingTitle" class="detail__title">{{ task.title }}</h1>
+      <input
+        v-else
+        data-testid="detail-title-input"
+        v-model="titleDraft"
+        class="detail__title-input"
+        aria-label="Task title"
+        @keydown="handleTitleKeydown"
+      />
+      <button
+        v-if="!editingTitle"
+        type="button"
+        class="detail__link-btn detail__title-edit-btn"
+        data-testid="detail-title-edit-btn"
+        aria-label="Edit title"
+        @click="startEditTitle"
+      >Edit</button>
+      <div
+        v-if="titleError"
+        class="detail__error"
+        role="alert"
+        data-testid="detail-title-error"
+      >{{ titleError }}</div>
+    </div>
 
     <div v-if="task.projects.length > 0" class="detail__projects">
       <span
@@ -366,11 +456,58 @@ onMounted(async () => {
 
     <!-- Overview tab -->
     <div v-show="activeTab === 'overview'">
-      <MarkdownView
-        v-if="task.description"
-        :source="task.description"
-        class="detail__description"
-      />
+      <div class="detail__description-wrap">
+        <template v-if="!editingDescription">
+          <MarkdownView
+            v-if="task.description"
+            :source="task.description"
+            class="detail__description"
+          />
+          <button
+            v-if="task.description"
+            type="button"
+            class="detail__link-btn"
+            data-testid="detail-description-edit-btn"
+            @click="startEditDescription"
+          >Edit description</button>
+          <button
+            v-else
+            type="button"
+            class="detail__link-btn detail__description-add-btn"
+            data-testid="detail-description-add-btn"
+            @click="startEditDescription"
+          >Add description</button>
+        </template>
+        <template v-else>
+          <textarea
+            data-testid="detail-description-textarea"
+            v-model="descriptionDraft"
+            class="detail__textarea detail__description-textarea"
+            rows="8"
+            aria-label="Task description"
+          />
+          <small class="comment-form__hint">Markdown supported</small>
+          <div
+            v-if="descriptionError"
+            class="detail__error"
+            role="alert"
+          >{{ descriptionError }}</div>
+          <div class="detail__description-actions">
+            <button
+              type="button"
+              class="detail__btn"
+              data-testid="detail-description-save-btn"
+              @click="saveDescription"
+            >Save</button>
+            <button
+              type="button"
+              class="detail__link-btn"
+              data-testid="detail-description-cancel-btn"
+              @click="cancelEditDescription"
+            >Cancel</button>
+          </div>
+        </template>
+      </div>
       <AttachmentStrip
         :images="task.images ?? []"
         :busy="attachmentBusy"
@@ -658,14 +795,63 @@ onMounted(async () => {
 .priority--medium { color: var(--priority-medium); }
 .priority--low { color: var(--priority-low); }
 
+.detail__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
 .detail__title {
   font-size: 1.5rem;
-  margin-bottom: 0.5rem;
+  margin: 0;
+}
+
+.detail__title-edit-btn {
+  font-size: 0.8125rem;
+  flex-shrink: 0;
+}
+
+.detail__title-input {
+  flex: 1;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: inherit;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  padding: 0.125rem 0.375rem;
+  background: var(--bg-primary, #fff);
+  color: var(--text-primary);
+}
+
+.detail__title-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.detail__description-wrap {
+  margin-bottom: 1rem;
 }
 
 .detail__description {
   color: var(--text-primary);
-  margin-bottom: 1rem;
+  margin-bottom: 0.375rem;
+}
+
+.detail__description-add-btn {
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.detail__description-textarea {
+  margin-bottom: 0.25rem;
+}
+
+.detail__description-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
 }
 
 .detail__projects {
