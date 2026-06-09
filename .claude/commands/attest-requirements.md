@@ -48,7 +48,7 @@ Review a task's requirements and submit verdicts on any agent-designated signoff
      Body: file=<image binary>
      ```
    - The response returns `{ id, filename, mimeType, size, createdAt }`. Record the `id` to pass as `evidenceImageId`.
-   - If you have no image evidence, omit `evidenceImageId` — it is optional.
+   - If you have no image evidence, omit it — it is optional.
 
 6. **Submit attestations**
    - For each open agent slot, POST:
