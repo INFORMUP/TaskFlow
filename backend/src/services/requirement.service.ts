@@ -42,7 +42,7 @@ export function computeQuorum(slots: Slot[], attestations: AttestationInput[]): 
     const isSatisfied =
       latest !== undefined &&
       latest.verdict === "met" &&
-      (slot.requiredActorType == null || latest.actorType === slot.requiredActorType) &&
+      (slot.requiredActorType == null || slot.requiredActorType === "agent" || latest.actorType === slot.requiredActorType) &&
       (slot.requiredUserId == null || latest.actorId === slot.requiredUserId);
 
     if (isSatisfied) {
