@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import FileStrip from "./FileStrip.vue";
 import type { FileMeta } from "@/api/files.api";
+import * as filesApi from "@/api/files.api";
 
 vi.mock("@/api/files.api", () => ({
   downloadTaskFile: vi.fn().mockResolvedValue(undefined),
@@ -55,5 +56,12 @@ describe("FileStrip", () => {
     const wrapper = mount(FileStrip, { props: { taskId: "task-1", files: [file1], busy: true } });
     const btn = wrapper.find(".file-strip__delete");
     expect((btn.element as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("clicking the download button calls downloadTaskFile with the correct id and filename", async () => {
+    const spy = vi.spyOn(filesApi, "downloadTaskFile");
+    const wrapper = mount(FileStrip, { props: { taskId: "task-1", files: [file1] } });
+    await wrapper.find(".file-strip__download").trigger("click");
+    expect(spy).toHaveBeenCalledWith("f-1", "report.html");
   });
 });
