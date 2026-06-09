@@ -219,7 +219,7 @@ describe("task file attachments API", () => {
       const task = await createTask(app, engineerToken);
       const content = Buffer.from("<h1>Hi</h1>");
       const { body, boundary } = buildMultipartBody(
-        "Screenshot 2026-06-04 at 12.45.42 PM.png",
+        "Screenshot 2026-06-04 at 12.45.42\u202fPM.png", // \u202f = narrow no-break space
         "text/html",
         content
       );
