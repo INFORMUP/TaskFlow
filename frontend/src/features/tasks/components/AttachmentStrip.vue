@@ -1,4 +1,24 @@
 <template>
+  <teleport to="body">
+    <div
+      v-if="lightboxUrl"
+      class="attachment-lightbox-backdrop"
+      data-testid="lightbox-backdrop"
+      @click.self="closeLightbox"
+      @keydown.esc="closeLightbox"
+    >
+      <div class="attachment-lightbox">
+        <button
+          type="button"
+          class="attachment-lightbox__close"
+          data-testid="lightbox-close"
+          @click="closeLightbox"
+        >×</button>
+        <img :src="lightboxUrl" alt="Attachment" class="attachment-lightbox__img" />
+      </div>
+    </div>
+  </teleport>
+
   <div class="attachment-strip">
     <div v-if="images.length" class="attachment-strip__thumbs">
       <div
@@ -11,6 +31,7 @@
           :src="blobUrls[img.id]"
           :alt="img.filename"
           class="attachment-strip__thumb"
+          @click="openLightbox(img.id)"
         />
         <button
           type="button"
@@ -52,6 +73,16 @@ const emit = defineEmits<{
 }>();
 
 const blobUrls = ref<Record<string, string>>({});
+const lightboxUrl = ref<string | null>(null);
+
+function openLightbox(imageId: string) {
+  const url = blobUrls.value[imageId];
+  if (url) lightboxUrl.value = url;
+}
+
+function closeLightbox() {
+  lightboxUrl.value = null;
+}
 
 watch(
   () => props.images,
@@ -153,5 +184,55 @@ function handleFileChange(event: Event) {
 
 .attachment-strip__file-input {
   display: none;
+}
+
+.attachment-strip__thumb {
+  cursor: pointer;
+}
+
+.attachment-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.attachment-lightbox {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachment-lightbox__img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.5);
+}
+
+.attachment-lightbox__close {
+  position: absolute;
+  top: -0.75rem;
+  right: -0.75rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  color: #333;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 </style>
