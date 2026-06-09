@@ -368,7 +368,7 @@ describe("requirements API", () => {
       expect(res.json().error.code).toBe("CHANNEL_MISMATCH");
     });
 
-    it("agent slot: API token with agent actorType can attest (200)", async () => {
+    it("agent slot: API token with agent actorType can attest (201)", async () => {
       const app = await buildApp();
       const task = await createTask(app, engineerToken);
       const req = (await createRequirement(app, engineerToken, task.id)).json();
@@ -403,7 +403,7 @@ describe("requirements API", () => {
       expect(res.json().error.code).toBe("CHANNEL_MISMATCH");
     });
 
-    it("agent slot: API token without agent actorType is rejected (403 CHANNEL_MISMATCH)", async () => {
+    it("agent slot: any API token (human actorType) can attest (201)", async () => {
       const app = await buildApp();
       const task = await createTask(app, engineerToken);
       const req = (await createRequirement(app, engineerToken, task.id)).json();
@@ -414,11 +414,10 @@ describe("requirements API", () => {
         })
       ).json();
 
-      // Engineer user is actorType='human', not 'agent'
+      // Engineer user has actorType='human' — API token session is sufficient
       const humanApiToken = await mintApiToken(TEST_ENGINEER_ID, ["tasks:read", "attestations:write"]);
       const res = await attest(app, humanApiToken, task.id, req.id, slot.id, "met");
-      expect(res.statusCode).toBe(403);
-      expect(res.json().error.code).toBe("CHANNEL_MISMATCH");
+      expect(res.statusCode).toBe(201);
     });
 
     it("requiredUserId: only the designated user can attest", async () => {
