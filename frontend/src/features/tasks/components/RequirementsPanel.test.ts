@@ -26,6 +26,11 @@ vi.mock("@/api/requirements.api", () => ({
   getImageBlobUrl: (...a: unknown[]) => getImageBlobUrl(...a),
 }));
 
+const listOrgMembers = vi.fn();
+vi.mock("@/api/org-members.api", () => ({
+  listOrgMembers: (...a: unknown[]) => listOrgMembers(...a),
+}));
+
 const SLOT_HUMAN = {
   id: "slot-1",
   ordinal: 1,
@@ -138,7 +143,11 @@ beforeEach(() => {
   uploadRequirementImage.mockReset();
   deleteRequirementImage.mockReset();
   getImageBlobUrl.mockReset();
+  listOrgMembers.mockReset();
   getRequirements.mockResolvedValue([REQ_A, REQ_B]);
+  listOrgMembers.mockResolvedValue([
+    { id: "user-1", displayName: "Ada Lovelace", actorType: "human" },
+  ]);
 });
 
 describe("RequirementsPanel", () => {
@@ -314,31 +323,115 @@ describe("RequirementsPanel", () => {
     expect(createAttestation).toHaveBeenCalledWith("task-1", "req-a", "slot-1", { verdict: "met" });
   });
 
-  it("displays attestation comment below slot when present", async () => {
-    const slotWithComment = {
-      ...SLOT_ANY,
-      attestations: [
-        {
-          ...SLOT_ANY.attestations[0],
-          verdict: "not_met",
-          comment: "Missing test coverage",
-        },
-      ],
-    };
-    const reqWithComment = { ...REQ_B, slots: [slotWithComment] };
-    getRequirements.mockResolvedValueOnce([reqWithComment]);
+  // ── Comment surfacing (history-aware) ────────────────────────────────────────
 
+  const SLOT_WITH_HISTORY = {
+    id: "slot-3",
+    ordinal: 3,
+    label: "Anyone",
+    requiredActorType: null,
+    requiredUserId: null,
+    attestations: [
+      {
+        id: "att-1",
+        actorId: "user-1",
+        actorType: "human",
+        verdict: "not_met",
+        evidence: null,
+        comment: "Missing test coverage",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "att-2",
+        actorId: "user-1",
+        actorType: "human",
+        verdict: "met",
+        evidence: null,
+        comment: "Tests added, signing off",
+        createdAt: "2026-01-02T00:00:00.000Z",
+      },
+    ],
+  };
+
+  it("shows a comment-count chip with the number of commented attestations", async () => {
+    getRequirements.mockResolvedValueOnce([{ ...REQ_B, slots: [SLOT_WITH_HISTORY] }]);
     const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
     await flushPromises();
 
-    expect(wrapper.find("[data-testid='attest-note-slot-3']").text()).toBe("Missing test coverage");
+    const chip = wrapper.find("[data-testid='comment-count-slot-3']");
+    expect(chip.exists()).toBe(true);
+    expect(chip.text()).toContain("2");
   });
 
-  it("does not display comment element when attestation has no comment", async () => {
+  it("does not show a comment-count chip when no attestation has a comment", async () => {
     const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
     await flushPromises();
 
-    expect(wrapper.find("[data-testid='attest-note-slot-3']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='comment-count-slot-3']").exists()).toBe(false);
+  });
+
+  it("keeps the comment thread collapsed until the chip is clicked", async () => {
+    getRequirements.mockResolvedValueOnce([{ ...REQ_B, slots: [SLOT_WITH_HISTORY] }]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='attest-thread-slot-3']").exists()).toBe(false);
+
+    await wrapper.get("[data-testid='comment-count-slot-3']").trigger("click");
+    expect(wrapper.find("[data-testid='attest-thread-slot-3']").exists()).toBe(true);
+  });
+
+  it("renders every commented attestation in the thread, newest first", async () => {
+    getRequirements.mockResolvedValueOnce([{ ...REQ_B, slots: [SLOT_WITH_HISTORY] }]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='comment-count-slot-3']").trigger("click");
+    const entries = wrapper.findAll("[data-testid^='attest-entry-slot-3-']");
+    expect(entries).toHaveLength(2);
+    // newest first
+    expect(entries[0].text()).toContain("Tests added, signing off");
+    expect(entries[1].text()).toContain("Missing test coverage");
+  });
+
+  it("resolves the attester display name to initials in the thread", async () => {
+    getRequirements.mockResolvedValueOnce([{ ...REQ_B, slots: [SLOT_WITH_HISTORY] }]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='comment-count-slot-3']").trigger("click");
+    expect(wrapper.find("[data-testid='attest-thread-slot-3']").text()).toContain("AL");
+  });
+
+  // ── State-forward styling ─────────────────────────────────────────────────────
+
+  it("marks a signed-off slot row with the met state class", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid='slot-row-slot-3']").classes()).toContain("req-panel__slot--met");
+  });
+
+  it("marks a not-met slot row with the not-met state class", async () => {
+    const notMetSlot = {
+      ...SLOT_ANY,
+      attestations: [{ ...SLOT_ANY.attestations[0], verdict: "not_met" }],
+    };
+    getRequirements.mockResolvedValueOnce([{ ...REQ_B, slots: [notMetSlot] }]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid='slot-row-slot-3']").classes()).toContain("req-panel__slot--not-met");
+  });
+
+  it("marks an unattested slot row with the pending state class", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid='slot-row-slot-1']").classes()).toContain("req-panel__slot--pending");
+  });
+
+  it("shows attester initials on a slot row that has a latest attestation", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid='attester-slot-3']").text()).toBe("AL");
   });
 
   it("deletes a requirement on button click", async () => {

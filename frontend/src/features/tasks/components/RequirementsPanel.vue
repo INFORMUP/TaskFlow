@@ -15,8 +15,10 @@ import {
   getImageBlobUrl,
   type Requirement,
   type SignoffSlot,
+  type Attestation,
   type ImageMeta,
 } from "@/api/requirements.api";
+import { listOrgMembers } from "@/api/org-members.api";
 
 const props = defineProps<{ taskId: string }>();
 
@@ -57,6 +59,12 @@ const lightboxUrl = ref<string | null>(null);
 
 // Evidence image blob URL cache (keyed by image ID stored in attestation.evidence)
 const evidenceBlobUrls = ref<Record<string, string>>({});
+
+// Actor display names resolved client-side from org members (keyed by actorId)
+const actorNames = ref<Record<string, string>>({});
+
+// Slot IDs whose comment-history thread is expanded
+const expandedThreads = ref<Set<string>>(new Set());
 
 watch(() => props.taskId, load, { immediate: true });
 
@@ -244,6 +252,61 @@ function isSignedOff(slot: SignoffSlot): boolean {
   return latest?.verdict === "met";
 }
 
+// ── At-a-glance state & attester identity ─────────────────────────────────────
+
+// Drives the state-forward left border: met (green) / not_met (red) / pending (grey)
+function slotState(slot: SignoffSlot): "met" | "not_met" | "pending" {
+  const latest = slot.attestations.at(-1);
+  if (!latest) return "pending";
+  return latest.verdict === "met" ? "met" : "not_met";
+}
+
+function resolveActorName(actorId: string): string {
+  return actorNames.value[actorId] ?? "Unknown";
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// Initials for the actor of the latest attestation, or null if unattested
+function latestAttesterInitials(slot: SignoffSlot): string | null {
+  const latest = slot.attestations.at(-1);
+  return latest ? initials(resolveActorName(latest.actorId)) : null;
+}
+
+// ── Comment history thread ────────────────────────────────────────────────────
+
+function commentCount(slot: SignoffSlot): number {
+  return slot.attestations.filter((a) => a.comment).length;
+}
+
+// Attestations carrying a comment, newest first
+function commentedAttestations(slot: SignoffSlot): Attestation[] {
+  return slot.attestations.filter((a) => a.comment).slice().reverse();
+}
+
+function toggleThread(slotId: string) {
+  const next = new Set(expandedThreads.value);
+  if (next.has(slotId)) next.delete(slotId);
+  else next.add(slotId);
+  expandedThreads.value = next;
+}
+
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 // ── Images ───────────────────────────────────────────────────────────────────
 
 const imageBlobUrls = ref<Record<string, string>>({});
@@ -256,8 +319,20 @@ async function loadImageUrls(images: ImageMeta[]) {
   }
 }
 
+async function loadActorNames() {
+  // Best-effort: attester names are decorative, so a failure here must not
+  // break the requirements panel.
+  try {
+    const members = await listOrgMembers();
+    actorNames.value = Object.fromEntries(members.map((m) => [m.id, m.displayName]));
+  } catch {
+    // leave actorNames as-is; helpers fall back to "Unknown"
+  }
+}
+
 async function load() {
   error.value = null;
+  if (Object.keys(actorNames.value).length === 0) await loadActorNames();
   try {
     requirements.value = await getRequirements(props.taskId);
     for (const req of requirements.value) {
@@ -569,6 +644,7 @@ async function handleDeleteImage(reqId: string, imageId: string) {
               v-for="slot in req.slots"
               :key="slot.id"
               class="req-panel__slot"
+              :class="`req-panel__slot--${slotState(slot).replace('_', '-')}`"
               :data-testid="`slot-row-${slot.id}`"
             >
               <div class="req-panel__slot-main">
@@ -593,11 +669,24 @@ async function handleDeleteImage(reqId: string, imageId: string) {
                     v-if="slot.attestations.length > 0"
                     class="req-panel__attestation"
                     :class="isSignedOff(slot) ? 'att--met' : 'att--not-met'"
-                    :title="slot.attestations.at(-1)?.comment ?? undefined"
                     :data-testid="`attestation-status-${slot.id}`"
                   >
                     {{ isSignedOff(slot) ? "✓" : "✗" }}
                   </span>
+                  <span
+                    v-else
+                    class="req-panel__attestation req-panel__attestation--pending"
+                    :data-testid="`attestation-status-${slot.id}`"
+                  >—</span>
+                  <button
+                    v-if="commentCount(slot) > 0"
+                    type="button"
+                    class="req-panel__chip"
+                    :class="{ 'req-panel__chip--active': expandedThreads.has(slot.id) }"
+                    :title="expandedThreads.has(slot.id) ? 'Hide comment history' : 'View comment history'"
+                    :data-testid="`comment-count-${slot.id}`"
+                    @click="toggleThread(slot.id)"
+                  >💬 {{ commentCount(slot) }}</button>
                   <button
                     v-if="slot.attestations.at(-1)?.evidence"
                     type="button"
@@ -607,6 +696,13 @@ async function handleDeleteImage(reqId: string, imageId: string) {
                     @click="openLightbox(slot.attestations.at(-1)!.evidence!)"
                   >📷</button>
                 </span>
+
+                <span
+                  v-if="latestAttesterInitials(slot)"
+                  class="req-panel__attester req-panel__attester--row"
+                  :title="resolveActorName(slot.attestations.at(-1)!.actorId)"
+                  :data-testid="`attester-${slot.id}`"
+                >{{ latestAttesterInitials(slot) }}</span>
 
                 <template v-if="pendingAttestation?.slotId !== slot.id">
                   <button
@@ -709,14 +805,41 @@ async function handleDeleteImage(reqId: string, imageId: string) {
                 </div>
               </div>
 
-              <!-- Attestation comment display -->
-              <p
-                v-if="slot.attestations.at(-1)?.comment"
-                class="req-panel__attest-note"
-                :data-testid="`attest-note-${slot.id}`"
+              <!-- Attestation comment history (toggled via the 💬 chip) -->
+              <ul
+                v-if="expandedThreads.has(slot.id) && commentCount(slot) > 0"
+                class="req-panel__thread"
+                :data-testid="`attest-thread-${slot.id}`"
               >
-                {{ slot.attestations.at(-1)?.comment }}
-              </p>
+                <li
+                  v-for="att in commentedAttestations(slot)"
+                  :key="att.id"
+                  class="req-panel__entry"
+                  :data-testid="`attest-entry-${slot.id}-${att.id}`"
+                >
+                  <span
+                    class="req-panel__attester"
+                    :title="resolveActorName(att.actorId)"
+                  >{{ initials(resolveActorName(att.actorId)) }}</span>
+                  <div class="req-panel__entry-body">
+                    <div class="req-panel__entry-head">
+                      <span class="req-panel__entry-name">{{ resolveActorName(att.actorId) }}</span>
+                      <span
+                        class="req-panel__entry-verdict"
+                        :class="att.verdict === 'met' ? 'att--met' : 'att--not-met'"
+                      >{{ att.verdict === "met" ? "✓ met" : "✗ not met" }}</span>
+                      <span class="req-panel__entry-time">{{ formatTimestamp(att.createdAt) }}</span>
+                    </div>
+                    <p class="req-panel__entry-comment">{{ att.comment }}</p>
+                    <button
+                      v-if="att.evidence"
+                      type="button"
+                      class="req-panel__entry-evidence"
+                      @click="openLightbox(att.evidence!)"
+                    >📷 View evidence</button>
+                  </div>
+                </li>
+              </ul>
             </li>
           </ul>
 
@@ -916,7 +1039,25 @@ async function handleDeleteImage(reqId: string, imageId: string) {
 }
 
 .req-panel__slot {
-  padding: 0.25rem 0;
+  padding: 0.3rem 0.5rem;
+  margin: 0.3rem 0;
+  border: 1px solid #e3e6ea;
+  border-left: 4px solid #c9ced6; /* pending (default) */
+  border-radius: 6px;
+}
+
+.req-panel__slot--met {
+  border-left-color: #28a745;
+  background: #f6fbf7;
+}
+
+.req-panel__slot--not-met {
+  border-left-color: #dc3545;
+  background: #fdf6f6;
+}
+
+.req-panel__slot--pending {
+  border-left-color: #c9ced6;
 }
 
 .req-panel__slot-main {
@@ -947,11 +1088,108 @@ async function handleDeleteImage(reqId: string, imageId: string) {
   font-family: inherit;
 }
 
-.req-panel__attest-note {
-  font-size: 0.78rem;
+/* ── Comment-count chip & attester initials ──────────────────────────────── */
+
+.req-panel__chip {
+  font-size: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.05rem 0.36rem;
+  border: 1px solid #d4d8de;
+  border-radius: 10px;
+  background: #fff;
+  color: #444;
+  cursor: pointer;
+}
+
+.req-panel__chip:hover {
+  background: #f0f1f3;
+}
+
+.req-panel__chip--active {
+  background: #eef3fb;
+  border-color: #b9cdec;
+  color: #1a4d8f;
+}
+
+.req-panel__attestation--pending {
+  color: #b0b6bf;
+}
+
+.req-panel__attester {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #fff;
+  background: #6c7589;
+  flex: 0 0 auto;
+}
+
+.req-panel__attester--row {
+  margin-left: auto;
+}
+
+/* ── Comment history thread ───────────────────────────────────────────────── */
+
+.req-panel__thread {
+  list-style: none;
+  margin: 0.5rem 0 0.1rem;
+  padding: 0.5rem 0 0;
+  border-top: 1px dashed #e3e6ea;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.req-panel__entry {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.req-panel__entry-body {
+  flex: 1;
+}
+
+.req-panel__entry-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.74rem;
+  flex-wrap: wrap;
+}
+
+.req-panel__entry-name {
+  font-weight: 600;
+}
+
+.req-panel__entry-verdict {
+  font-weight: 700;
+}
+
+.req-panel__entry-time {
   color: var(--color-text-muted, #666);
+}
+
+.req-panel__entry-comment {
+  font-size: 0.8rem;
   margin: 0.2rem 0 0;
-  font-style: italic;
+  line-height: 1.4;
+}
+
+.req-panel__entry-evidence {
+  font-size: 0.72rem;
+  color: #1a4d8f;
+  background: none;
+  border: none;
+  padding: 0.2rem 0 0;
+  cursor: pointer;
 }
 
 .req-panel__slot-label {
