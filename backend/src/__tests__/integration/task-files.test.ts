@@ -212,6 +212,43 @@ describe("task file attachments API", () => {
       expect(getRes.rawPayload).toEqual(content);
     });
 
+    it("serves a file whose name has a U+202F narrow no-break space without 500ing", async () => {
+      // Regression: a non-ASCII byte in the filename is illegal in an HTTP
+      // header and previously made the attachment Content-Disposition 500.
+      const app = await buildApp();
+      const task = await createTask(app, engineerToken);
+      const content = Buffer.from("<h1>Hi</h1>");
+      const { body, boundary } = buildMultipartBody(
+        "Screenshot 2026-06-04 at 12.45.42\u202fPM.png", // \u202f = narrow no-break space
+        "text/html",
+        content
+      );
+
+      const uploadRes = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${task.id}/files`,
+        headers: {
+          authorization: `Bearer ${engineerToken}`,
+          "content-type": `multipart/form-data; boundary=${boundary}`,
+        },
+        body,
+      });
+      const { id: fileId } = uploadRes.json();
+
+      const getRes = await app.inject({
+        method: "GET",
+        url: `/api/v1/files/${fileId}`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+
+      expect(getRes.statusCode).toBe(200);
+      const disposition = getRes.headers["content-disposition"] as string;
+      expect(disposition).toContain("attachment");
+      expect(disposition).toContain("filename*=UTF-8''");
+      expect(disposition).toContain("%E2%80%AF");
+      expect(getRes.rawPayload).toEqual(content);
+    });
+
     it("returns 404 for unknown file id", async () => {
       const app = await buildApp();
       const nonExistentId = "00000000-0000-0000-0000-000000000000";
