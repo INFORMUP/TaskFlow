@@ -228,6 +228,11 @@ function handleEvidenceFileChange(event: Event) {
   pendingAttestation.value.evidenceFile = input.files?.[0] ?? null;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isImageId(v: string | null | undefined): v is string {
+  return !!v && UUID_RE.test(v);
+}
+
 async function loadEvidenceBlobUrl(imageId: string) {
   if (!evidenceBlobUrls.value[imageId]) {
     evidenceBlobUrls.value[imageId] = await getImageBlobUrl(imageId);
@@ -688,7 +693,7 @@ async function handleDeleteImage(reqId: string, imageId: string) {
                     @click="toggleThread(slot.id)"
                   >💬 {{ commentCount(slot) }}</button>
                   <button
-                    v-if="slot.attestations.at(-1)?.evidence"
+                    v-if="isImageId(slot.attestations.at(-1)?.evidence)"
                     type="button"
                     class="req-panel__evidence-btn"
                     title="View evidence image"
@@ -832,7 +837,7 @@ async function handleDeleteImage(reqId: string, imageId: string) {
                     </div>
                     <p class="req-panel__entry-comment">{{ att.comment }}</p>
                     <button
-                      v-if="att.evidence"
+                      v-if="isImageId(att.evidence)"
                       type="button"
                       class="req-panel__entry-evidence"
                       @click="openLightbox(att.evidence!)"

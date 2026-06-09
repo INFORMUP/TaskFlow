@@ -16,7 +16,7 @@ Review a task's requirements and submit verdicts on any agent-designated signoff
 1. **Setup**
    - Read API token from `~/.taskflow-import-token` (chmod 600). Never log it.
    - Base URL: `https://taskflow.informup.org`.
-   - The API token must have `tasks:read` and `attestations:write` scopes, and must belong to a user with `actorType = "agent"`. If a 403 `CHANNEL_MISMATCH` is returned on any attestation, stop and tell the user — the token is not configured as an agent actor.
+   - The API token must have `tasks:read` and `attestations:write` scopes. Any API token session (regardless of `actorType`) can attest agent slots — if a 403 `CHANNEL_MISMATCH` is returned, the session is an interactive JWT (not an API token) and cannot be used here.
 
 2. **Fetch task + comments + requirements**
    - Resolve task by UUID or display ID (`FEAT`→`feature`, `BUG`→`bug`, `IMP`→`improvement`).
@@ -59,11 +59,12 @@ Review a task's requirements and submit verdicts on any agent-designated signoff
 
      {
        "verdict": "met" | "not_met",
-       "evidence": "<concise explanation of why this verdict was reached>",
-       "evidenceImageId": "<image id from step 5, if applicable>"
+       "comment": "<concise explanation of why this verdict was reached>",
+       "evidence": "<image UUID from step 5, if applicable>"
      }
      ```
-   - Always include `evidence` text — even a short explanation ("Requirement satisfied at routes/requirements.ts:460 — evidenceImageId FK stored and validated before create") is better than nothing.
+   - `comment` is the text explanation (always include it). `evidence` is the image UUID — omit it if you have no image.
+   - **Do not put text in `evidence`** — the UI treats `evidence` as an image ID and will show a broken camera icon if it contains a plain string.
    - Process slots one at a time. If any POST returns a non-201, stop and report the error before continuing.
 
 7. **Report results**
