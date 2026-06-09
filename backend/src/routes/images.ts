@@ -17,6 +17,12 @@ const RequirementImageParams = Type.Object({
   rid: Type.String({ format: "uuid" }),
 });
 
+const AttestationEvidenceParams = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  rid: Type.String({ format: "uuid" }),
+  sid: Type.String({ format: "uuid" }),
+});
+
 const ImageParams = Type.Object({
   imageId: Type.String({ format: "uuid" }),
 });
@@ -28,12 +34,13 @@ const RequirementImageDeleteParams = Type.Object({
 });
 
 async function deleteImageIfOrphaned(imageId: string) {
-  const [ti, ci, ri] = await Promise.all([
+  const [ti, ci, ri, ai] = await Promise.all([
     prisma.taskImage.count({ where: { imageId } }),
     prisma.commentImage.count({ where: { imageId } }),
     prisma.requirementImage.count({ where: { imageId } }),
+    prisma.attestation.count({ where: { evidence: imageId } }),
   ]);
-  if (ti + ci + ri === 0) {
+  if (ti + ci + ri + ai === 0) {
     await prisma.image.delete({ where: { id: imageId } });
   }
 }
@@ -106,6 +113,69 @@ export async function imageRoutes(fastify: FastifyInstance) {
       });
 
       return reply.status(201).send({ ...image, createdAt: image.createdAt.toISOString() });
+    }
+  );
+
+  // POST /api/v1/tasks/:id/requirements/:rid/slots/:sid/attestations/evidence-image
+  fastify.post(
+    "/api/v1/tasks/:id/requirements/:rid/slots/:sid/attestations/evidence-image",
+    {
+      schema: {
+        summary: "Upload an evidence image for a human attestation",
+        tags: ["requirements"],
+        params: AttestationEvidenceParams,
+        response: {
+          201: Type.Object({ imageId: Type.String({ format: "uuid" }) }),
+          ...CommonErrorResponses,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (!enforceScope(request, reply, "attestations:write")) return;
+
+      const { sid } = request.params as { id: string; rid: string; sid: string };
+
+      const slot = await prisma.signoffSlot.findFirst({
+        where: { id: sid },
+        select: { id: true, requiredActorType: true },
+      });
+      if (!slot) {
+        return reply.status(404).send({ error: { code: "NOT_FOUND", message: "Slot not found" } });
+      }
+      if (slot.requiredActorType === "agent") {
+        return reply.status(403).send({ error: { code: "FORBIDDEN", message: "Agent-only slots do not accept human evidence" } });
+      }
+
+      const file = await (request as any).file();
+      if (!file) {
+        return reply.status(400).send({ error: { code: "BAD_REQUEST", message: "No file uploaded" } });
+      }
+
+      const mimeType: string = file.mimetype;
+      if (!ALLOWED_MIME_TYPES.has(mimeType)) {
+        return reply.status(415).send({
+          error: { code: "UNSUPPORTED_MEDIA_TYPE", message: "Only image files are allowed" },
+        });
+      }
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of file.file) {
+        chunks.push(chunk);
+      }
+      const data = Buffer.concat(chunks);
+
+      const image = await prisma.image.create({
+        data: {
+          filename: file.filename,
+          mimeType,
+          size: data.length,
+          data,
+          uploadedBy: request.user.id,
+        },
+        select: { id: true },
+      });
+
+      return reply.status(201).send({ imageId: image.id });
     }
   );
 

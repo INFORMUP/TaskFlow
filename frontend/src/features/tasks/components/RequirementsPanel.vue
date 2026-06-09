@@ -10,6 +10,7 @@ import {
   deleteSlot,
   createAttestation,
   uploadRequirementImage,
+  uploadAttestationEvidenceImage,
   deleteRequirementImage,
   getImageBlobUrl,
   type Requirement,
@@ -48,7 +49,14 @@ const pendingAttestation = ref<{
   slotId: string;
   verdict: "met" | "not_met";
   comment: string;
+  evidenceFile: File | null;
 } | null>(null);
+
+// Lightbox state
+const lightboxUrl = ref<string | null>(null);
+
+// Evidence image blob URL cache (keyed by image ID stored in attestation.evidence)
+const evidenceBlobUrls = ref<Record<string, string>>({});
 
 watch(() => props.taskId, load, { immediate: true });
 
@@ -176,21 +184,26 @@ async function handleDeleteSlot(reqId: string, slot: SignoffSlot) {
 }
 
 function handleSignOff(reqId: string, slotId: string) {
-  pendingAttestation.value = { reqId, slotId, verdict: "met", comment: "" };
+  pendingAttestation.value = { reqId, slotId, verdict: "met", comment: "", evidenceFile: null };
 }
 
 function handleCancelSignOff(reqId: string, slotId: string) {
-  pendingAttestation.value = { reqId, slotId, verdict: "not_met", comment: "" };
+  pendingAttestation.value = { reqId, slotId, verdict: "not_met", comment: "", evidenceFile: null };
 }
 
 async function submitAttestation() {
   if (!pendingAttestation.value) return;
-  const { reqId, slotId, verdict, comment } = pendingAttestation.value;
+  const { reqId, slotId, verdict, comment, evidenceFile } = pendingAttestation.value;
   busy.value = true;
   try {
+    let evidenceImageId: string | undefined;
+    if (evidenceFile) {
+      evidenceImageId = await uploadAttestationEvidenceImage(props.taskId, reqId, slotId, evidenceFile);
+    }
     await createAttestation(props.taskId, reqId, slotId, {
       verdict,
       comment: comment.trim() || undefined,
+      evidence: evidenceImageId,
     });
     pendingAttestation.value = null;
     await load();
@@ -199,6 +212,27 @@ async function submitAttestation() {
   } finally {
     busy.value = false;
   }
+}
+
+function handleEvidenceFileChange(event: Event) {
+  if (!pendingAttestation.value) return;
+  const input = event.target as HTMLInputElement;
+  pendingAttestation.value.evidenceFile = input.files?.[0] ?? null;
+}
+
+async function loadEvidenceBlobUrl(imageId: string) {
+  if (!evidenceBlobUrls.value[imageId]) {
+    evidenceBlobUrls.value[imageId] = await getImageBlobUrl(imageId);
+  }
+}
+
+async function openLightbox(imageId: string) {
+  await loadEvidenceBlobUrl(imageId);
+  lightboxUrl.value = evidenceBlobUrls.value[imageId];
+}
+
+function closeLightbox() {
+  lightboxUrl.value = null;
 }
 
 function isAgentOnly(slot: SignoffSlot): boolean {
@@ -228,6 +262,10 @@ async function load() {
     requirements.value = await getRequirements(props.taskId);
     for (const req of requirements.value) {
       if (req.images.length) await loadImageUrls(req.images);
+      for (const slot of req.slots) {
+        const latest = slot.attestations.at(-1);
+        if (latest?.evidence) await loadEvidenceBlobUrl(latest.evidence);
+      }
     }
   } catch (e: any) {
     error.value = e?.error?.message ?? "Failed to load requirements";
@@ -267,6 +305,27 @@ async function handleDeleteImage(reqId: string, imageId: string) {
 </script>
 
 <template>
+  <!-- Lightbox modal -->
+  <teleport to="body">
+    <div
+      v-if="lightboxUrl"
+      class="req-lightbox-backdrop"
+      data-testid="lightbox-backdrop"
+      @click.self="closeLightbox"
+      @keydown.esc="closeLightbox"
+    >
+      <div class="req-lightbox">
+        <button
+          type="button"
+          class="req-lightbox__close"
+          data-testid="lightbox-close"
+          @click="closeLightbox"
+        >×</button>
+        <img :src="lightboxUrl" alt="Attestation evidence" class="req-lightbox__img" />
+      </div>
+    </div>
+  </teleport>
+
   <section class="req-panel">
     <div class="req-panel__header">
       <h3>Requirements</h3>
@@ -539,6 +598,14 @@ async function handleDeleteImage(reqId: string, imageId: string) {
                   >
                     {{ isSignedOff(slot) ? "✓" : "✗" }}
                   </span>
+                  <button
+                    v-if="slot.attestations.at(-1)?.evidence"
+                    type="button"
+                    class="req-panel__evidence-btn"
+                    title="View evidence image"
+                    :data-testid="`evidence-btn-${slot.id}`"
+                    @click="openLightbox(slot.attestations.at(-1)!.evidence!)"
+                  >📷</button>
                 </span>
 
                 <template v-if="pendingAttestation?.slotId !== slot.id">
@@ -591,6 +658,29 @@ async function handleDeleteImage(reqId: string, imageId: string) {
                     : 'Add a note (optional)'"
                   :disabled="busy"
                 />
+                <div class="req-panel__attest-evidence">
+                  <label
+                    class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm req-panel__upload-label"
+                    :data-testid="`attest-evidence-btn-${slot.id}`"
+                  >
+                    {{ pendingAttestation.evidenceFile ? pendingAttestation.evidenceFile.name : '+ Attach image' }}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      class="req-panel__file-input"
+                      :data-testid="`attest-evidence-input-${slot.id}`"
+                      :disabled="busy"
+                      @change="handleEvidenceFileChange"
+                    />
+                  </label>
+                  <button
+                    v-if="pendingAttestation.evidenceFile"
+                    type="button"
+                    class="req-panel__btn req-panel__btn--ghost req-panel__btn--sm"
+                    :disabled="busy"
+                    @click="pendingAttestation.evidenceFile = null"
+                  >×</button>
+                </div>
                 <div class="req-panel__form-actions">
                   <button
                     type="button"
@@ -1047,5 +1137,71 @@ async function handleDeleteImage(reqId: string, imageId: string) {
 
 .req-panel__file-input {
   display: none;
+}
+
+.req-panel__attest-evidence {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.req-panel__evidence-btn {
+  background: none;
+  border: none;
+  padding: 0 0.1rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+.req-panel__evidence-btn:hover {
+  opacity: 1;
+}
+
+.req-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.req-lightbox {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.req-lightbox__img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.5);
+}
+
+.req-lightbox__close {
+  position: absolute;
+  top: -0.75rem;
+  right: -0.75rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  color: #333;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 </style>
