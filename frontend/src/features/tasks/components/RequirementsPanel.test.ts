@@ -582,6 +582,62 @@ describe("RequirementsPanel", () => {
     expect(uploadRequirementImage).toHaveBeenCalledWith("task-1", "req-a", file);
   });
 
+  // ── Evidence image button guard ──────────────────────────────────────────────
+
+  it("hides evidence button when attestation evidence is a plain text string (not a UUID)", async () => {
+    const slotWithTextEvidence = {
+      id: "slot-1",
+      ordinal: 1,
+      label: "Agent",
+      requiredActorType: "agent",
+      requiredUserId: null,
+      attestations: [
+        {
+          id: "att-text",
+          actorId: "u1",
+          actorType: "human",
+          verdict: "met",
+          evidence: "QuestionBlock.vue diff: border-radius:50% confirmed",
+          comment: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    getRequirements.mockResolvedValueOnce([{ ...REQ_A, slots: [slotWithTextEvidence] }]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='evidence-btn-slot-1']").exists()).toBe(false);
+  });
+
+  it("shows evidence button when attestation evidence is a valid UUID", async () => {
+    const IMAGE_UUID = "3f6c2e1a-4b5d-4e7f-8a9b-0c1d2e3f4a5b";
+    getImageBlobUrl.mockResolvedValue("blob:fake-evidence");
+    const slotWithImageEvidence = {
+      id: "slot-1",
+      ordinal: 1,
+      label: "Agent",
+      requiredActorType: "agent",
+      requiredUserId: null,
+      attestations: [
+        {
+          id: "att-img",
+          actorId: "u1",
+          actorType: "human",
+          verdict: "met",
+          evidence: IMAGE_UUID,
+          comment: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    };
+    getRequirements.mockResolvedValueOnce([{ ...REQ_A, slots: [slotWithImageEvidence] }]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='evidence-btn-slot-1']").exists()).toBe(true);
+  });
+
   it("calls deleteRequirementImage and refreshes on delete image click", async () => {
     getRequirements.mockResolvedValueOnce([{ ...REQ_A, images: [IMAGE_META] }, REQ_B]);
     getImageBlobUrl.mockResolvedValue("blob:fake-url");
