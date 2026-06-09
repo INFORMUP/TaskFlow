@@ -199,6 +199,10 @@ function handleCancelSignOff(reqId: string, slotId: string) {
   pendingAttestation.value = { reqId, slotId, verdict: "not_met", comment: "", evidenceFile: null };
 }
 
+function handleMarkNotMet(reqId: string, slotId: string) {
+  pendingAttestation.value = { reqId, slotId, verdict: "not_met", comment: "", evidenceFile: null };
+}
+
 async function submitAttestation() {
   if (!pendingAttestation.value) return;
   const { reqId, slotId, verdict, comment, evidenceFile } = pendingAttestation.value;
@@ -719,6 +723,16 @@ async function handleDeleteImage(reqId: string, imageId: string) {
                     @click="handleSignOff(req.id, slot.id)"
                   >
                     Sign off
+                  </button>
+                  <button
+                    v-if="!isAgentOnly(slot) && slotState(slot) === 'pending'"
+                    type="button"
+                    class="req-panel__btn req-panel__btn--sm req-panel__btn--cancel-signoff"
+                    :data-testid="`not-met-btn-${slot.id}`"
+                    :disabled="busy"
+                    @click="handleMarkNotMet(req.id, slot.id)"
+                  >
+                    Not met
                   </button>
                   <button
                     v-if="!isAgentOnly(slot) && isSignedOff(slot)"
