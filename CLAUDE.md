@@ -104,3 +104,4 @@ The `feature` flow runs `discuss → design → prototype → implement → vali
 - **[testing]**: Integration tests sharing PostgreSQL must run sequentially — set `fileParallelism: false` in vitest.config.ts to avoid FK constraint violations.
 - **[testing]**: Playwright E2E tests need `npx prisma db seed` first — otherwise the `projects` table is empty and anything touching project pickers silently renders 0 options.
 - **[testing]**: `@vue/test-utils` `isVisible()` did not reflect a `v-show` `display:none` under happy-dom (returned `true` for a hidden element). Assert toggle/visibility state another way — active class, or `v-if` element existence.
+- **[tooling]**: Fresh worktrees don't have a generated Prisma client — run `npx prisma generate` from `backend/` before the first commit or the pre-commit type-check will fail with ~100 spurious TS errors about missing Prisma types.
