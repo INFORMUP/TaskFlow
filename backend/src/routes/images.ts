@@ -3,6 +3,7 @@ import { Type } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { enforceScope } from "../services/permission.service.js";
 import { CommonErrorResponses } from "./_schemas.js";
+import { fileContentDisposition } from "../lib/content-disposition.js";
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
@@ -205,7 +206,7 @@ export async function imageRoutes(fastify: FastifyInstance) {
 
       return reply
         .header("Content-Type", image.mimeType)
-        .header("Content-Disposition", `inline; filename="${image.filename}"`)
+        .header("Content-Disposition", fileContentDisposition(image.filename, "inline"))
         .header("Cache-Control", "private, max-age=31536000, immutable")
         .send(image.data);
     }

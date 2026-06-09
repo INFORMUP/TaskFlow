@@ -3,6 +3,7 @@ import { Type } from "@sinclair/typebox";
 import { prisma } from "../prisma-client.js";
 import { enforceScope } from "../services/permission.service.js";
 import { CommonErrorResponses } from "./_schemas.js";
+import { fileContentDisposition } from "../lib/content-disposition.js";
 
 const FileMeta = Type.Object(
   {
@@ -140,7 +141,7 @@ export async function taskFileRoutes(fastify: FastifyInstance) {
 
       return reply
         .header("Content-Type", file.mimeType)
-        .header("Content-Disposition", `attachment; filename="${file.filename}"`)
+        .header("Content-Disposition", fileContentDisposition(file.filename, "attachment"))
         .header("Cache-Control", "private, max-age=31536000, immutable")
         .send(file.data);
     }

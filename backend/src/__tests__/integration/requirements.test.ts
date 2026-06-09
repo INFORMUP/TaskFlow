@@ -74,6 +74,26 @@ async function attest(
   });
 }
 
+// Builds a multipart/form-data body for a single image file upload. The
+// filename is UTF-8 encoded into the part header so non-ASCII names (e.g. a
+// U+202F narrow no-break space) round-trip through the multipart parser.
+function buildImageMultipart(
+  filename: string,
+  mimeType: string,
+  data: Buffer
+): { body: Buffer; boundary: string } {
+  const boundary = "ReqImageBoundary789";
+  const parts: Buffer[] = [
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mimeType}\r\n\r\n`,
+      "utf-8"
+    ),
+    data,
+    Buffer.from(`\r\n--${boundary}--`),
+  ];
+  return { body: Buffer.concat(parts), boundary };
+}
+
 // Creates a real API token in the DB for the given userId with the given scopes.
 // Returns the plaintext token string.
 async function mintApiToken(
@@ -495,6 +515,68 @@ describe("requirements API", () => {
       // Both slots filled → verified, even though same actor signed both
       expect(q.verified).toBe(true);
       expect(q.notDistinct).toBe(true);
+    });
+  });
+
+  // ── Image download ──────────────────────────────────────────────────────────
+
+  describe("GET /api/v1/images/:imageId", () => {
+    async function uploadRequirementImage(app: any, taskId: string, reqId: string, filename: string) {
+      const { body, boundary } = buildImageMultipart(filename, "image/png", Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/v1/tasks/${taskId}/requirements/${reqId}/images`,
+        headers: {
+          authorization: `Bearer ${engineerToken}`,
+          "content-type": `multipart/form-data; boundary=${boundary}`,
+        },
+        body,
+      });
+      expect(res.statusCode).toBe(201);
+      return res.json().id as string;
+    }
+
+    it("serves an image whose filename has a U+202F narrow no-break space without 500ing", async () => {
+      // Regression: macOS screenshot names contain U+202F, which is illegal in
+      // an HTTP header and previously made the inline Content-Disposition 500.
+      const app = await buildApp();
+      const task = await createTask(app, engineerToken);
+      const req = (await createRequirement(app, engineerToken, task.id)).json();
+      const imageId = await uploadRequirementImage(
+        app,
+        task.id,
+        req.id,
+        "Screenshot 2026-06-04 at 12.45.42 PM.png"
+      );
+
+      const getRes = await app.inject({
+        method: "GET",
+        url: `/api/v1/images/${imageId}`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+
+      expect(getRes.statusCode).toBe(200);
+      const disposition = getRes.headers["content-disposition"] as string;
+      expect(disposition).toContain("inline");
+      // The non-ASCII byte is RFC 5987-encoded into filename*, never sent raw.
+      expect(disposition).toContain("filename*=UTF-8''");
+      expect(disposition).toContain("%E2%80%AF");
+    });
+
+    it("serves a plain ASCII filename inline", async () => {
+      const app = await buildApp();
+      const task = await createTask(app, engineerToken);
+      const req = (await createRequirement(app, engineerToken, task.id)).json();
+      const imageId = await uploadRequirementImage(app, task.id, req.id, "evidence.png");
+
+      const getRes = await app.inject({
+        method: "GET",
+        url: `/api/v1/images/${imageId}`,
+        headers: { authorization: `Bearer ${engineerToken}` },
+      });
+
+      expect(getRes.statusCode).toBe(200);
+      expect(getRes.headers["content-disposition"]).toContain('filename="evidence.png"');
     });
   });
 });
