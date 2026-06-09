@@ -7,6 +7,8 @@ import TaskCard from "../components/TaskCard.vue";
 import ProjectChip from "@/components/visual/ProjectChip.vue";
 import FlowIcon from "@/components/visual/FlowIcon.vue";
 import StageBadge from "@/components/visual/StageBadge.vue";
+import FilterBar from "../components/FilterBar.vue";
+import { useTaskFilters } from "../composables/useTaskFilters";
 
 type GroupKey = "in_progress" | "todo" | "done";
 type GroupBy = "status" | "project";
@@ -39,8 +41,8 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 const groupBy = ref<GroupBy>("status");
 
-const projectFilter = ref<string>("__all__");
-const flowFilter = ref<string>("__all__");
+const { filters } = useTaskFilters();
+
 const expanded = ref<Record<GroupKey, boolean>>({
   in_progress: true,
   todo: false,
@@ -76,37 +78,30 @@ const flowInitialStatusSlug = computed<Record<string, string>>(() => {
   return map;
 });
 
-const projectOptions = computed(() => {
-  const seen = new Map<string, string>();
-  for (const t of tasks.value) {
-    for (const p of t.projects) if (!seen.has(p.id)) seen.set(p.id, `${p.key} — ${p.name}`);
+const allStatuses = computed(() => {
+  const seen = new Map<string, { slug: string; name: string }>();
+  for (const statuses of Object.values(flowStatuses.value)) {
+    for (const s of statuses) {
+      if (!seen.has(s.slug)) seen.set(s.slug, { slug: s.slug, name: s.name });
+    }
   }
-  return [...seen.entries()]
-    .map(([id, label]) => ({ id, label }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-});
-
-const flowOptions = computed(() => {
-  const seen = new Map<string, string>();
-  for (const t of tasks.value) if (!seen.has(t.flow.id)) seen.set(t.flow.id, t.flow.name);
-  return [...seen.entries()]
-    .map(([id, label]) => ({ id, label }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+  return [...seen.values()];
 });
 
 const filteredTasks = computed(() => {
-  const proj = projectFilter.value;
-  const flow = flowFilter.value;
+  const f = filters.value;
+  const q = f.q.toLowerCase().trim();
   return tasks.value.filter((t) => {
-    if (flow !== "__all__" && t.flow.id !== flow) return false;
-    if (proj !== "__all__" && !t.projects.some((p) => p.id === proj)) return false;
+    if (f.projectId && !t.projects.some((p) => p.id === f.projectId)) return false;
+    if (f.status.length > 0 && !f.status.includes(t.currentStatus.slug)) return false;
+    if (f.priority && t.priority !== f.priority) return false;
+    if (q && !t.title.toLowerCase().includes(q)) return false;
+    if (f.dueAfter && (!t.dueDate || t.dueDate < f.dueAfter)) return false;
+    if (f.dueBefore && (!t.dueDate || t.dueDate > f.dueBefore)) return false;
+    if (f.labelIds.length > 0 && !f.labelIds.some((id) => t.labels.some((l) => l.id === id))) return false;
     return true;
   });
 });
-
-const filtersActive = computed(
-  () => projectFilter.value !== "__all__" || flowFilter.value !== "__all__",
-);
 
 interface RankedTask {
   task: Task;
@@ -285,11 +280,6 @@ function toggle(key: GroupKey) {
   expanded.value[key] = !expanded.value[key];
 }
 
-function clearFilters() {
-  projectFilter.value = "__all__";
-  flowFilter.value = "__all__";
-}
-
 async function loadFlowMeta(flowIds: string[]) {
   const flows = await listFlows();
   const present = flows.filter((f) => flowIds.includes(f.id));
@@ -420,32 +410,8 @@ onMounted(load);
         </ul>
       </section>
 
-      <!-- Filter strip. Applies to status/project groups, not Up next. -->
-      <div class="filters" data-testid="my-work-filters">
-        <label class="filters__field">
-          <span class="filters__label">Project</span>
-          <select v-model="projectFilter" data-testid="my-work-filter-project">
-            <option value="__all__">All projects</option>
-            <option v-for="p in projectOptions" :key="p.id" :value="p.id">{{ p.label }}</option>
-          </select>
-        </label>
-        <label class="filters__field">
-          <span class="filters__label">Flow</span>
-          <select v-model="flowFilter" data-testid="my-work-filter-flow">
-            <option value="__all__">All flows</option>
-            <option v-for="f in flowOptions" :key="f.id" :value="f.id">{{ f.label }}</option>
-          </select>
-        </label>
-        <button
-          v-if="filtersActive"
-          type="button"
-          class="filters__clear"
-          data-testid="my-work-filters-clear"
-          @click="clearFilters"
-        >
-          Clear filters
-        </button>
-      </div>
+      <!-- Filter bar. Applies to status/project groups, not Up next. -->
+      <FilterBar :statuses="allStatuses" />
 
       <!-- Status grouping: collapsible groups (In progress expanded by default). -->
       <div v-if="groupBy === 'status'" class="my-work__groups">
@@ -753,52 +719,6 @@ onMounted(load);
   gap: 0.25rem;
   font-size: 0.6875rem;
   color: var(--text-secondary);
-}
-
-/* ---- Filters ---- */
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: flex-end;
-  padding: 0.5rem 0;
-  border-top: 1px solid var(--border-soft);
-  border-bottom: 1px solid var(--border-soft);
-}
-
-.filters__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 160px;
-}
-
-.filters__label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
-}
-
-.filters__field select {
-  font: inherit;
-  font-size: 0.8125rem;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  background: var(--bg-primary);
-}
-
-.filters__clear {
-  margin-left: auto;
-  align-self: center;
-  font-size: 0.75rem;
-  background: transparent;
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  padding: 0.25rem 0.6rem;
-  cursor: pointer;
 }
 
 /* ---- Groups ---- */
