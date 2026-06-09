@@ -57,6 +57,7 @@ const SLOT_ANY = {
       actorType: "human",
       verdict: "met",
       evidence: null,
+      comment: null,
       createdAt: "2026-01-01T00:00:00.000Z",
     },
   ],
@@ -204,13 +205,25 @@ describe("RequirementsPanel", () => {
     expect(wrapper.find("[data-testid='cancel-signoff-btn-slot-3']").exists()).toBe(true);
   });
 
-  it("calls createAttestation with not_met on cancel sign-off", async () => {
+  it("shows attestation form with not_met placeholder on cancel sign-off click", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='cancel-signoff-btn-slot-3']").trigger("click");
+
+    expect(wrapper.find("[data-testid='attest-form-slot-3']").exists()).toBe(true);
+    const placeholder = wrapper.find("[data-testid='attest-comment-slot-3']").attributes("placeholder");
+    expect(placeholder).toContain("still needs to be done");
+  });
+
+  it("calls createAttestation with not_met on cancel sign-off confirm", async () => {
     createAttestation.mockResolvedValue({
       id: "att-cancel",
       actorId: "u1",
       actorType: "human",
       verdict: "not_met",
       evidence: null,
+      comment: null,
       createdAt: "2026-01-01T00:00:00Z",
     });
 
@@ -218,9 +231,47 @@ describe("RequirementsPanel", () => {
     await flushPromises();
 
     await wrapper.get("[data-testid='cancel-signoff-btn-slot-3']").trigger("click");
+    await wrapper.get("[data-testid='attest-submit-slot-3']").trigger("click");
     await flushPromises();
 
     expect(createAttestation).toHaveBeenCalledWith("task-1", "req-b", "slot-3", { verdict: "not_met" });
+  });
+
+  it("passes comment to createAttestation when provided on cancel", async () => {
+    createAttestation.mockResolvedValue({
+      id: "att-cancel",
+      actorId: "u1",
+      actorType: "human",
+      verdict: "not_met",
+      evidence: null,
+      comment: "Missing test coverage",
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='cancel-signoff-btn-slot-3']").trigger("click");
+    await wrapper.get("[data-testid='attest-comment-slot-3']").setValue("Missing test coverage");
+    await wrapper.get("[data-testid='attest-submit-slot-3']").trigger("click");
+    await flushPromises();
+
+    expect(createAttestation).toHaveBeenCalledWith("task-1", "req-b", "slot-3", {
+      verdict: "not_met",
+      comment: "Missing test coverage",
+    });
+  });
+
+  it("dismiss button closes the attestation form without submitting", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='cancel-signoff-btn-slot-3']").trigger("click");
+    expect(wrapper.find("[data-testid='attest-form-slot-3']").exists()).toBe(true);
+
+    await wrapper.get("[data-testid='attest-cancel-slot-3']").trigger("click");
+    expect(wrapper.find("[data-testid='attest-form-slot-3']").exists()).toBe(false);
+    expect(createAttestation).not.toHaveBeenCalled();
   });
 
   it("shows agent-only badge for agent slots", async () => {
@@ -229,7 +280,19 @@ describe("RequirementsPanel", () => {
     expect(wrapper.find("[data-testid='agent-only-slot-2']").exists()).toBe(true);
   });
 
-  it("calls createAttestation with met verdict on sign-off", async () => {
+  it("shows attestation form on sign-off click", async () => {
+    getRequirements.mockResolvedValue([REQ_A]);
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    await wrapper.get("[data-testid='signoff-btn-slot-1']").trigger("click");
+
+    expect(wrapper.find("[data-testid='attest-form-slot-1']").exists()).toBe(true);
+    const placeholder = wrapper.find("[data-testid='attest-comment-slot-1']").attributes("placeholder");
+    expect(placeholder).toContain("note");
+  });
+
+  it("calls createAttestation with met verdict on sign-off confirm", async () => {
     getRequirements.mockResolvedValue([REQ_A]);
     createAttestation.mockResolvedValue({
       id: "att-new",
@@ -237,17 +300,45 @@ describe("RequirementsPanel", () => {
       actorType: "human",
       verdict: "met",
       evidence: null,
+      comment: null,
       createdAt: "2026-01-01T00:00:00Z",
     });
-    getRequirements.mockResolvedValueOnce([REQ_A]).mockResolvedValueOnce([REQ_A]);
 
     const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
     await flushPromises();
 
     await wrapper.get("[data-testid='signoff-btn-slot-1']").trigger("click");
+    await wrapper.get("[data-testid='attest-submit-slot-1']").trigger("click");
     await flushPromises();
 
     expect(createAttestation).toHaveBeenCalledWith("task-1", "req-a", "slot-1", { verdict: "met" });
+  });
+
+  it("displays attestation comment below slot when present", async () => {
+    const slotWithComment = {
+      ...SLOT_ANY,
+      attestations: [
+        {
+          ...SLOT_ANY.attestations[0],
+          verdict: "not_met",
+          comment: "Missing test coverage",
+        },
+      ],
+    };
+    const reqWithComment = { ...REQ_B, slots: [slotWithComment] };
+    getRequirements.mockResolvedValueOnce([reqWithComment]);
+
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='attest-note-slot-3']").text()).toBe("Missing test coverage");
+  });
+
+  it("does not display comment element when attestation has no comment", async () => {
+    const wrapper = mount(RequirementsPanel, { props: { taskId: "task-1" } });
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='attest-note-slot-3']").exists()).toBe(false);
   });
 
   it("deletes a requirement on button click", async () => {

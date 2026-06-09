@@ -57,6 +57,7 @@ test.describe("Task transition", () => {
 
     await expect(page.locator(".detail__status")).toHaveText("Triage", { timeout: 10_000 });
 
+    await page.locator(".detail__tab", { hasText: "Activity" }).click();
     await page.getByLabel("New status").selectOption("closed");
     await page.getByLabel("Transition note").fill("Resolving via e2e test");
     await page.getByLabel("Resolution").selectOption("fixed");

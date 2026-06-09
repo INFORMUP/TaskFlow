@@ -3,7 +3,7 @@ import { Client } from "pg";
 import { createNoTeamUser } from "./helpers/test-user";
 
 // Known-broken on main/staging — tracked in #20. Skipped to keep CI green per #36.
-test.describe.skip("Welcome to TaskFlow – Join flow", () => {
+test.describe("Welcome to TaskFlow – Join flow", () => {
   test("clicking Join persists team selection and closes the modal", async ({
     page,
   }) => {
