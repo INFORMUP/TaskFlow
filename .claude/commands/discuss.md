@@ -29,6 +29,7 @@ This skill **does not** post comments, transition the task, or open PRs. If the 
 3. **Pull the surrounding context** (in parallel where possible):
    - `GET /api/v1/tasks/{id}/comments` — full comment thread, in order.
    - `GET /api/v1/tasks/{id}/pull-requests` — any linked PRs. For each, also fetch the GitHub PR via `gh pr view <number> --json title,state,body,reviews,comments` if the user might care about review state.
+   - `GET /api/v1/tasks/{id}/requirements` — requirements with attestation sign-offs. Each requirement has `slots[].attestations[]`, where each attestation has `verdict`, `comment`, `actorId`, and `createdAt`. This is the only place attestation comments appear — they do **not** show up in `/comments`.
    - `GET /api/v1/tasks/{id}/transitions` if available — status history (skip if endpoint 404s; not every deployment has it).
    - For projects on the task: `GET /api/v1/projects/{id}` to know what product surface this lives in.
 
