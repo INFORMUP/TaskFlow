@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mount } from "@vue/test-utils";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mount, flushPromises } from "@vue/test-utils";
 import AttachmentStrip from "./AttachmentStrip.vue";
 import type { ImageMeta } from "@/api/attachments.api";
 
@@ -49,5 +49,24 @@ describe("AttachmentStrip", () => {
     const wrapper = mount(AttachmentStrip, { props: { images: [img1], busy: true } });
     const btn = wrapper.find(".attachment-strip__delete");
     expect((btn.element as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("clicking a thumbnail opens the lightbox", async () => {
+    const wrapper = mount(AttachmentStrip, { props: { images: [img1] }, attachTo: document.body });
+    await flushPromises();
+    await wrapper.find(".attachment-strip__thumb").trigger("click");
+    expect(document.body.querySelector("[data-testid='lightbox-backdrop']")).not.toBeNull();
+    wrapper.unmount();
+  });
+
+  it("clicking the lightbox backdrop closes it", async () => {
+    const wrapper = mount(AttachmentStrip, { props: { images: [img1] }, attachTo: document.body });
+    await flushPromises();
+    await wrapper.find(".attachment-strip__thumb").trigger("click");
+    const backdrop = document.body.querySelector("[data-testid='lightbox-backdrop']") as HTMLElement;
+    backdrop.click();
+    await flushPromises();
+    expect(document.body.querySelector("[data-testid='lightbox-backdrop']")).toBeNull();
+    wrapper.unmount();
   });
 });
