@@ -96,9 +96,9 @@ function enforceChannel(
   const isApiToken = scopes !== null;
 
   if (slot.requiredActorType === "agent") {
-    // Must be an API token session with actorType=agent
-    if (!isApiToken || actorType !== "agent") {
-      reply.status(403).send({ error: { code: "CHANNEL_MISMATCH", message: "Agent slot requires an agent API token session" } });
+    // Must be an API token session — any actor type qualifies (Claude Code uses human tokens)
+    if (!isApiToken) {
+      reply.status(403).send({ error: { code: "CHANNEL_MISMATCH", message: "Agent slot requires an API token session" } });
       return false;
     }
   } else if (slot.requiredActorType === "human") {
