@@ -205,6 +205,92 @@ describe("SettingsView — token management", () => {
     );
   });
 
+  it("renders the integration token checkbox unchecked by default", async () => {
+    const wrapper = await mountView();
+    const checkbox = wrapper.find(
+      "[data-testid='token-integration-checkbox']"
+    ).element as HTMLInputElement;
+    expect(checkbox).toBeTruthy();
+    expect(checkbox.checked).toBe(false);
+  });
+
+  it("sends integration:true when the integration checkbox is checked", async () => {
+    const created: CreatedToken = {
+      id: "44444444-4444-4444-4444-444444444444",
+      name: "agent-bot",
+      token: "tf_agenttoken123",
+      integration: true,
+      scopes: ["tasks:read"],
+      expiresAt: null,
+      createdAt: "2026-04-15T12:00:00.000Z",
+    };
+    createToken.mockResolvedValueOnce(created);
+    listTokens.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: [] });
+
+    const wrapper = await mountView();
+    await wrapper.get("[data-testid='token-name-input']").setValue("agent-bot");
+    await wrapper.get("[data-testid='scope-checkbox-tasks:read']").setValue(true);
+    await wrapper.get("[data-testid='token-integration-checkbox']").setValue(true);
+    await wrapper.get("[data-testid='token-create-submit']").trigger("submit");
+    await flushPromises();
+
+    expect(createToken).toHaveBeenCalledWith(
+      expect.objectContaining({ integration: true })
+    );
+  });
+
+  it("does not send integration flag when checkbox is unchecked", async () => {
+    const created: CreatedToken = {
+      id: "55555555-5555-5555-5555-555555555555",
+      name: "ci-token",
+      token: "tf_citoken456",
+      integration: false,
+      scopes: ["tasks:read"],
+      expiresAt: null,
+      createdAt: "2026-04-15T12:00:00.000Z",
+    };
+    createToken.mockResolvedValueOnce(created);
+    listTokens.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: [] });
+
+    const wrapper = await mountView();
+    await wrapper.get("[data-testid='token-name-input']").setValue("ci-token");
+    await wrapper.get("[data-testid='scope-checkbox-tasks:read']").setValue(true);
+    await wrapper.get("[data-testid='token-create-submit']").trigger("submit");
+    await flushPromises();
+
+    expect(createToken).toHaveBeenCalledWith(
+      expect.not.objectContaining({ integration: true })
+    );
+  });
+
+  it("resets the integration checkbox after a successful create", async () => {
+    const created: CreatedToken = {
+      id: "66666666-6666-6666-6666-666666666666",
+      name: "reset-test",
+      token: "tf_resettoken789",
+      integration: true,
+      scopes: ["tasks:read"],
+      expiresAt: null,
+      createdAt: "2026-04-15T12:00:00.000Z",
+    };
+    createToken.mockResolvedValueOnce(created);
+    listTokens.mockResolvedValueOnce({ data: [] }).mockResolvedValueOnce({ data: [] });
+
+    const wrapper = await mountView();
+    await wrapper.get("[data-testid='token-name-input']").setValue("reset-test");
+    await wrapper.get("[data-testid='scope-checkbox-tasks:read']").setValue(true);
+    await wrapper.get("[data-testid='token-integration-checkbox']").setValue(true);
+    await wrapper.get("[data-testid='token-create-submit']").trigger("submit");
+    await flushPromises();
+
+    await wrapper.get("[data-testid='token-dismiss-button']").trigger("click");
+
+    const checkbox = wrapper.find(
+      "[data-testid='token-integration-checkbox']"
+    ).element as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+  });
+
   it("surfaces server validation errors when create fails", async () => {
     createToken.mockRejectedValue({
       status: 400,

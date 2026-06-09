@@ -19,6 +19,7 @@ const loadError = ref<string | null>(null);
 const formName = ref("");
 const formSelectedScopes = ref<Record<string, boolean>>({});
 const formExpiresAt = ref("");
+const formIntegration = ref(false);
 const formError = ref<string | null>(null);
 const creating = ref(false);
 
@@ -72,11 +73,15 @@ async function handleCreate() {
     if (formExpiresAt.value) {
       body.expiresAt = new Date(formExpiresAt.value).toISOString();
     }
+    if (formIntegration.value) {
+      body.integration = true;
+    }
     const result = await createToken(body);
     createdToken.value = result;
     formName.value = "";
     formSelectedScopes.value = {};
     formExpiresAt.value = "";
+    formIntegration.value = false;
     await refreshTokens();
   } catch (e: any) {
     formError.value = e?.error?.message || "Failed to create token";
@@ -231,6 +236,18 @@ onBeforeUnmount(() => {
             class="settings__input"
             data-testid="token-expires-input"
           />
+        </label>
+
+        <label class="settings__field settings__integration-toggle">
+          <input
+            v-model="formIntegration"
+            type="checkbox"
+            data-testid="token-integration-checkbox"
+          />
+          <span>
+            <strong>Integration token</strong>
+            <span class="settings__scope-desc">— for agents and automated services acting on your behalf</span>
+          </span>
         </label>
 
         <div
@@ -509,6 +526,14 @@ onBeforeUnmount(() => {
 .settings__scope-desc {
   color: var(--text-secondary);
   margin-left: 0.25rem;
+}
+
+.settings__integration-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
 }
 
 .settings__btn {
