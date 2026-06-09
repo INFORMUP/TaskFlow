@@ -372,6 +372,126 @@ describe("TaskDetailView — standalone reassignment", () => {
   });
 });
 
+describe("TaskDetailView — inline title editing", () => {
+  it("renders an edit button next to the title", async () => {
+    const wrapper = await mountDetail();
+    expect(wrapper.find("[data-testid='detail-title-edit-btn']").exists()).toBe(true);
+  });
+
+  it("shows an input pre-filled with the current title when edit is clicked", async () => {
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-title-edit-btn']").trigger("click");
+    const input = wrapper.find("[data-testid='detail-title-input']");
+    expect(input.exists()).toBe(true);
+    expect((input.element as HTMLInputElement).value).toBe("A task");
+  });
+
+  it("hides the h1 and edit button while the input is open", async () => {
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-title-edit-btn']").trigger("click");
+    expect(wrapper.find("h1.detail__title").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='detail-title-edit-btn']").exists()).toBe(false);
+  });
+
+  it("calls updateTask with the new title when Enter is pressed", async () => {
+    updateTask.mockResolvedValue(taskFixture({ title: "Updated title" }));
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-title-edit-btn']").trigger("click");
+    const input = wrapper.find("[data-testid='detail-title-input']");
+    await input.setValue("Updated title");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(updateTask).toHaveBeenCalledWith("t-1", { title: "Updated title" });
+  });
+
+  it("exits edit mode and restores the title when Escape is pressed", async () => {
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-title-edit-btn']").trigger("click");
+    const input = wrapper.find("[data-testid='detail-title-input']");
+    await input.setValue("Something else");
+    await input.trigger("keydown", { key: "Escape" });
+    await flushPromises();
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(wrapper.find("h1.detail__title").text()).toBe("A task");
+  });
+
+  it("does not save and shows an error when the title is blank", async () => {
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-title-edit-btn']").trigger("click");
+    const input = wrapper.find("[data-testid='detail-title-input']");
+    await input.setValue("   ");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(wrapper.find("[data-testid='detail-title-error']").exists()).toBe(true);
+  });
+});
+
+describe("TaskDetailView — description editing", () => {
+  it("renders an edit button when the task has a description", async () => {
+    getTask.mockResolvedValue(taskFixture({ description: "Hello **world**" }));
+    const wrapper = await mountDetail();
+    expect(wrapper.find("[data-testid='detail-description-edit-btn']").exists()).toBe(true);
+  });
+
+  it("renders an 'Add description' button when the task has no description", async () => {
+    const wrapper = await mountDetail(); // fixture has description: null
+    expect(wrapper.find("[data-testid='detail-description-add-btn']").exists()).toBe(true);
+  });
+
+  it("shows a textarea pre-filled with the description when edit is clicked", async () => {
+    getTask.mockResolvedValue(taskFixture({ description: "Hello **world**" }));
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-description-edit-btn']").trigger("click");
+    const ta = wrapper.find("[data-testid='detail-description-textarea']");
+    expect(ta.exists()).toBe(true);
+    expect((ta.element as HTMLTextAreaElement).value).toBe("Hello **world**");
+  });
+
+  it("shows an empty textarea when 'Add description' is clicked", async () => {
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-description-add-btn']").trigger("click");
+    const ta = wrapper.find("[data-testid='detail-description-textarea']");
+    expect(ta.exists()).toBe(true);
+    expect((ta.element as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("calls updateTask with the new description when Save is clicked", async () => {
+    getTask.mockResolvedValue(taskFixture({ description: "old" }));
+    updateTask.mockResolvedValue(taskFixture({ description: "new content" }));
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-description-edit-btn']").trigger("click");
+    const ta = wrapper.find("[data-testid='detail-description-textarea']");
+    await ta.setValue("new content");
+    await wrapper.find("[data-testid='detail-description-save-btn']").trigger("click");
+    await flushPromises();
+    expect(updateTask).toHaveBeenCalledWith("t-1", { description: "new content" });
+  });
+
+  it("exits edit mode without saving when Cancel is clicked", async () => {
+    getTask.mockResolvedValue(taskFixture({ description: "original" }));
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-description-edit-btn']").trigger("click");
+    await wrapper.find("[data-testid='detail-description-textarea']").setValue("changed");
+    await wrapper.find("[data-testid='detail-description-cancel-btn']").trigger("click");
+    await flushPromises();
+    expect(updateTask).not.toHaveBeenCalled();
+    expect(wrapper.find("[data-testid='detail-description-textarea']").exists()).toBe(false);
+  });
+
+  it("updates the displayed description after a successful save", async () => {
+    getTask.mockResolvedValue(taskFixture({ description: "old" }));
+    updateTask.mockResolvedValue(taskFixture({ description: "new content" }));
+    const wrapper = await mountDetail();
+    await wrapper.find("[data-testid='detail-description-edit-btn']").trigger("click");
+    await wrapper.find("[data-testid='detail-description-textarea']").setValue("new content");
+    await wrapper.find("[data-testid='detail-description-save-btn']").trigger("click");
+    await flushPromises();
+    expect(wrapper.find("[data-testid='detail-description-textarea']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='detail-description-edit-btn']").exists()).toBe(true);
+  });
+});
+
 describe("TaskDetailView — parent controls (FEAT-116)", () => {
   const CANDIDATE = {
     id: "parent-id",
