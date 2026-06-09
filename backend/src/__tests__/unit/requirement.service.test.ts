@@ -51,7 +51,22 @@ describe("requirement.service", () => {
       expect(result.notDistinct).toBe(true);
     });
 
-    it("returns slot unmet when requiredActorType does not match", () => {
+    it("returns slot unmet when requiredActorType is 'human' but attested by API token (human actorType not from interactive session)", () => {
+      // human slots specifically require interactive JWT — enforceChannel blocks API tokens at write time;
+      // quorum still checks actorType for human slots
+      const slots = [
+        { id: "slot-1", label: "human-reviewer", requiredActorType: "human", requiredUserId: null },
+      ];
+      const attestations = [
+        // actorType='agent' would be rejected by enforceChannel, but verify quorum also rejects
+        { slotId: "slot-1", actorId: "actor-a", actorType: "agent", verdict: "met" },
+      ];
+      const result = computeQuorum(slots, attestations);
+      expect(result.verified).toBe(false);
+      expect(result.missing).toEqual(["human-reviewer"]);
+    });
+
+    it("agent slot is satisfied by a human actorType attestation (API token session)", () => {
       const slots = [
         { id: "slot-1", label: "agent-reviewer", requiredActorType: "agent", requiredUserId: null },
       ];
@@ -59,8 +74,8 @@ describe("requirement.service", () => {
         { slotId: "slot-1", actorId: "actor-a", actorType: "human", verdict: "met" },
       ];
       const result = computeQuorum(slots, attestations);
-      expect(result.verified).toBe(false);
-      expect(result.missing).toEqual(["agent-reviewer"]);
+      expect(result.verified).toBe(true);
+      expect(result.missing).toEqual([]);
     });
 
     it("returns slot unmet when requiredUserId does not match", () => {
