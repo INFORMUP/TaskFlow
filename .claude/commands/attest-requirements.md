@@ -48,7 +48,7 @@ Review a task's requirements and submit verdicts on any agent-designated signoff
      Body: file=<image binary>
      ```
    - The response returns `{ id, filename, mimeType, size, createdAt }`. Record the `id` to pass as `evidenceImageId`.
-   - If you have no image evidence, omit `evidenceImageId` — it is optional.
+   - If you have no image evidence, omit it — it is optional.
 
 6. **Submit attestations**
    - For each open agent slot, POST:
@@ -78,7 +78,7 @@ Review a task's requirements and submit verdicts on any agent-designated signoff
 
 ## Notes
 
-- **One shot per slot.** Once an attestation is submitted it cannot be edited — think carefully before posting. If you are genuinely uncertain, `not_met` with an explanation is the honest answer.
+- **Resubmittable.** The API accepts multiple attestations per slot (each POST creates a new record). The latest attestation is what counts for quorum. You can correct a wrong verdict by resubmitting — include a brief note in `comment` explaining the correction. Still: think carefully before posting, since the full history is visible.
 - **Don't fabricate evidence.** Only submit `met` if you can point to something concrete (a line of code, a passing test, a design match). "I assume it works" is not evidence.
 - **Scope:** this skill attests agent slots only. Human slots require a human session and will be rejected by the server (`CHANNEL_MISMATCH`) — do not attempt them.
 - **No task transitions.** This skill submits verdicts; moving the task forward is the human's decision.
