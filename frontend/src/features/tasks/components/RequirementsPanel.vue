@@ -348,7 +348,7 @@ async function load() {
       if (req.images.length) await loadImageUrls(req.images);
       for (const slot of req.slots) {
         const latest = slot.attestations.at(-1);
-        if (latest?.evidence) await loadEvidenceBlobUrl(latest.evidence);
+        if (isImageId(latest?.evidence)) await loadEvidenceBlobUrl(latest.evidence);
       }
     }
   } catch (e: any) {
